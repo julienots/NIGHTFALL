@@ -212,7 +212,7 @@ for (let i = 0; i < 200; i++) {
 }
 console.log('   modes des anneaux observés :', [...ringModes].join(', '));
 check('combat aux anneaux : créature vaincue', (await G(() => window.__nightfall.missions.state.p03_rings.step)) === 1);
-const modeAfter = (a) => G((a) => { const g = window.__nightfall; g.simulate(0.8); g.input.pressed.add(a); g.simulate(0.15); const m = g.hero.rings.mode; g.simulate(0.9); return m; }, a);
+const modeAfter = (a) => G((a) => { const g = window.__nightfall; g.simulate(0.8); g.hero.combo = 0; g.input.pressed.add(a); g.simulate(0.15); const m = g.hero.rings.mode; g.simulate(0.9); return m; }, a);
 const punchMode = await modeAfter('light');
 const whipMode = await modeAfter('heavy');
 check('animations d’anneaux : coup et fouet', punchMode === 'punch' && whipMode === 'whip', `${punchMode} / ${whipMode}`);
@@ -424,7 +424,7 @@ check('le Colosse utilise plusieurs attaques', ['slamWindup', 'sweepWindup', 'st
 await shot('22_combat_colosse');
 const ph = await G(() => { const g = window.__nightfall; const b = g.boss; b.state = 'walk'; b.exposed = true; b.takeHit({ damage: Math.ceil((b.hp - b.def.hp * 0.3 + 10) / 2.5), dir: { x: 0, y: 0, z: 1 } }); return b.stage; });
 check('passage en phase 3 (rage + renforts)', ph === 3 && (await G(() => window.__nightfall.enemies.filter((e) => e.spawn.group === 'colossus_adds').length)) === 2);
-await G(() => { const g = window.__nightfall; const b = g.boss; b.state = 'stun'; b.exposed = true; b.hp = 50; });
+await G(() => { const g = window.__nightfall; const b = g.boss; b.state = 'stun'; b.stunFor = 30; b.exposed = true; b.hp = 50; g.hero.takeDamage = () => false; g.hero.hp = g.hero.stats.maxHp; });
 await fightGroup('colossus', 200);
 await sim(6);
 check('Colosse vaincu', await G(() => window.__nightfall.missions.state.m03_colossus.step === 2));

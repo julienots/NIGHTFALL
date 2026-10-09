@@ -326,8 +326,9 @@ export class Colossus {
     this.game.audio.hit(this.pos, true);
     if (!this.exposed && Math.random() < 0.25) this.game.hud.toast('L’armure encaisse — attends que ses noyaux s’ouvrent !', '#c38cff');
     const ratio = this.hp / HP;
+    // Un gros coup peut franchir deux seuils : les phases s'enchaînent sans en sauter.
     if (this.stage === 1 && ratio < 0.66) this.#phase(2);
-    else if (this.stage === 2 && ratio < 0.33) this.#phase(3);
+    if (this.stage === 2 && ratio < 0.33) this.#phase(3);
     if (this.hp <= 0) {
       this.hp = 0;
       this.alive = false;
