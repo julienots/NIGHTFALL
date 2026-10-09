@@ -3,10 +3,23 @@
 // points d'intérêt (cibles de mission, apparitions d'ennemis, caisses).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { toon, PALETTE } from '../fx/toon.js';
 import { mulberry32 } from '../core/rng.js';
 import {
   facadeTextures, asphaltTextures, sidewalkTexture, ribbedTexture, riftTexture, signTexture, roadMarkTexture,
 } from './textures.js';
+
+// Matériau cartoon à partir de paramètres « standard » (rugosité/métal ignorés).
+function M(p = {}) {
+  const m = new THREE.MeshToonMaterial({ gradientMap: toon('#fff').gradientMap });
+  for (const k of ['color', 'map', 'emissive', 'emissiveMap', 'emissiveIntensity', 'transparent', 'opacity', 'side', 'wireframe', 'polygonOffset', 'polygonOffsetFactor', 'depthWrite']) {
+    if (p[k] === undefined) continue;
+    if (k === 'color' || k === 'emissive') m[k].set(p[k]);
+    else m[k] = p[k];
+  }
+  return m;
+}
 
 const BAY = 4; // largeur d'une travée de fenêtre (m)
 const FLOOR = 3.5; // hauteur d'étage (m)
@@ -17,6 +30,7 @@ export function buildDowntown(scene, col, quality) {
   root.name = 'downtown';
   scene.add(root);
   const updaters = [];
+  const smokeSources = [];
   const lampLights = [];
   const maxLights = { low: 3, medium: 8, high: 14 }[quality] ?? 8;
 
@@ -24,15 +38,15 @@ export function buildDowntown(scene, col, quality) {
   const asphalt = asphaltTextures();
   asphalt.map.repeat.set(40, 40);
   asphalt.roughness.repeat.set(40, 40);
-  const groundMat = new THREE.MeshStandardMaterial({
-    map: asphalt.map, roughnessMap: asphalt.roughness, roughness: 0.9, metalness: 0.05, envMapIntensity: 0.6,
+  const groundMat = M({
+    map: asphalt.map,
   });
-  const sidewalkMat = new THREE.MeshStandardMaterial({ map: sidewalkTexture(), roughness: 0.85 });
-  const concreteMat = new THREE.MeshStandardMaterial({ color: '#4a4c52', roughness: 0.95 });
-  const darkMetal = new THREE.MeshStandardMaterial({ color: '#23262c', roughness: 0.6, metalness: 0.7 });
-  const roofMat = new THREE.MeshStandardMaterial({ color: '#2c2d31', roughness: 1 });
-  const barrierMat = new THREE.MeshStandardMaterial({ color: '#8a8a86', roughness: 0.9 });
-  const stripeMat = new THREE.MeshStandardMaterial({ color: '#d8a21c', roughness: 0.6 });
+  const sidewalkMat = M({ map: sidewalkTexture() });
+  const concreteMat = M({ color: '#8f8bc4' });
+  const darkMetal = M({ color: '#3a2f6b' });
+  const roofMat = M({ color: '#4a3f7a' });
+  const barrierMat = M({ color: '#f2efe6' });
+  const stripeMat = M({ color: '#ff8a3d' });
 
   // ---------- Sol & routes ----------
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(320, 320), groundMat);
@@ -42,8 +56,8 @@ export function buildDowntown(scene, col, quality) {
 
   // Marquages : lignes discontinues au centre des routes.
   const marks = roadMarkTexture();
-  const markMat = new THREE.MeshStandardMaterial({
-    map: marks, transparent: true, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false,
+  const markMat = M({
+    map: marks, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false,
   });
   const addDashes = (x, z, len, alongX) => {
     const t = marks.clone();
@@ -62,7 +76,7 @@ export function buildDowntown(scene, col, quality) {
   addDashes(38, 0, 52, true);
 
   // Passages piétons autour de la place.
-  const zebraMat = new THREE.MeshStandardMaterial({ color: '#d9d4c4', roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2 });
+  const zebraMat = M({ color: '#fff4d6', polygonOffset: true, polygonOffsetFactor: -2 });
   const zebra = (x, z, alongX) => {
     for (let i = -3; i <= 3; i++) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(alongX ? 3 : 0.9, alongX ? 0.9 : 3), zebraMat);
@@ -86,7 +100,7 @@ export function buildDowntown(scene, col, quality) {
     const t = sidewalkMat.map.clone();
     t.needsUpdate = true;
     t.repeat.set(w / 4, d / 4);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.15, d), new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 }));
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.15, d), M({ map: t }));
     m.position.set((x0 + x1) / 2, 0.075, (z0 + z1) / 2);
     m.receiveShadow = true;
     root.add(m);
@@ -103,13 +117,11 @@ export function buildDowntown(scene, col, quality) {
     const k = style + seed;
     if (!facadeMats[k]) {
       const f = facadeTextures(style, seed);
-      facadeMats[k] = new THREE.MeshStandardMaterial({
+      facadeMats[k] = M({
         map: f.map,
         emissiveMap: f.emissive,
         emissive: new THREE.Color('#ffffff'),
-        emissiveIntensity: 1.4,
-        roughness: style === 'glass' ? 0.25 : 0.9,
-        metalness: style === 'glass' ? 0.6 : 0.05,
+        emissiveIntensity: 1.1
       });
     }
     return facadeMats[k];
@@ -130,7 +142,7 @@ export function buildDowntown(scene, col, quality) {
         uv.setXY(i, uv.getX(i) * (su / (BAY * 8)) + ou, uv.getY(i) * (sv / (FLOOR * 8)));
       }
     }
-    const fm = facadeMat(style, opts.seed ?? Math.floor(rand() * 3));
+    const fm = facadeMat(style, opts.seed ?? Math.floor(rand() * 8));
     const mesh = new THREE.Mesh(geo, [fm, fm, roofMat, roofMat, fm, fm]);
     mesh.position.set((x0 + x1) / 2, h / 2, (z0 + z1) / 2);
     mesh.castShadow = h < 30;
@@ -166,14 +178,14 @@ export function buildDowntown(scene, col, quality) {
       }
     }
     // Rez-de-chaussée : bandeau sombre + enseigne éventuelle
-    const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 3.2, d + 0.2), new THREE.MeshStandardMaterial({ color: '#16171b', roughness: 0.6, metalness: 0.3 }));
+    const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 3.2, d + 0.2), M({ color: '#2b2050' }));
     band.position.set((x0 + x1) / 2, 1.6, (z0 + z1) / 2);
     root.add(band);
     if (opts.sign) {
       const [text, color, face] = opts.sign;
       const sm = new THREE.Mesh(
         new THREE.PlaneGeometry(Math.min(w * 0.7, 10), 2.2),
-        new THREE.MeshStandardMaterial({ map: signTexture(text, color), emissiveMap: signTexture(text, color), emissive: '#ffffff', emissiveIntensity: 1.6 }),
+        M({ map: signTexture(text, color), emissiveMap: signTexture(text, color), emissive: '#ffffff', emissiveIntensity: 1.6 }),
       );
       const faces = {
         n: [(x0 + x1) / 2, z0 - 0.15, Math.PI], s: [(x0 + x1) / 2, z1 + 0.15, 0],
@@ -236,7 +248,7 @@ export function buildDowntown(scene, col, quality) {
   // ---------- Place Halden (centre) ----------
   const plaza = new THREE.Mesh(
     new THREE.CircleGeometry(7, 48),
-    new THREE.MeshStandardMaterial({ color: '#3d3e44', roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -1 }),
+    M({ color: '#5b4f9a', polygonOffset: true, polygonOffsetFactor: -1 }),
   );
   plaza.rotation.x = -Math.PI / 2;
   plaza.position.y = 0.015;
@@ -247,7 +259,7 @@ export function buildDowntown(scene, col, quality) {
   root.add(ped);
   col.addCentered(0, 0, 0, 3.2, 1.2, 3.2);
   // Monument brisé : obélisque fendu, morceau tombé au sol.
-  const obMat = new THREE.MeshStandardMaterial({ color: '#7d7f86', roughness: 0.7, metalness: 0.2 });
+  const obMat = M({ color: '#c9b8ff' });
   const ob = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 5, 4), obMat);
   ob.position.set(0, 3.7, 0);
   ob.rotation.y = Math.PI / 4;
@@ -261,99 +273,111 @@ export function buildDowntown(scene, col, quality) {
   col.addCentered(2.8, 0, 1.6, 2.4, 1.0, 1.2);
 
   // ---------- Décor : voitures, barrières, conteneurs ----------
-  const carColors = ['#5a6270', '#7a1f24', '#2a3f5a', '#c8c8c0', '#1c1d20', '#3d5040', '#8a6a2a'];
-  const glassMat = new THREE.MeshStandardMaterial({ color: '#0d1218', roughness: 0.1, metalness: 0.9 });
-  const tireMat = new THREE.MeshStandardMaterial({ color: '#111', roughness: 0.9 });
-  const headMat = new THREE.MeshStandardMaterial({ color: '#fff', emissive: '#fff4d6', emissiveIntensity: 2 });
-  const tailMat = new THREE.MeshStandardMaterial({ color: '#600', emissive: '#ff2020', emissiveIntensity: 1.5 });
-  const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.26, 16);
-  const burntMat = new THREE.MeshStandardMaterial({ color: '#151414', roughness: 1 });
+  const carColors = ['#ff5d5d', '#4fc3f7', '#ffd54f', '#9575cd', '#66bb6a', '#ff8a65', '#f06292'];
+  const glassMat = M({ color: '#3a5bb8', emissive: '#1a2a6a', emissiveIntensity: 0.6 });
+  const tireMat = M({ color: '#221a3a' });
+  const hubMat = M({ color: '#e8e4ff' });
+  const headMat = M({ color: '#fff', emissive: '#fff4d6', emissiveIntensity: 2 });
+  const tailMat = M({ color: '#ff3b5a', emissive: '#ff2040', emissiveIntensity: 1.2 });
+  const wheelGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.36, 18);
+  const hubGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.38, 12);
+  const burntMat = M({ color: '#4a3550' });
+  const rbox = (w, h, d, r = 0.12) => new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2.1, h / 2.1, d / 2.1));
 
+  // Voiture « bulle » : carrosserie arrondie, grosses roues, phares ronds.
   function car(x, z, rot, opts = {}) {
     const g = new THREE.Group();
-    const paint = opts.burnt
-      ? burntMat
-      : new THREE.MeshStandardMaterial({ color: opts.color || carColors[Math.floor(rand() * carColors.length)], roughness: 0.35, metalness: 0.6 });
-    const len = opts.van ? 5.4 : 4.4;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, opts.van ? 1.5 : 0.75, len), paint);
-    body.position.y = opts.van ? 1.15 : 0.7;
-    body.castShadow = true;
+    const paint = opts.burnt ? burntMat : M({ color: opts.color || carColors[Math.floor(rand() * carColors.length)] });
+    const len = opts.van ? 5.2 : 4.1;
+    const body = new THREE.Mesh(rbox(2.0, opts.van ? 1.7 : 0.9, len, 0.4), paint);
+    body.position.y = opts.van ? 1.3 : 0.85;
     g.add(body);
     if (!opts.van) {
-      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.6, 2.2), glassMat);
-      cabin.position.set(0, 1.35, -0.2);
-      cabin.castShadow = true;
+      const cabin = new THREE.Mesh(rbox(1.7, 0.8, 2.0, 0.35), paint);
+      cabin.position.set(0, 1.55, -0.25);
       g.add(cabin);
-      const roofM = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.08, 1.9), paint);
-      roofM.position.set(0, 1.68, -0.25);
-      g.add(roofM);
+      for (const [wz, wl] of [[0.77, 0.06], [-1.27, 0.06]]) {
+        const win = new THREE.Mesh(rbox(1.5, 0.55, wl, 0.03), glassMat);
+        win.position.set(0, 1.6, wz);
+        g.add(win);
+      }
+      for (const sx of [-0.86, 0.86]) {
+        const sw = new THREE.Mesh(rbox(0.06, 0.5, 1.6, 0.03), glassMat);
+        sw.position.set(sx, 1.6, -0.25);
+        g.add(sw);
+      }
     } else {
-      const ws = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.7, 0.1), glassMat);
-      ws.position.set(0, 1.5, len / 2 + 0.01);
+      const ws = new THREE.Mesh(rbox(1.7, 0.7, 0.08, 0.03), glassMat);
+      ws.position.set(0, 1.75, len / 2 + 0.01);
       g.add(ws);
     }
-    for (const [wx, wz] of [[-0.95, 1.4], [0.95, 1.4], [-0.95, -1.4], [0.95, -1.4]]) {
+    for (const [wx, wz] of [[-0.95, 1.35], [0.95, 1.35], [-0.95, -1.35], [0.95, -1.35]]) {
       const wh = new THREE.Mesh(wheelGeo, tireMat);
       wh.rotation.z = Math.PI / 2;
-      wh.position.set(wx, 0.36, wz * (len / 4.4));
+      wh.position.set(wx, 0.46, wz * (len / 4.1));
       g.add(wh);
+      const hub = new THREE.Mesh(hubGeo, hubMat);
+      hub.rotation.z = Math.PI / 2;
+      hub.position.copy(wh.position);
+      g.add(hub);
     }
     if (!opts.burnt) {
-      for (const s of [-0.65, 0.65]) {
-        const hl = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, 0.05), opts.lightsOn ? headMat : glassMat);
-        hl.position.set(s, opts.van ? 0.9 : 0.8, len / 2);
+      for (const sx of [-0.6, 0.6]) {
+        const hl = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8), headMat);
+        hl.position.set(sx, opts.van ? 1.0 : 0.95, len / 2 - 0.05);
+        hl.scale.z = 0.5;
         g.add(hl);
-        const tl = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.12, 0.05), tailMat);
-        tl.position.set(s, opts.van ? 0.9 : 0.85, -len / 2);
+        const tl = new THREE.Mesh(rbox(0.4, 0.18, 0.08, 0.04), tailMat);
+        tl.position.set(sx, opts.van ? 1.0 : 1.0, -len / 2);
         g.add(tl);
       }
+    } else {
+      // Épave : fumée violette persistante (particules gérées par le monde)
+      smokeSources.push(new THREE.Vector3(x, 1.4, z));
     }
     if (opts.decal) {
-      const dm = new THREE.Mesh(
-        new THREE.PlaneGeometry(3, 0.75),
-        new THREE.MeshStandardMaterial({ map: signTexture(opts.decal, '#3f9bff', '#e8e8e8'), roughness: 0.5 }),
-      );
-      dm.position.set(0.96, 1.3, 0);
+      const dm = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.75), M({ map: signTexture(opts.decal, '#3d8fd1', '#f2efe6') }));
+      dm.position.set(1.01, 1.4, 0);
       dm.rotation.y = Math.PI / 2;
       g.add(dm);
     }
+    g.traverse((o) => o.isMesh && (o.castShadow = true));
     g.position.set(x, 0, z);
     g.rotation.y = rot;
     if (opts.tilt) g.rotation.z = opts.tilt;
     root.add(g);
-    // Collision : boîte englobante orientée approximée par une AABB.
     const c = Math.abs(Math.cos(rot));
     const s = Math.abs(Math.sin(rot));
-    const ex = 1.9 * c + len * s;
-    const ez = 1.9 * s + len * c;
-    col.addCentered(x, 0, z, ex * 0.95, opts.van ? 1.9 : 1.5, ez * 0.95);
+    col.addCentered(x, 0, z, (2.0 * c + len * s) * 0.95, opts.van ? 2.15 : 1.6, (2.0 * s + len * c) * 0.95);
     return g;
   }
 
+  // Barrière de chantier arrondie, rayée blanc/orange.
   function barrier(x, z, rot) {
     const g = new THREE.Group();
-    const base = new THREE.Mesh(new THREE.BoxGeometry(2, 0.5, 0.7), barrierMat);
-    base.position.y = 0.25;
-    const top = new THREE.Mesh(new THREE.BoxGeometry(2, 0.55, 0.28), barrierMat);
-    top.position.y = 0.77;
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.01, 0.12, 0.29), stripeMat);
-    stripe.position.y = 0.85;
-    g.add(base, top, stripe);
+    const base = new THREE.Mesh(rbox(2, 0.55, 0.75, 0.15), barrierMat);
+    base.position.y = 0.27;
+    const top = new THREE.Mesh(rbox(1.9, 0.55, 0.32, 0.12), barrierMat);
+    top.position.y = 0.8;
+    for (const k of [-0.6, 0, 0.6]) {
+      const stripe = new THREE.Mesh(rbox(0.3, 0.56, 0.34, 0.08), stripeMat);
+      stripe.position.set(k, 0.8, 0);
+      g.add(stripe);
+    }
+    g.add(base, top);
     g.traverse((o) => (o.castShadow = true));
     g.position.set(x, 0, z);
     g.rotation.y = rot;
     root.add(g);
     const along = Math.abs(Math.cos(rot)) > 0.5;
-    col.addCentered(x, 0, z, along ? 2 : 0.7, 1.05, along ? 0.7 : 2);
+    col.addCentered(x, 0, z, along ? 2 : 0.75, 1.07, along ? 0.75 : 2);
   }
 
   const containerMats = {};
   function container(x0, z0, x1, z1, y, color) {
-    if (!containerMats[color]) {
-      containerMats[color] = new THREE.MeshStandardMaterial({ map: ribbedTexture(color), roughness: 0.7, metalness: 0.4 });
-    }
+    if (!containerMats[color]) containerMats[color] = M({ map: ribbedTexture(color) });
     const h = 2.6;
-    const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, h, z1 - z0), containerMats[color]);
+    const m = new THREE.Mesh(rbox(x1 - x0, h, z1 - z0, 0.18), containerMats[color]);
     m.position.set((x0 + x1) / 2, y + h / 2, (z0 + z1) / 2);
     m.castShadow = m.receiveShadow = true;
     root.add(m);
@@ -361,7 +385,7 @@ export function buildDowntown(scene, col, quality) {
   }
 
   function box(x, y, z, sx, sy, sz, mat, collide = true) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    const m = new THREE.Mesh(rbox(sx, sy, sz, 0.1), mat);
     m.position.set(x, y + sy / 2, z);
     m.castShadow = m.receiveShadow = true;
     root.add(m);
@@ -369,36 +393,84 @@ export function buildDowntown(scene, col, quality) {
     return m;
   }
 
-  // Lampadaire (lumière réelle seulement si prioritaire / qualité suffisante).
-  const lampHeadMat = new THREE.MeshStandardMaterial({ color: '#fff', emissive: '#ffd7a0', emissiveIntensity: 3 });
-  const lampColdMat = new THREE.MeshStandardMaterial({ color: '#fff', emissive: '#cfe3ff', emissiveIntensity: 3 });
+  // Arbre « sucette » dans un bac : tronc courbe, feuillage en boules.
+  const leafMats = [M({ color: '#2fa88a' }), M({ color: '#3cc29a' }), M({ color: '#7b5cd6' })];
+  const trunkMat = M({ color: '#7a4a3a' });
+  function tree(x, z, purple = false) {
+    const g = new THREE.Group();
+    const planter = new THREE.Mesh(rbox(1.6, 0.6, 1.6, 0.15), concreteMat);
+    planter.position.y = 0.3;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 2.6, 8), trunkMat);
+    trunk.position.y = 1.6;
+    trunk.rotation.z = (rand() - 0.5) * 0.25;
+    g.add(planter, trunk);
+    const leaf = purple ? leafMats[2] : leafMats[Math.floor(rand() * 2)];
+    for (const [lx, ly, lz, r] of [[0, 3.3, 0, 1.2], [0.6, 3.0, 0.3, 0.8], [-0.5, 3.1, -0.3, 0.85], [0.1, 3.9, -0.1, 0.8]]) {
+      const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), leaf);
+      b.position.set(lx, ly, lz);
+      g.add(b);
+    }
+    g.traverse((o) => o.isMesh && (o.castShadow = true));
+    g.position.set(x, 0.15, z);
+    g.rotation.y = rand() * 6;
+    root.add(g);
+    col.addCentered(x, 0, z, 1.6, 0.75, 1.6);
+  }
+
+  // Borne d'incendie
+  const hydrantMat = M({ color: '#ff4f5e' });
+  function hydrant(x, z) {
+    const g = new THREE.Group();
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.7, 12), hydrantMat);
+    b.position.y = 0.5;
+    const t = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), hydrantMat);
+    t.position.y = 0.85;
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.6, 8), hydrantMat);
+    s.rotation.z = Math.PI / 2;
+    s.position.y = 0.6;
+    g.add(b, t, s);
+    g.position.set(x, 0.15, z);
+    root.add(g);
+    col.addCentered(x, 0, z, 0.5, 1.1, 0.5);
+  }
+
+  // Lampadaire courbé à tête ronde (lumière réelle si prioritaire).
+  const lampHeadMat = M({ color: '#fff', emissive: '#ffd27a', emissiveIntensity: 2.5 });
+  const lampColdMat = M({ color: '#fff', emissive: '#a8e6ff', emissiveIntensity: 2.5 });
+  const lampArc = new THREE.TorusGeometry(0.7, 0.07, 8, 16, Math.PI / 2);
   function lamp(x, z, rot, { cold = false, priority = 2, broken = false } = {}) {
     const g = new THREE.Group();
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 6, 8), darkMetal);
-    pole.position.y = 3;
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.6), darkMetal);
-    arm.position.set(0, 5.95, 0.75);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.12, 0.7), broken ? darkMetal : cold ? lampColdMat : lampHeadMat);
-    head.position.set(0, 5.88, 1.4);
-    g.add(pole, arm, head);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 5.4, 10), darkMetal);
+    pole.position.y = 2.7;
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 0.4, 10), darkMetal);
+    foot.position.y = 0.2;
+    const arc = new THREE.Mesh(lampArc, darkMetal);
+    arc.position.set(0, 5.4, 0.7);
+    arc.rotation.set(0, Math.PI / 2, 0);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 10), broken ? darkMetal : cold ? lampColdMat : lampHeadMat);
+    head.position.set(0, 5.75, 1.0);
+    head.scale.y = 0.75;
+    const hood = new THREE.Mesh(new THREE.SphereGeometry(0.38, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), darkMetal);
+    hood.position.set(0, 5.8, 1.0);
+    g.add(pole, foot, arc, head, hood);
     pole.castShadow = true;
     g.position.set(x, 0, z);
     g.rotation.y = rot;
     root.add(g);
-    col.addCentered(x, 0, z, 0.3, 6, 0.3);
+    col.addCentered(x, 0, z, 0.35, 6, 0.35);
     if (!broken) {
-      const light = new THREE.PointLight(cold ? '#cfe3ff' : '#ffcf8f', 0, 22, 1.6);
-      const wp = new THREE.Vector3(0, 5.6, 1.4).applyAxisAngle(new THREE.Vector3(0, 1, 0), rot).add(g.position);
+      const light = new THREE.PointLight(cold ? '#a8e6ff' : '#ffc46b', 0, 22, 1.6);
+      const wp = new THREE.Vector3(0, 5.4, 1.0).applyAxisAngle(new THREE.Vector3(0, 1, 0), rot).add(g.position);
       light.position.copy(wp);
       root.add(light);
       lampLights.push({ light, priority, base: 26 });
-      // Halo au sol (faux éclairage, gratuit) pour les lampes sans lumière réelle.
+      // Halo au sol : disque net (lumière « dessinée »)
       const pool = new THREE.Mesh(
-        new THREE.CircleGeometry(4.5, 24),
-        new THREE.MeshBasicMaterial({ color: cold ? '#9fc4ff' : '#ffb870', transparent: true, opacity: 0.08, depthWrite: false, blending: THREE.AdditiveBlending }),
+        new THREE.CircleGeometry(3.6, 32),
+        new THREE.MeshBasicMaterial({ color: cold ? '#7fd8ff' : '#ffc46b', transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending }),
       );
       pool.rotation.x = -Math.PI / 2;
-      pool.position.set(wp.x, 0.03, wp.z);
+      pool.position.set(wp.x, 0.17, wp.z);
       root.add(pool);
     }
   }
@@ -412,6 +484,13 @@ export function buildDowntown(scene, col, quality) {
     lamp(i + 9, 9.5, Math.PI, { priority: 3, broken: rand() < 0.2 });
   }
   lamp(6, 6, -Math.PI * 0.75, { priority: 1, cold: true });
+
+  // Arbres et bornes le long des trottoirs
+  for (const z of [-45, -27, 27, 45]) tree(-9, z);
+  for (const z of [-36, 36, 54, -54]) tree(9, z, z === -36);
+  for (const x of [-45, -27, 27, 45]) tree(x, -9, x === 27);
+  for (const x of [-45, 27, 45]) tree(x, 9);
+  for (const [hx, hz] of [[-9.2, 20], [9.2, -20], [20, 9.2], [-20, -9.2]]) hydrant(hx, hz);
 
   // Voitures abandonnées sur les avenues
   car(-3.5, 30, 0.1);
@@ -439,7 +518,7 @@ export function buildDowntown(scene, col, quality) {
   // Bâche tendue (visuelle) + poteaux
   const tarp = new THREE.Mesh(
     new THREE.PlaneGeometry(12, 9),
-    new THREE.MeshStandardMaterial({ color: '#2d4a3e', roughness: 0.9, side: THREE.DoubleSide }),
+    M({ color: '#3fae7a', side: THREE.DoubleSide }),
   );
   tarp.position.set(-36, 3.6, 30);
   tarp.rotation.x = -Math.PI / 2 + 0.12;
@@ -447,21 +526,21 @@ export function buildDowntown(scene, col, quality) {
   root.add(tarp);
   for (const [px, pz] of [[-41.8, 25.8], [-30.2, 25.8]]) box(px, 0, pz, 0.15, 3.3, 0.15, darkMetal);
   // Établi (atelier) et terminal de sauvegarde
-  const bench = box(-40, 0, 32, 3.2, 1, 1.1, new THREE.MeshStandardMaterial({ color: '#5a4630', roughness: 0.8 }));
+  const bench = box(-40, 0, 32, 3.2, 1, 1.1, M({ color: '#b5763f' }));
   bench.name = 'workbench';
   box(-41, 1, 32.2, 0.5, 0.3, 0.4, darkMetal, false);
-  box(-39, 1, 31.9, 0.8, 0.15, 0.5, new THREE.MeshStandardMaterial({ color: '#d8a21c' }), false);
+  box(-39, 1, 31.9, 0.8, 0.15, 0.5, M({ color: '#d8a21c' }), false);
   box(-31, 0, 33, 1, 1.5, 0.7, darkMetal);
   const screen = new THREE.Mesh(
     new THREE.PlaneGeometry(0.8, 0.55),
-    new THREE.MeshStandardMaterial({ color: '#000', emissive: '#4dd2ff', emissiveIntensity: 1.5 }),
+    M({ color: '#000', emissive: '#4dd2ff', emissiveIntensity: 1.5 }),
   );
   screen.position.set(-31, 1.2, 32.64);
   screen.rotation.y = Math.PI;
   screen.rotation.x = 0.15;
   root.add(screen);
   // Générateur + jerricans
-  box(-44, 0, 20, 1.6, 1.2, 1, new THREE.MeshStandardMaterial({ color: '#7a2a20', roughness: 0.6, metalness: 0.4 }));
+  box(-44, 0, 20, 1.6, 1.2, 1, M({ color: '#e2533f' }));
   box(-44.5, 0, 22, 0.4, 0.6, 0.3, stripeMat);
   // Lumières chaudes du refuge (toujours actives : point de repère)
   const s1 = new THREE.PointLight('#ffb35c', 0, 18, 1.5);
@@ -474,20 +553,20 @@ export function buildDowntown(scene, col, quality) {
   lampLights.push({ light: s2, priority: 1, base: 3 });
 
   // ---------- Ruelle Q2 ----------
-  container(30, 28, 32.4, 38, 0, '#7a2f22');
-  box(20, 0, 30, 1.8, 1.3, 1.2, new THREE.MeshStandardMaterial({ color: '#2f4a2f', roughness: 0.8 })); // benne
-  box(42, 0, 29, 1.2, 1.2, 1.2, new THREE.MeshStandardMaterial({ color: '#4a3a2a', roughness: 0.9 }));
+  container(30, 28, 32.4, 38, 0, '#e8553f');
+  box(20, 0, 30, 1.8, 1.3, 1.2, M({ color: '#3fae6a' })); // benne
+  box(42, 0, 29, 1.2, 1.2, 1.2, M({ color: '#c98a4a' }));
   lamp(26, 27, Math.PI / 2, { priority: 1, cold: true });
 
   // ---------- Immeuble Corvin : parcours vertical ----------
   // Benne 1,3 > conteneur 2,6 > caisse 3,9 > conteneur empilé 5,2 >
   // échafaudage 6,5 puis 7,8 > toit 9,0 (chaque palier ≤ 1,3 m).
-  box(-42.4, 0, -21.1, 2.2, 1.3, 1.8, new THREE.MeshStandardMaterial({ color: '#2f4a2f', roughness: 0.8 }));
-  container(-43.6, -34, -41.2, -22, 0, '#1f4a6a');
-  box(-42.4, 2.6, -25, 2.2, 1.3, 1.8, new THREE.MeshStandardMaterial({ color: '#4a3a2a', roughness: 0.9 }));
-  container(-43.6, -34, -41.2, -27, 2.6, '#6a5a1f');
-  const scaffMat = new THREE.MeshStandardMaterial({ color: '#8a8f99', roughness: 0.5, metalness: 0.8 });
-  const plank = new THREE.MeshStandardMaterial({ color: '#6b5236', roughness: 0.9 });
+  box(-42.4, 0, -21.1, 2.2, 1.3, 1.8, M({ color: '#3fae6a' }));
+  container(-43.6, -34, -41.2, -22, 0, '#3d8fd1');
+  box(-42.4, 2.6, -25, 2.2, 1.3, 1.8, M({ color: '#c98a4a' }));
+  container(-43.6, -34, -41.2, -27, 2.6, '#f2b84b');
+  const scaffMat = M({ color: '#ffcf4a' });
+  const plank = M({ color: '#c98a4a' });
   box(-42.4, 6.35, -35.6, 2.4, 0.15, 2.4, plank);
   box(-41.8, 7.65, -38.6, 3.6, 0.15, 2.0, plank);
   for (const [px, pz, h] of [[-43.5, -36.8, 6.5], [-41.3, -36.8, 6.5], [-43.5, -34.4, 6.5], [-41.3, -34.4, 6.5], [-43.5, -39.6, 7.8], [-40.1, -39.6, 7.8], [-43.5, -37.6, 7.8], [-40.1, -37.6, 7.8]]) {
@@ -503,7 +582,7 @@ export function buildDowntown(scene, col, quality) {
   // Fuite de lumière + balise sur le toit
   const beaconPos = { x: -28, y: 9, z: -28 };
   const antenna = box(beaconPos.x - 4, 9, beaconPos.z + 3, 0.1, 4, 0.1, scaffMat, false);
-  const beaconMat = new THREE.MeshStandardMaterial({ color: '#300', emissive: '#ff2030', emissiveIntensity: 4 });
+  const beaconMat = M({ color: '#300', emissive: '#ff2030', emissiveIntensity: 4 });
   const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), beaconMat);
   beacon.position.set(antenna.position.x, 13.1, antenna.position.z);
   root.add(beacon);
@@ -518,7 +597,7 @@ export function buildDowntown(scene, col, quality) {
   });
 
   // ---------- Parking Halden (Q4) ----------
-  const lineMat = new THREE.MeshStandardMaterial({ color: '#cfc8b0', roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -3 });
+  const lineMat = M({ color: '#fff4d6', polygonOffset: true, polygonOffsetFactor: -3 });
   for (let i = 0; i < 9; i++) {
     for (const zc of [-22, -44]) {
       const l = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 5), lineMat);
@@ -542,7 +621,7 @@ export function buildDowntown(scene, col, quality) {
   lamp(14, -33, Math.PI / 2, { cold: true, priority: 0 });
   lamp(44, -30, -Math.PI / 2, { cold: true, priority: 0 });
   // Grillage sur le côté est de la ruelle du parking
-  const fenceMat = new THREE.MeshStandardMaterial({ color: '#9aa0a8', metalness: 0.8, roughness: 0.4, wireframe: true });
+  const fenceMat = M({ color: '#c9c4ff', wireframe: true });
   const fence = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.4, 30, 1, 8, 60), fenceMat);
   fence.position.set(46.5, 1.35, -42);
   root.add(fence);
@@ -580,7 +659,7 @@ export function buildDowntown(scene, col, quality) {
     const along = rot === 0;
     const wall = new THREE.Mesh(
       new THREE.BoxGeometry(along ? 16 : 0.2, 3.2, along ? 0.2 : 16),
-      new THREE.MeshStandardMaterial({ map: signTexture('QUARANTAINE', '#ff3b3b', '#1a1a1a'), roughness: 0.9 }),
+      M({ map: signTexture('QUARANTAINE', '#ff5d5d', '#2b2050') }),
     );
     const off = Math.sign(along ? z : x) * 2;
     wall.position.set(x + (along ? 0 : off), 1.6, z + (along ? off : 0));
@@ -599,21 +678,68 @@ export function buildDowntown(scene, col, quality) {
       vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
       fragmentShader: `
         varying vec3 vDir; uniform float uTime;
+        float hash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
         void main(){
           float h = clamp(vDir.y, -0.1, 1.0);
-          vec3 top = vec3(0.012, 0.018, 0.045);
-          vec3 hor = vec3(0.07, 0.06, 0.14);
-          vec3 col = mix(hor, top, pow(max(h,0.0), 0.5));
-          // Lueur violette en direction de l'anomalie (nord, -Z)
-          float a = max(dot(normalize(vec3(vDir.x, 0.0, vDir.z)), vec3(0.0,0.0,-1.0)), 0.0);
-          col += vec3(0.35, 0.12, 0.6) * pow(a, 6.0) * (1.0 - smoothstep(0.0, 0.6, h)) * 0.6;
-          // Pollution lumineuse ambrée de la ville
-          col += vec3(0.25, 0.14, 0.05) * (1.0 - smoothstep(0.0, 0.25, h)) * 0.35;
+          // Dégradé cartoon en bandes : indigo > violet > rose à l'horizon
+          float k = floor(pow(max(h, 0.0), 0.45) * 7.0) / 7.0;
+          vec3 top = vec3(0.07, 0.04, 0.2);
+          vec3 mid = vec3(0.22, 0.1, 0.42);
+          vec3 hor = vec3(0.85, 0.36, 0.6);
+          vec3 col = k < 0.3 ? mix(hor, mid, k / 0.3) : mix(mid, top, (k - 0.3) / 0.7);
+          // Lueur de l'anomalie au nord (-Z)
+          float a = max(dot(normalize(vec3(vDir.x, 0.0, vDir.z)), vec3(0.0, 0.0, -1.0)), 0.0);
+          col = mix(col, vec3(0.75, 0.35, 1.0), step(0.93, a) * (1.0 - smoothstep(0.0, 0.35, h)) * 0.5);
+          // Étoiles scintillantes
+          vec3 cell = floor(vDir * 160.0);
+          float st = step(0.996, hash(cell)) * smoothstep(0.15, 0.4, h);
+          col += vec3(1.0, 0.95, 0.85) * st * (0.6 + 0.4 * sin(uTime * 2.0 + hash(cell + 3.0) * 30.0));
           gl_FragColor = vec4(col, 1.0);
         }`,
     }),
   );
+  sky.renderOrder = -2;
   scene.add(sky);
+
+  // Grosse lune cartoon avec cratères et halo
+  const moonG = new THREE.Group();
+  const moonDisc = new THREE.Mesh(new THREE.CircleGeometry(38, 48), new THREE.MeshBasicMaterial({ color: '#f4f0ff', fog: false }));
+  moonG.add(moonDisc);
+  for (const [cx, cy, r] of [[-12, 8, 7], [10, -6, 9], [8, 16, 4], [-6, -16, 5]]) {
+    const cr = new THREE.Mesh(new THREE.CircleGeometry(r, 24), new THREE.MeshBasicMaterial({ color: '#d4cdf5', fog: false }));
+    cr.position.set(cx, cy, 0.5);
+    moonG.add(cr);
+  }
+  for (const [r, o] of [[52, 0.18], [70, 0.08]]) {
+    const halo = new THREE.Mesh(new THREE.RingGeometry(38, r, 48), new THREE.MeshBasicMaterial({ color: '#c8b8ff', transparent: true, opacity: o, fog: false, depthWrite: false }));
+    halo.position.z = -0.5;
+    moonG.add(halo);
+  }
+  moonG.position.set(-260, 330, 420);
+  moonG.lookAt(0, 0, 0);
+  moonG.traverse((o) => { if (o.material) o.material.depthWrite = false; o.renderOrder = -1; });
+  scene.add(moonG);
+
+  // Nuages stylisés qui dérivent lentement
+  const cloudMat = toon('#4b2f7e', { rim: '#ff9ccf', rimStrength: 0.7 });
+  cloudMat.fog = false;
+  const clouds = new THREE.Group();
+  for (let i = 0; i < 14; i++) {
+    const c = new THREE.Group();
+    const n = 4 + Math.floor(rand() * 3);
+    for (let k = 0; k < n; k++) {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(18 + rand() * 14, 12, 8), cloudMat);
+      b.position.set((k - n / 2) * 22 + rand() * 6, rand() * 8, rand() * 10);
+      b.scale.y = 0.55;
+      c.add(b);
+    }
+    const ang = (i / 14) * Math.PI * 2 + rand() * 0.3;
+    const r = 480 + rand() * 120;
+    c.position.set(Math.cos(ang) * r, 160 + rand() * 90, Math.sin(ang) * r);
+    c.lookAt(0, c.position.y, 0);
+    clouds.add(c);
+  }
+  scene.add(clouds);
 
   const anomaly = new THREE.Mesh(
     new THREE.CylinderGeometry(18, 40, 900, 32, 1, true),
@@ -642,7 +768,7 @@ export function buildDowntown(scene, col, quality) {
   anomaly.position.set(30, 300, -620);
   scene.add(anomaly);
 
-  const rainCount = { low: 1500, medium: 4000, high: 8000 }[quality] ?? 4000;
+  const rainCount = { low: 800, medium: 2000, high: 4000 }[quality] ?? 2000;
   const rainGeo = new THREE.BufferGeometry();
   const rainPos = new Float32Array(rainCount * 6);
   const rainSeed = new Float32Array(rainCount * 3);
@@ -654,13 +780,16 @@ export function buildDowntown(scene, col, quality) {
   rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
   const rain = new THREE.LineSegments(
     rainGeo,
-    new THREE.LineBasicMaterial({ color: '#9fb4d8', transparent: true, opacity: 0.35, depthWrite: false }),
+    new THREE.LineBasicMaterial({ color: '#c9d8ff', transparent: true, opacity: 0.45, depthWrite: false }),
   );
   rain.frustumCulled = false;
   scene.add(rain);
 
   updaters.push((dt, t, cam) => {
     sky.position.copy(cam.position);
+    moonG.position.set(cam.position.x - 260, 330, cam.position.z + 420);
+    clouds.position.set(cam.position.x, 0, cam.position.z);
+    clouds.rotation.y = t * 0.004;
     sky.material.uniforms.uTime.value = t;
     anomaly.material.uniforms.uTime.value = t;
     const fall = 28;
@@ -740,7 +869,7 @@ export function buildDowntown(scene, col, quality) {
   const drawCalls = mergeStatic(root);
 
   return {
-    root, targets, enemySpawns, crates, spawn, drawCalls,
+    root, targets, enemySpawns, crates, spawn, drawCalls, smokeSources,
     update(dt, t, cam, player) {
       for (const u of updaters) u(dt, t, cam, player);
     },
@@ -756,10 +885,10 @@ function mergeStatic(root) {
   root.traverse((o) => {
     if (!o.isMesh || Array.isArray(o.material) || o.userData.dynamic) return;
     const g = o.geometry;
-    if (!g.index || !g.attributes.uv || !g.attributes.normal) return;
+    if (!g.attributes.uv || !g.attributes.normal) return;
     const key = `${o.material.uuid}:${o.castShadow ? 1 : 0}:${o.receiveShadow ? 1 : 0}`;
     if (!buckets.has(key)) buckets.set(key, { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, geos: [] });
-    const geo = g.clone();
+    const geo = g.index ? g.toNonIndexed() : g.clone();
     geo.applyMatrix4(o.matrixWorld);
     for (const name of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(name)) geo.deleteAttribute(name);
     buckets.get(key).geos.push(geo);

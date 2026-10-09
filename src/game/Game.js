@@ -79,25 +79,27 @@ export class Game {
   }
 
   async init() {
+    // Police cartoon des enseignes (si disponible ; repli sinon après 2 s).
+    await Promise.race([document.fonts?.load('40px "Lilita One"'), new Promise((r) => setTimeout(r, 2000))]).catch(() => {});
     // --- Rendu ---
     const q = this.settings.quality;
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: q !== 'low', powerPreference: 'high-performance' }));
     r.outputColorSpace = THREE.SRGBColorSpace;
-    r.toneMapping = THREE.ACESFilmicToneMapping;
-    r.toneMappingExposure = 1.15;
+    r.toneMapping = THREE.NeutralToneMapping; // préserve les couleurs saturées
+    r.toneMappingExposure = 1.0;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(r.domElement);
 
     const scene = (this.scene = new THREE.Scene());
-    scene.fog = new THREE.FogExp2('#0b0f1e', 0.017);
-    scene.background = new THREE.Color('#05060c');
+    scene.fog = new THREE.FogExp2('#4a2f7a', 0.0055);
+    scene.background = new THREE.Color('#1a0d36');
     const pmrem = new THREE.PMREMGenerator(r);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = 0.22;
+    scene.environmentIntensity = 0.0;
 
     this.camera = new THREE.PerspectiveCamera(62, 16 / 9, 0.1, 1500);
-    scene.add(new THREE.HemisphereLight('#5a6c9c', '#1a1410', 0.55));
-    const moon = (this.moon = new THREE.DirectionalLight('#9fb4ff', 1.15));
+    scene.add(new THREE.HemisphereLight('#d6d0ff', '#6a4a5a', 1.35));
+    const moon = (this.moon = new THREE.DirectionalLight('#e8f0ff', 1.6));
     moon.shadow.camera.left = moon.shadow.camera.bottom = -36;
     moon.shadow.camera.right = moon.shadow.camera.top = 36;
     moon.shadow.camera.far = 160;
@@ -107,7 +109,7 @@ export class Game {
 
     this.composer = new EffectComposer(r);
     this.composer.addPass(new RenderPass(scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.8, 0.55, 0.8);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.55, 0.4, 0.88);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 
@@ -332,6 +334,13 @@ export class Game {
     for (const e of this.enemies) e.update(dt);
     this.#separateEnemies();
     for (const c of this.crates) c.update(dt, this.time);
+    this.smokeT = (this.smokeT || 0) - dt;
+    if (this.smokeT <= 0) {
+      this.smokeT = 0.25;
+      for (const p of this.world.smokeSources) {
+        if (p.distanceTo(hero.pos) < 40) this.fx.puff(p, { color: '#8a6ab8', size: 0.9, life: 2.2, rise: 1.2 });
+      }
+    }
     this.fx.update(dt);
 
     // Lumière de lune qui suit le joueur (ombres)

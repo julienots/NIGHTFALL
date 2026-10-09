@@ -3,6 +3,51 @@
 import * as THREE from 'three';
 
 const MAX_PARTICLES = 1200;
+const MAX_PUFFS = 300;
+const WORDS = ['POW!', 'BAM!', 'CRAC!', 'BOUM!', 'WHAM!'];
+
+function starTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const x = c.getContext('2d');
+  x.translate(64, 64);
+  x.beginPath();
+  for (let i = 0; i < 16; i++) {
+    const r = i % 2 ? 22 : 60;
+    const a = (i / 16) * Math.PI * 2;
+    x.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  x.closePath();
+  x.fillStyle = '#ffffff';
+  x.fill();
+  x.lineWidth = 6;
+  x.strokeStyle = 'rgba(30,10,60,0.9)';
+  x.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function wordTexture(word, color) {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 128;
+  const x = c.getContext('2d');
+  x.font = '76px "Lilita One", "Arial Black", sans-serif';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.lineJoin = 'round';
+  x.lineWidth = 14;
+  x.strokeStyle = '#1d0f3a';
+  x.translate(128, 64);
+  x.rotate(-0.12);
+  x.strokeText(word, 0, 0);
+  x.fillStyle = color;
+  x.fillText(word, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
 
 export class Effects {
   constructor(scene) {
@@ -46,6 +91,46 @@ export class Effects {
     scene.add(this.points);
     this.particles = Array.from({ length: MAX_PARTICLES }, () => ({ life: 0 }));
     this.pi = 0;
+
+    // --- Nuages de poussière / fumée (opaques, bord net : style cartoon) ---
+    const pg = new THREE.BufferGeometry();
+    this.uPos = new Float32Array(MAX_PUFFS * 3);
+    this.uCol = new Float32Array(MAX_PUFFS * 3);
+    this.uSize = new Float32Array(MAX_PUFFS);
+    this.uAlpha = new Float32Array(MAX_PUFFS);
+    pg.setAttribute('position', new THREE.BufferAttribute(this.uPos, 3));
+    pg.setAttribute('color', new THREE.BufferAttribute(this.uCol, 3));
+    pg.setAttribute('size', new THREE.BufferAttribute(this.uSize, 1));
+    pg.setAttribute('alpha', new THREE.BufferAttribute(this.uAlpha, 1));
+    this.puffPoints = new THREE.Points(
+      pg,
+      new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        uniforms: { uScale: { value: 600 } },
+        vertexShader: this.points.material.vertexShader,
+        fragmentShader: `
+          varying vec3 vCol; varying float vA;
+          void main(){
+            vec2 p = gl_PointCoord - 0.5;
+            float d = length(p);
+            if (d > 0.5) discard;
+            // Ombrage en deux tons + liseré sombre
+            float shade = p.x + p.y < 0.1 ? 1.0 : 0.78;
+            vec3 c = d > 0.44 ? vCol * 0.45 : vCol * shade;
+            gl_FragColor = vec4(c, vA);
+          }`,
+      }),
+    );
+    this.puffPoints.frustumCulled = false;
+    scene.add(this.puffPoints);
+    this.puffs = Array.from({ length: MAX_PUFFS }, () => ({ life: 0 }));
+    this.ui = 0;
+
+    // --- Étoiles d'impact et onomatopées (sprites) ---
+    this.starTex = starTexture();
+    this.wordTex = {};
+    this.sprites = [];
 
     // --- Anneaux / télégraphes ---
     this.rings = [];
@@ -91,6 +176,56 @@ export class Effects {
     }
   }
 
+  puff(pos, { color = '#ece6ff', size = 0.8, life = 0.8, rise = 0.6, spread = 0.6, count = 1, vel = null } = {}) {
+    const c = new THREE.Color(color);
+    for (let i = 0; i < count; i++) {
+      const p = this.puffs[this.ui];
+      this.ui = (this.ui + 1) % MAX_PUFFS;
+      p.x = pos.x + (Math.random() - 0.5) * spread;
+      p.y = pos.y + Math.random() * 0.2;
+      p.z = pos.z + (Math.random() - 0.5) * spread;
+      p.vx = vel ? vel.x : (Math.random() - 0.5) * 0.6;
+      p.vy = rise;
+      p.vz = vel ? vel.z : (Math.random() - 0.5) * 0.6;
+      p.life = p.max = life * (0.7 + Math.random() * 0.5);
+      p.size = size * (0.7 + Math.random() * 0.6);
+      p.r = c.r;
+      p.g = c.g;
+      p.b = c.b;
+    }
+  }
+
+  // Couronne de poussière au sol (atterrissage, onde de choc)
+  dustRing(pos, radius = 1.5, count = 12, color = '#d9d0f5') {
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2;
+      this.puff({ x: pos.x + Math.cos(a) * radius * 0.3, y: pos.y + 0.1, z: pos.z + Math.sin(a) * radius * 0.3 }, {
+        color, size: 0.9, life: 0.6, rise: 0.4, spread: 0.1, vel: { x: Math.cos(a) * radius * 2.2, z: Math.sin(a) * radius * 2.2 },
+      });
+    }
+  }
+
+  #sprite(map, pos, { size = 1.2, life = 0.25, color = '#ffffff', grow = 1.6, rise = 0 }) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map, color, transparent: true, depthWrite: false, depthTest: false }));
+    s.position.set(pos.x, pos.y, pos.z);
+    s.scale.setScalar(size * 0.3);
+    s.material.rotation = Math.random() * Math.PI;
+    s.renderOrder = 10;
+    this.scene.add(s);
+    this.sprites.push({ s, t: 0, life, size, grow, rise });
+  }
+
+  starBurst(pos, color = '#fff27a', size = 1.3) {
+    this.#sprite(this.starTex, pos, { color, size, life: 0.18 });
+  }
+
+  comic(pos, color = '#ffd23f') {
+    const w = WORDS[Math.floor(Math.random() * WORDS.length)];
+    const key = w + color;
+    if (!this.wordTex[key]) this.wordTex[key] = wordTexture(w, color);
+    this.#sprite(this.wordTex[key], { x: pos.x, y: pos.y + 0.6, z: pos.z }, { size: 2.6, life: 0.7, grow: 1.15, rise: 1.2 });
+  }
+
   // Anneau qui s'étend au sol (onde de choc) ou disque de télégraphe.
   ring(pos, { color = '#ffcd20', from = 0.5, to = 6, life = 0.5, y = 0.08, disc = false, opacity = 0.9, follow = null } = {}) {
     const m = new THREE.Mesh(
@@ -123,13 +258,14 @@ export class Effects {
   }
 
   hitSpark(pos, color = '#ffd27a', heavy = false) {
-    this.emit(pos, { count: heavy ? 26 : 14, color, speed: heavy ? 9 : 6, size: heavy ? 0.3 : 0.2, life: 0.35 });
-    this.emit(pos, { count: heavy ? 10 : 5, color: '#ffffff', speed: 3, size: 0.5, life: 0.12, gravity: 0 });
-    this.flash(pos, color, heavy ? 40 : 18, 0.12);
+    this.emit(pos, { count: heavy ? 18 : 10, color, speed: heavy ? 9 : 6, size: heavy ? 0.3 : 0.22, life: 0.3 });
+    this.starBurst(pos, heavy ? '#fff27a' : '#ffffff', heavy ? 1.9 : 1.2);
+    if (heavy) this.comic(pos);
+    this.flash(pos, color, heavy ? 30 : 14, 0.12);
   }
 
   ichor(pos, color = '#7dff6a') {
-    this.emit(pos, { count: 10, color, speed: 4, up: 3, size: 0.18, life: 0.6, gravity: 14 });
+    this.puff(pos, { color, size: 0.35, life: 0.45, rise: 2.5, spread: 0.4, count: 5 });
   }
 
   voidBurst(pos, dir) {
@@ -142,13 +278,14 @@ export class Effects {
 
   slamWave(pos, radius, color = '#ff5a2a') {
     this.ring(pos, { color, from: 0.5, to: radius, life: 0.45 });
-    this.emit(pos, { count: 40, color: '#9a8c7a', speed: 7, up: 3, size: 0.35, life: 0.9, gravity: 12 });
-    this.flash(pos, color, 40, 0.25);
+    this.dustRing(pos, radius * 0.5, 16);
+    this.flash(pos, color, 30, 0.25);
   }
 
   deathBurst(pos, color) {
-    this.emit({ x: pos.x, y: pos.y + 1, z: pos.z }, { count: 60, color, speed: 7, up: 4, size: 0.3, life: 1.1, gravity: 4 });
-    this.emit({ x: pos.x, y: pos.y + 1, z: pos.z }, { count: 30, color: '#1a0a20', speed: 3, up: 3, size: 0.6, life: 1.4, gravity: -1 });
+    this.emit({ x: pos.x, y: pos.y + 1, z: pos.z }, { count: 30, color, speed: 7, up: 4, size: 0.3, life: 0.9, gravity: 4 });
+    this.puff({ x: pos.x, y: pos.y + 0.6, z: pos.z }, { color: '#6a4aa8', size: 1.4, life: 1.3, rise: 1.4, spread: 1.4, count: 14 });
+    this.starBurst({ x: pos.x, y: pos.y + 1.2, z: pos.z }, color, 2.4);
     this.ring(pos, { color, from: 0.3, to: 3.5, life: 0.6 });
   }
 
@@ -185,6 +322,56 @@ export class Effects {
     if (any) {
       const a = this.points.geometry.attributes;
       a.position.needsUpdate = a.color.needsUpdate = a.size.needsUpdate = a.alpha.needsUpdate = true;
+    }
+
+    let anyP = false;
+    for (let i = 0; i < MAX_PUFFS; i++) {
+      const p = this.puffs[i];
+      if (p.life <= 0) {
+        if (this.uAlpha[i] !== 0) {
+          this.uAlpha[i] = 0;
+          anyP = true;
+        }
+        continue;
+      }
+      anyP = true;
+      p.life -= dt;
+      const k = 1 - p.life / p.max;
+      const dg = Math.exp(-3 * dt);
+      p.vx *= dg;
+      p.vz *= dg;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      const j = i * 3;
+      this.uPos[j] = p.x;
+      this.uPos[j + 1] = p.y;
+      this.uPos[j + 2] = p.z;
+      this.uCol[j] = p.r;
+      this.uCol[j + 1] = p.g;
+      this.uCol[j + 2] = p.b;
+      // Gonfle puis rétrécit (pop cartoon)
+      this.uSize[i] = p.size * (k < 0.2 ? k / 0.2 : 1 - (k - 0.2) * 0.9);
+      this.uAlpha[i] = k > 0.8 ? (1 - k) / 0.2 : 1;
+    }
+    if (anyP) {
+      const a = this.puffPoints.geometry.attributes;
+      a.position.needsUpdate = a.color.needsUpdate = a.size.needsUpdate = a.alpha.needsUpdate = true;
+    }
+
+    for (let i = this.sprites.length - 1; i >= 0; i--) {
+      const sp = this.sprites[i];
+      sp.t += dt;
+      const k = sp.t / sp.life;
+      const pop = k < 0.25 ? 0.3 + (k / 0.25) * 0.9 : 1.2 + (k - 0.25) * (sp.grow - 1);
+      sp.s.scale.setScalar(sp.size * pop);
+      sp.s.position.y += sp.rise * dt;
+      sp.s.material.opacity = k > 0.6 ? Math.max(0, (1 - k) / 0.4) : 1;
+      if (k >= 1) {
+        this.scene.remove(sp.s);
+        sp.s.material.dispose();
+        this.sprites.splice(i, 1);
+      }
     }
 
     for (let i = this.rings.length - 1; i >= 0; i--) {

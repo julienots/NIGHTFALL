@@ -24,38 +24,38 @@ export const ITEMS = {
   // --- Gants énergétiques (arme du vertical slice) ---
   patrol_gloves: {
     name: 'Gants de patrouille', category: 'weapon', slot: 'weapon', rarity: 'common',
-    stats: { damage: 10 }, visual: { glow: '#ffb347', plate: '#3a3f4a' },
+    stats: { damage: 10 }, visual: { glow: '#ffb347', plate: '#8a93b8' },
     desc: 'Gants renforcés de la police de Vesper. Fiables, sans plus.',
   },
   amber_knuckles: {
     name: 'Poings Ambre', category: 'weapon', slot: 'weapon', rarity: 'uncommon',
-    stats: { damage: 14, energyGain: 2 }, visual: { glow: '#ffcd20', plate: '#4a3a20' },
+    stats: { damage: 14, energyGain: 2 }, visual: { glow: '#fff27a', plate: '#ffb020' },
     desc: "Alliage chargé d'énergie résiduelle. Chaque coup recharge un peu d'énergie.",
   },
   eclipse_gauntlets: {
     name: 'Gantelets Éclipse', category: 'weapon', slot: 'weapon', rarity: 'rare',
-    stats: { damage: 19, energyGain: 3 }, visual: { glow: '#3f9bff', plate: '#1d2a44' },
+    stats: { damage: 19, energyGain: 3 }, visual: { glow: '#7fe3ff', plate: '#2f7de1' },
     desc: 'Prototype Aegis. Les circuits brillent plus fort à chaque combo.',
   },
   void_phalanx: {
     name: 'Phalanges du Vide', category: 'weapon', slot: 'weapon', rarity: 'epic',
-    stats: { damage: 26, energyGain: 4, powerDamage: 0.2 }, visual: { glow: '#b05cff', plate: '#24123a' },
+    stats: { damage: 26, energyGain: 4, powerDamage: 0.2 }, visual: { glow: '#e0a0ff', plate: '#6a3ad1' },
     desc: 'Arrachées à une créature. Amplifient Void Strike de 20 %.',
   },
   // --- Armures ---
   street_jacket: {
     name: 'Veste renforcée', category: 'armor', slot: 'armor', rarity: 'common',
-    stats: { defense: 4, maxHp: 10 }, visual: { plate: '#2b2f38', trim: '#7a8190' },
+    stats: { defense: 4, maxHp: 10 }, visual: { plate: '#c9563f', trim: '#ffd27a' },
     desc: 'Kevlar de récupération cousu à la main.',
   },
   aegis_plate: {
     name: 'Plastron Aegis', category: 'armor', slot: 'armor', rarity: 'rare',
-    stats: { defense: 10, maxHp: 30 }, visual: { plate: '#1b2c4a', trim: '#3f9bff' },
+    stats: { defense: 10, maxHp: 30 }, visual: { plate: '#e8ecff', trim: '#3f9bff' },
     desc: 'Plaque de confinement réutilisée. Lourde mais efficace.',
   },
   nightfall_shell: {
     name: 'Carapace Nightfall', category: 'armor', slot: 'armor', rarity: 'epic',
-    stats: { defense: 15, maxHp: 45, maxEnergy: 20 }, visual: { plate: '#20102e', trim: '#b05cff' },
+    stats: { defense: 15, maxHp: 45, maxEnergy: 20 }, visual: { plate: '#3a1d6e', trim: '#d08cff' },
     desc: "Tissu organique qui semble respirer. Augmente la réserve d'énergie.",
   },
   // --- Ressources ---

@@ -9,20 +9,27 @@ canvas.screen { display: block; }
   animation: breathe 2.4s ease-in-out infinite; }
 .skip { position: fixed; right: 24px; bottom: 18px; margin: 0; font-size: 12px; letter-spacing: .2em;
   text-transform: uppercase; color: #ffffff55; }
-#title { background: radial-gradient(ellipse at 50% 60%, #1c1238 0%, #05030c 60%, #000 100%);
-  animation: fadein 1.2s ease-out; }
-#title h1 { margin: 0; font-size: clamp(48px, 11vw, 160px); letter-spacing: .12em; font-weight: 900;
-  color: #e9e6f5; text-shadow: 0 0 40px #6a3cff88; }
-#title h2 { margin: .2em 0 0; font-size: clamp(14px, 2.4vw, 32px); letter-spacing: .5em; color: #ffcd20; }
+#title { background: radial-gradient(ellipse at 50% 70%, #6a2fa8 0%, #2a1260 45%, #120630 100%);
+  animation: fadein 1.2s ease-out; font-family: "Nunito", system-ui, sans-serif; }
+#title h1 { margin: 0; font: clamp(56px, 12vw, 170px)/1 "Lilita One", "Arial Black", sans-serif; letter-spacing: .04em;
+  color: #fff; text-shadow: 0 6px 0 #2a1260, 0 12px 0 #120630, 0 0 60px #b070ff; -webkit-text-stroke: 3px #2a1260;
+  animation: wobble 3s ease-in-out infinite; }
+#title h2 { margin: .3em 0 0; font: clamp(16px, 2.6vw, 34px) "Lilita One", sans-serif; letter-spacing: .25em; color: #ffcd20;
+  text-shadow: 0 4px 0 #2a1260; }
+@keyframes wobble { 50% { transform: rotate(-1.5deg) scale(1.02); } }
 #title .press { margin-top: 3em; letter-spacing: .3em; text-transform: uppercase; font-size: 13px;
   color: #ffffffaa; animation: breathe 2s ease-in-out infinite; }
 #title .studio { position: absolute; bottom: 16px; font-size: 11px; color: #ffffff44; }
 @keyframes breathe { 50% { opacity: .45; } }
 @keyframes fadein { from { opacity: 0; } }
 .title-menu { margin-top: 2.6em; display: flex; flex-direction: column; gap: 10px; align-items: center; }
-.tbtn { width: 260px; background: rgba(255,255,255,.04); border: 1px solid #ffffff33; color: #e9e6f5; padding: 12px;
-  font: 700 13px/1 system-ui, sans-serif; letter-spacing: .3em; text-transform: uppercase; cursor: pointer; }
-.tbtn:hover { border-color: #ffcd20; color: #ffcd20; }
+.tbtn { width: 280px; background: #ffcd20; border: 4px solid #2a1260; color: #2a1260; padding: 14px; border-radius: 18px;
+  font: 20px/1 "Lilita One", sans-serif; letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
+  box-shadow: 0 6px 0 #2a1260; transition: transform .1s; }
+.tbtn:hover { transform: translateY(-2px) scale(1.04); background: #fff27a; }
+.tbtn:active { transform: translateY(4px); box-shadow: 0 2px 0 #2a1260; }
+#btn-new { background: #7fe3ff; }
 .save-info { color: #ffffff66; font-size: 12px; margin: 4px 0 0; }
-.loading { letter-spacing: .4em; text-transform: uppercase; color: #ffcd20; animation: breathe 1.4s ease-in-out infinite; }
+.loading { font: 28px "Lilita One", sans-serif; letter-spacing: .1em; color: #ffcd20; text-shadow: 0 4px 0 #2a1260; animation: breathe 1.4s ease-in-out infinite; }
+#loading { background: #2a1260; }
 #game.hidden { display: none; }

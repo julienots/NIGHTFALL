@@ -136,7 +136,7 @@ check('ouverture répétée sans duplication', count === 1, `${count}`);
 const before = await G(() => window.__nightfall.hero.stats.damage);
 await G(() => { const g = window.__nightfall; const it = g.inventory.items.find((i) => i.id === 'eclipse_gauntlets'); g.inventory.equip(it.uid); g.onEquipmentChanged(); });
 const after = await G(() => ({ d: window.__nightfall.hero.stats.damage, glow: '#' + window.__nightfall.hero.model.mats.glow.emissive.getHexString() }));
-check('équiper modifie stats + visuel', after.d > before && after.glow === '#3f9bff', `${before} -> ${after.d}, ${after.glow}`);
+check('équiper modifie stats + visuel', after.d > before && after.glow === '#7fe3ff', `${before} -> ${after.d}, ${after.glow}`);
 
 await press('inventory', 0.02);
 await G(() => window.__nightfall.renderOnce());

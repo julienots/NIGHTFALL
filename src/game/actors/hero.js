@@ -233,7 +233,7 @@ export class Hero {
       this.yaw = wishDir ? Math.atan2(dir.x, dir.z) : this.yaw;
       this.dodgeCd = 0.55;
       this.game.audio.dodge();
-      this.game.fx.emit({ x: this.pos.x, y: this.pos.y + 1, z: this.pos.z }, { count: 16, color: '#a060ff', speed: 2, size: 0.3, life: 0.35, gravity: 0 });
+      this.game.fx.dustRing(this.pos, 0.8, 7, '#c9b8ff');
     } else if (input.was('power')) {
       const def = MOVES.power;
       if (this.powerCd > 0 || this.energy < def.energy) this.game.onPowerDenied(this.powerCd > 0 ? 'cooldown' : 'energy');
@@ -386,6 +386,7 @@ export class Hero {
       this.pos.y += this.vy * dt;
       if (this.pos.y <= gh && this.vy <= 0) {
         if (this.vy < -14 && this.action?.kind !== 'dive') this.game.shake(0.12);
+        if (this.vy < -6) this.game.fx.dustRing(this.pos, 0.9, 8);
         this.pos.y = gh;
         this.vy = 0;
         this.grounded = true;

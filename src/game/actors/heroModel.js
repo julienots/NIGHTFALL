@@ -2,36 +2,7 @@
 // interchangeables, visière et veines d'énergie émissives, écharpe animée.
 // Le modèle fait face à +Z ; son côté droit est en -X.
 import * as THREE from 'three';
-
-function suitTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const x = c.getContext('2d');
-  x.fillStyle = '#1a2033';
-  x.fillRect(0, 0, 256, 256);
-  // Maillage hexagonal discret
-  x.strokeStyle = 'rgba(120,140,190,0.18)';
-  x.lineWidth = 2;
-  const r = 14;
-  for (let row = 0; row < 12; row++) {
-    for (let colI = 0; colI < 12; colI++) {
-      const cx = colI * r * 1.5;
-      const cy = row * r * 1.732 + (colI % 2 ? r * 0.866 : 0);
-      x.beginPath();
-      for (let k = 0; k < 6; k++) {
-        const a = (k / 6) * Math.PI * 2;
-        x.lineTo(cx + Math.cos(a) * r * 0.92, cy + Math.sin(a) * r * 0.92);
-      }
-      x.closePath();
-      x.stroke();
-    }
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(2, 2);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
+import { toon } from '../fx/toon.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => t * t * (3 - 2 * t);
@@ -108,18 +79,19 @@ export class HeroModel {
     this.joints = {};
     this.time = 0;
     this.current = {};
-    const suit = new THREE.MeshStandardMaterial({ map: suitTexture(), color: '#ffffff', roughness: 0.55, metalness: 0.2 });
+    const rim = { rim: '#9fd8ff', rimStrength: 0.75, shared: false };
     this.mats = {
-      suit,
-      armor: new THREE.MeshStandardMaterial({ color: '#2b2f38', roughness: 0.35, metalness: 0.75 }),
-      trim: new THREE.MeshStandardMaterial({ color: '#7a8190', roughness: 0.3, metalness: 0.9 }),
-      helmet: new THREE.MeshStandardMaterial({ color: '#1b1f2a', roughness: 0.25, metalness: 0.85 }),
-      visor: new THREE.MeshStandardMaterial({ color: '#100800', emissive: '#ffb020', emissiveIntensity: 3, roughness: 0.1 }),
-      vein: new THREE.MeshStandardMaterial({ color: '#0a0010', emissive: '#a060ff', emissiveIntensity: 1.5 }),
-      gauntlet: new THREE.MeshStandardMaterial({ color: '#3a3f4a', roughness: 0.3, metalness: 0.85 }),
-      glow: new THREE.MeshStandardMaterial({ color: '#100500', emissive: '#ffb347', emissiveIntensity: 2.5 }),
-      scarf: new THREE.MeshStandardMaterial({ color: '#c8641c', roughness: 0.85, side: THREE.DoubleSide }),
-      boot: new THREE.MeshStandardMaterial({ color: '#15171c', roughness: 0.5, metalness: 0.5 }),
+      suit: toon('#2f4bd1', rim),
+      armor: toon('#26307a', rim),
+      trim: toon('#ff9a3d', rim),
+      helmet: toon('#1d2463', { ...rim, rimStrength: 1 }),
+      visor: toon('#ffb020', { emissive: '#ffb020', emissiveIntensity: 1.6, shared: false }),
+      vein: toon('#a060ff', { emissive: '#a060ff', emissiveIntensity: 1.2, shared: false }),
+      gauntlet: toon('#8a93b8', rim),
+      glow: toon('#ffb347', { emissive: '#ffb347', emissiveIntensity: 1.4, shared: false }),
+      scarf: toon('#ff7a2a', { ...rim, side: THREE.DoubleSide }),
+      boot: toon('#1d2463', rim),
+      skin: toon('#f2c6a0', rim),
     };
     this.#build();
     this.root.traverse((o) => {
@@ -156,9 +128,9 @@ export class HeroModel {
 
     const spine = this.#pivot('spine', hips, 0, 0.12, 0);
     // Abdomen et torse
-    this.#mesh(new THREE.CapsuleGeometry(0.16, 0.18, 4, 12), M.suit, spine, 0, 0.14, 0);
-    const chest = this.#mesh(new THREE.CapsuleGeometry(0.2, 0.2, 6, 16), M.suit, spine, 0, 0.4, 0);
-    chest.scale.set(1.22, 1, 0.85);
+    this.#mesh(new THREE.CapsuleGeometry(0.135, 0.18, 4, 12), M.suit, spine, 0, 0.14, 0);
+    const chest = this.#mesh(new THREE.CapsuleGeometry(0.2, 0.2, 6, 16), M.suit, spine, 0, 0.42, 0);
+    chest.scale.set(1.35, 1.05, 0.9); // torse en V héroïque
     // Plastron (armure)
     this.armorParts = [];
     const plate = this.#mesh(new THREE.SphereGeometry(0.25, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.armor, spine, 0, 0.38, 0.03, Math.PI / 2 - 0.1);
@@ -169,7 +141,8 @@ export class HeroModel {
       this.#mesh(new THREE.BoxGeometry(0.2 - i * 0.02, 0.055, 0.06), M.armor, spine, 0, 0.27 - i * 0.07, 0.14 + i * 0.005);
     }
     // Noyau d'énergie au centre du torse
-    this.core = this.#mesh(new THREE.OctahedronGeometry(0.05, 0), M.vein, spine, 0, 0.42, 0.24);
+    this.core = this.#mesh(new THREE.OctahedronGeometry(0.065, 0), M.vein, spine, 0, 0.44, 0.255);
+    this.#mesh(new THREE.TorusGeometry(0.085, 0.014, 6, 20), M.trim, spine, 0, 0.44, 0.235);
     // Dos : module dorsal
     this.#mesh(new THREE.BoxGeometry(0.3, 0.32, 0.1), M.armor, spine, 0, 0.4, -0.2);
     for (const s of [-1, 1]) this.#mesh(new THREE.BoxGeometry(0.03, 0.26, 0.03), M.vein, spine, s * 0.09, 0.4, -0.26);
@@ -178,7 +151,8 @@ export class HeroModel {
     const neck = this.#pivot('head', spine, 0, 0.66, 0);
     this.#mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.1, 10), M.suit, neck, 0, 0.0, 0);
     const helm = this.#mesh(new THREE.SphereGeometry(0.135, 24, 18), M.helmet, neck, 0, 0.14, 0.01);
-    helm.scale.set(0.95, 1.12, 1.05);
+    helm.scale.set(0.95, 1.08, 1.05);
+    neck.scale.setScalar(1.4); // tête cartoon plus grosse
     // Visière en V
     for (const s of [-1, 1]) {
       this.#mesh(new THREE.BoxGeometry(0.11, 0.028, 0.04), M.visor, neck, s * 0.05, 0.15, 0.125, 0, s * 0.35, s * 0.22);
@@ -208,8 +182,8 @@ export class HeroModel {
     for (const [side, sx] of [['R', -1], ['L', 1]]) {
       const sh = this.#pivot('sh' + side, spine, sx * 0.29, 0.5, 0);
       // Épaulière (armure)
-      const pad = this.#mesh(new THREE.SphereGeometry(0.12, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.armor, sh, sx * 0.02, 0.03, 0);
-      pad.scale.set(1.1, 0.8, 1.1);
+      const pad = this.#mesh(new THREE.SphereGeometry(0.12, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.armor, sh, sx * 0.03, 0.03, 0);
+      pad.scale.set(1.45, 1.1, 1.45);
       this.armorParts.push(pad);
       this.#mesh(new THREE.BoxGeometry(0.02, 0.02, 0.18), M.trim, sh, sx * 0.08, 0.09, 0, 0, 0, sx * 0.6);
       this.#mesh(new THREE.CapsuleGeometry(0.068, 0.2, 4, 10), M.suit, sh, 0, -0.16, 0);
@@ -218,13 +192,14 @@ export class HeroModel {
       const el = this.#pivot('el' + side, sh, 0, -0.33, 0);
       this.#mesh(new THREE.CapsuleGeometry(0.06, 0.18, 4, 10), M.suit, el, 0, -0.13, 0);
       // Gantelet (arme)
-      const g = this.#mesh(new THREE.CylinderGeometry(0.078, 0.07, 0.2, 12), M.gauntlet, el, 0, -0.17, 0);
+      const g = this.#mesh(new THREE.CylinderGeometry(0.1, 0.075, 0.22, 14), M.gauntlet, el, 0, -0.18, 0);
       g.scale.z = 1.1;
       for (let k = 0; k < 2; k++) {
-        this.#mesh(new THREE.TorusGeometry(0.079, 0.008, 6, 16), M.glow, el, 0, -0.12 - k * 0.07, 0, Math.PI / 2);
+        this.#mesh(new THREE.TorusGeometry(0.095 - k * 0.012, 0.012, 6, 16), M.glow, el, 0, -0.12 - k * 0.08, 0, Math.PI / 2);
       }
-      const fist = this.#mesh(new THREE.BoxGeometry(0.1, 0.1, 0.11), M.gauntlet, el, 0, -0.31, 0.01);
-      this.#mesh(new THREE.BoxGeometry(0.105, 0.025, 0.03), M.glow, fist, 0, 0.0, 0.055);
+      const fist = this.#mesh(new THREE.SphereGeometry(0.075, 14, 10), M.gauntlet, el, 0, -0.33, 0.01);
+      fist.scale.set(1.25, 1.1, 1.3); // gros poings cartoon
+      this.#mesh(new THREE.BoxGeometry(0.12, 0.03, 0.03), M.glow, fist, 0, 0.0, 0.07);
       this.joints['fist' + side] = fist;
     }
 
@@ -237,8 +212,10 @@ export class HeroModel {
       const kn = this.#pivot('kn' + side, hip, 0, -0.43, 0);
       this.#mesh(new THREE.SphereGeometry(0.06, 10, 8), M.armor, kn, 0, 0, 0.06);
       this.#mesh(new THREE.CapsuleGeometry(0.07, 0.3, 4, 10), M.suit, kn, 0, -0.2, 0);
-      this.#mesh(new THREE.BoxGeometry(0.11, 0.16, 0.13), M.boot, kn, 0, -0.38, 0.0);
-      this.#mesh(new THREE.BoxGeometry(0.1, 0.08, 0.24), M.boot, kn, 0, -0.47, 0.05);
+      this.#mesh(new THREE.CylinderGeometry(0.085, 0.1, 0.2, 12), M.boot, kn, 0, -0.37, 0.0);
+      const shoe = this.#mesh(new THREE.SphereGeometry(0.1, 14, 10), M.boot, kn, 0, -0.47, 0.07);
+      shoe.scale.set(1.05, 0.6, 1.6); // grosses bottes arrondies
+      this.#mesh(new THREE.BoxGeometry(0.16, 0.02, 0.05), M.trim, kn, 0, -0.42, 0.1);
       this.#mesh(new THREE.BoxGeometry(0.1, 0.012, 0.012), M.glow, kn, 0, -0.43, 0.17);
     }
 
@@ -254,10 +231,10 @@ export class HeroModel {
 
   // Apparence de l'équipement (visuels définis dans data/items.js).
   setEquipment(weaponVisual, armorVisual) {
-    const w = weaponVisual || { glow: '#ffb347', plate: '#3a3f4a' };
+    const w = weaponVisual || { glow: '#ffb347', plate: '#8a93b8' };
     this.mats.glow.emissive.set(w.glow);
     this.mats.gauntlet.color.set(w.plate);
-    const a = armorVisual || { plate: '#2b2f38', trim: '#7a8190' };
+    const a = armorVisual || { plate: '#26307a', trim: '#ff9a3d' };
     this.mats.armor.color.set(a.plate);
     this.mats.trim.color.set(a.trim);
     for (const p of this.armorParts) p.visible = !!armorVisual || p.geometry.type !== 'BoxGeometry';
@@ -265,8 +242,8 @@ export class HeroModel {
 
   // Intensité des veines selon l'énergie (0..1) et le flash d'attaque.
   setEnergy(e, flash = 0) {
-    this.mats.vein.emissiveIntensity = 0.4 + e * 2.2 + flash * 4;
-    this.mats.glow.emissiveIntensity = 2.2 + flash * 5;
+    this.mats.vein.emissiveIntensity = 0.5 + e * 1.2 + flash * 2.5;
+    this.mats.glow.emissiveIntensity = 1.3 + flash * 2.5;
     this.aura.material.opacity = flash * 0.18;
     this.aura.scale.setScalar(0.7 + flash * 0.4);
     this.aura.scale.y = 1.15 + flash * 0.4;

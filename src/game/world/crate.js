@@ -2,11 +2,13 @@
 import * as THREE from 'three';
 import { CRATE_TYPES } from '../systems/loot.js';
 import { ribbedTexture } from './textures.js';
+import { toon } from '../fx/toon.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const STYLE = {
-  supply: { body: '#4a5a3a', trim: '#2a2a24', size: [1.2, 0.75, 0.8] },
-  tactical: { body: '#1e2633', trim: '#3f9bff', size: [1.4, 0.8, 0.9] },
-  elite: { body: '#1a1024', trim: '#b05cff', size: [1.5, 0.9, 1.0] },
+  supply: { body: '#c98a4a', trim: '#6a3a2a', size: [1.2, 0.75, 0.8] },
+  tactical: { body: '#3d8fd1', trim: '#fff27a', size: [1.4, 0.8, 0.9] },
+  elite: { body: '#7b4ad6', trim: '#ff9cf0', size: [1.5, 0.9, 1.0] },
 };
 
 export class Crate {
@@ -24,10 +26,10 @@ export class Crate {
     this.root.position.copy(this.pos);
     this.root.rotation.y = def.rot || 0;
 
-    const body = new THREE.MeshStandardMaterial({ map: ribbedTexture(st.body), roughness: 0.6, metalness: def.type === 'supply' ? 0.2 : 0.7 });
-    const trim = new THREE.MeshStandardMaterial({ color: st.trim, roughness: 0.4, metalness: 0.8, emissive: def.type === 'supply' ? '#000' : st.trim, emissiveIntensity: def.type === 'supply' ? 0 : 1.2 });
+    const body = toon('#ffffff', { map: ribbedTexture(st.body), rim: '#ffffff', rimStrength: 0.5 });
+    const trim = toon(st.trim, { emissive: def.type === 'supply' ? '#000000' : st.trim, emissiveIntensity: def.type === 'supply' ? 0 : 0.8, shared: false });
     this.trimMat = trim;
-    const base = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.7, d), body);
+    const base = new THREE.Mesh(new RoundedBoxGeometry(w, h * 0.7, d, 3, 0.07), body);
     base.position.y = h * 0.35;
     this.root.add(base);
     // Renforts d'angle
@@ -44,7 +46,7 @@ export class Crate {
     // Couvercle sur charnière arrière
     this.lid = new THREE.Group();
     this.lid.position.set(0, h * 0.7, -d / 2);
-    const lidMesh = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.3, d), body);
+    const lidMesh = new THREE.Mesh(new RoundedBoxGeometry(w + 0.04, h * 0.3, d + 0.04, 3, 0.07), body);
     lidMesh.position.set(0, h * 0.15, d / 2);
     this.lid.add(lidMesh);
     const lock = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.05), trim);
@@ -120,7 +122,7 @@ export class Crate {
       }
     } else if (this.state !== 'opened') {
       this.beam.material.opacity = 0.1 + Math.sin(t * 2 + this.pos.x) * 0.04;
-      this.trimMat.emissiveIntensity = this.type === 'supply' ? 0 : 1 + Math.sin(t * 3) * 0.4;
+      this.trimMat.emissiveIntensity = this.type === 'supply' ? 0 : 0.7 + Math.sin(t * 3) * 0.3;
     }
   }
 }

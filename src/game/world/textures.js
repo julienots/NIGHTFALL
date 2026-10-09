@@ -27,12 +27,25 @@ function grain(ctx, w, h, rand, amount, alpha = 0.08) {
   }
 }
 
-// Façade : grille de fenêtres (8 travées x 8 étages par répétition).
-// Renvoie { map, emissive } ; style : 'concrete' | 'brick' | 'glass'.
+// Façade cartoon : mur en aplat, fenêtres arrondies à cadre épais.
+// (8 travées x 8 étages par répétition). style : 'concrete' | 'brick' | 'glass'.
+const WALLS = ['#e86f6f', '#5fb7c9', '#f2b84b', '#8f7ad8', '#6fcf97', '#e98ccf', '#4f74c9', '#ff9f5a'];
+const LIT = ['#ffe27a', '#ffd166', '#9ff3ff', '#ffb3e6', '#ffe27a'];
+
+function roundRect(x, px, py, w, h, r) {
+  x.beginPath();
+  x.moveTo(px + r, py);
+  x.arcTo(px + w, py, px + w, py + h, r);
+  x.arcTo(px + w, py + h, px, py + h, r);
+  x.arcTo(px, py + h, px, py, r);
+  x.arcTo(px, py, px + w, py, r);
+  x.closePath();
+}
+
 export function facadeTextures(style, seed = 1) {
   const key = `facade:${style}:${seed}`;
   if (cache.has(key)) return cache.get(key);
-  const rand = mulberry32(seed * 977 + style.length);
+  const rand = mulberry32(seed * 977 + style.length * 31);
   const W = 512;
   const H = 512;
   const bays = 8;
@@ -41,137 +54,131 @@ export function facadeTextures(style, seed = 1) {
   const fh = H / floors;
   const [c, x] = canvas(W, H);
   const [e, ex] = canvas(W, H);
-  const base = { concrete: '#5d5f66', brick: '#5a3a32', glass: '#1c2733' }[style];
-  x.fillStyle = base;
+  const wall = style === 'glass' ? ['#3d6fd1', '#2fa8a8', '#7b4ad6'][seed % 3] : WALLS[(seed * 3 + style.length) % WALLS.length];
+  x.fillStyle = wall;
   x.fillRect(0, 0, W, H);
   ex.fillStyle = '#000';
   ex.fillRect(0, 0, W, H);
-  grain(x, W, H, rand, 6000, 0.12);
-
-  // Traînées d'humidité verticales
-  for (let i = 0; i < 40; i++) {
-    x.fillStyle = `rgba(0,0,0,${0.05 + rand() * 0.1})`;
-    x.fillRect(rand() * W, rand() * H * 0.5, 2 + rand() * 6, H * (0.3 + rand() * 0.7));
-  }
-
-  const warm = ['#ffcf8a', '#ffd9a0', '#ffe9c4', '#ffb45e'];
-  const cold = ['#a8d4ff', '#cfe6ff', '#8fffe6'];
-  for (let f = 0; f < floors; f++) {
-    // Bandeau de dalle
-    x.fillStyle = 'rgba(0,0,0,0.25)';
-    x.fillRect(0, f * fh + fh - 6, W, 6);
-    for (let b = 0; b < bays; b++) {
-      const wx = b * bw + bw * (style === 'glass' ? 0.06 : 0.2);
-      const wy = f * fh + fh * (style === 'glass' ? 0.08 : 0.22);
-      const ww = bw * (style === 'glass' ? 0.88 : 0.6);
-      const wh = fh * (style === 'glass' ? 0.8 : 0.55);
-      const lit = rand() < (style === 'glass' ? 0.28 : 0.22);
-      const broken = !lit && rand() < 0.08;
-      // Vitre sombre avec reflet
-      const g = x.createLinearGradient(wx, wy, wx + ww, wy + wh);
-      g.addColorStop(0, '#1a2230');
-      g.addColorStop(1, '#0b0f16');
-      x.fillStyle = g;
-      x.fillRect(wx, wy, ww, wh);
-      if (style !== 'glass') {
-        x.strokeStyle = 'rgba(0,0,0,0.6)';
-        x.lineWidth = 3;
-        x.strokeRect(wx, wy, ww, wh);
-        x.fillStyle = 'rgba(255,255,255,0.08)';
-        x.fillRect(wx - 2, wy + wh, ww + 4, 3); // rebord
+  if (style === 'brick') {
+    // Briques arrondies, à peine plus sombres
+    x.fillStyle = 'rgba(0,0,0,0.10)';
+    for (let row = 0; row < H / 14; row++) {
+      for (let col = -1; col < W / 32; col++) {
+        if (rand() < 0.35) continue;
+        roundRect(x, col * 32 + (row % 2) * 16 + 2, row * 14 + 2, 28, 10, 4);
+        x.fill();
       }
-      if (broken) {
-        x.strokeStyle = 'rgba(200,210,230,0.25)';
-        x.lineWidth = 1;
-        x.beginPath();
-        const cx = wx + rand() * ww;
-        const cy = wy + rand() * wh;
-        for (let k = 0; k < 6; k++) {
-          x.moveTo(cx, cy);
-          x.lineTo(wx + rand() * ww, wy + rand() * wh);
+    }
+  }
+  // Bandeaux d'étage
+  for (let f = 0; f < floors; f++) {
+    x.fillStyle = 'rgba(20,10,50,0.22)';
+    x.fillRect(0, f * fh + fh - 7, W, 7);
+    x.fillStyle = 'rgba(255,255,255,0.12)';
+    x.fillRect(0, f * fh + fh - 9, W, 2);
+    for (let b = 0; b < bays; b++) {
+      const glass = style === 'glass';
+      const ww = bw * (glass ? 0.8 : 0.56);
+      const wh = fh * (glass ? 0.72 : 0.58);
+      const wx = b * bw + (bw - ww) / 2;
+      const wy = f * fh + fh * (glass ? 0.1 : 0.16);
+      const lit = rand() < (glass ? 0.35 : 0.3);
+      // Cadre épais sombre
+      x.fillStyle = '#1d1640';
+      roundRect(x, wx - 4, wy - 4, ww + 8, wh + 8, 9);
+      x.fill();
+      x.fillStyle = lit ? LIT[Math.floor(rand() * LIT.length)] : '#2a2160';
+      roundRect(x, wx, wy, ww, wh, 6);
+      x.fill();
+      if (lit) {
+        ex.fillStyle = x.fillStyle;
+        roundRect(ex, wx, wy, ww, wh, 6);
+        ex.fill();
+        // Rideaux ou silhouette
+        if (rand() < 0.45) {
+          const cc = ['#e86f6f', '#6fcf97', '#8f7ad8'][Math.floor(rand() * 3)];
+          for (const ctx of [x, ex]) {
+            ctx.fillStyle = ctx === ex ? '#000' : cc;
+            ctx.fillRect(wx, wy, ww * 0.22, wh);
+            ctx.fillRect(wx + ww * 0.78, wy, ww * 0.22, wh);
+          }
         }
+      } else {
+        // Reflet cartoon : deux traits diagonaux
+        x.strokeStyle = 'rgba(160,200,255,0.35)';
+        x.lineWidth = 3;
+        x.beginPath();
+        x.moveTo(wx + ww * 0.2, wy + wh * 0.65);
+        x.lineTo(wx + ww * 0.55, wy + wh * 0.2);
+        x.moveTo(wx + ww * 0.45, wy + wh * 0.75);
+        x.lineTo(wx + ww * 0.7, wy + wh * 0.45);
         x.stroke();
       }
-      if (lit) {
-        const pal = rand() < 0.75 ? warm : cold;
-        const col = pal[Math.floor(rand() * pal.length)];
-        const lg = ex.createLinearGradient(wx, wy, wx, wy + wh);
-        lg.addColorStop(0, col);
-        lg.addColorStop(1, 'rgba(60,40,20,1)');
-        ex.globalAlpha = 0.5 + rand() * 0.5;
-        ex.fillStyle = lg;
-        ex.fillRect(wx + 2, wy + 2, ww - 4, wh - 4);
-        // Store / silhouette
-        if (rand() < 0.4) {
-          ex.fillStyle = '#000';
-          ex.globalAlpha = 0.6;
-          ex.fillRect(wx + 2, wy + 2, ww - 4, (wh - 4) * rand() * 0.6);
-        }
-        ex.globalAlpha = 1;
-        x.fillStyle = col;
-        x.globalAlpha = 0.35;
-        x.fillRect(wx + 2, wy + 2, ww - 4, wh - 4);
-        x.globalAlpha = 1;
+      if (!glass) {
+        // Rebord + croisillon
+        x.fillStyle = 'rgba(255,255,255,0.35)';
+        roundRect(x, wx - 6, wy + wh + 3, ww + 12, 5, 2);
+        x.fill();
+        x.fillStyle = '#1d1640';
+        x.fillRect(wx + ww / 2 - 1.5, wy, 3, wh);
       }
     }
-  }
-  if (style === 'brick') {
-    x.globalAlpha = 0.18;
-    x.strokeStyle = '#2a1712';
-    for (let y = 0; y < H; y += 6) {
-      x.beginPath();
-      x.moveTo(0, y);
-      x.lineTo(W, y);
-      x.stroke();
-    }
-    x.globalAlpha = 1;
   }
   const out = { map: tex(c), emissive: tex(e), bays, floors };
   cache.set(key, out);
   return out;
 }
 
-// Asphalte mouillé : couleur + rugosité (les flaques sont plus lisses).
+// Asphalte cartoon : violet-bleu, flaques stylisées bleu ciel, fissures épaisses.
 export function asphaltTextures() {
   if (cache.has('asphalt')) return cache.get('asphalt');
   const rand = mulberry32(7);
   const S = 512;
   const [c, x] = canvas(S, S);
   const [r, rx] = canvas(S, S);
-  x.fillStyle = '#26272b';
+  x.fillStyle = '#3b3561';
   x.fillRect(0, 0, S, S);
-  grain(x, S, S, rand, 30000, 0.18);
-  rx.fillStyle = '#c8c8c8';
+  rx.fillStyle = '#d0d0d0';
   rx.fillRect(0, 0, S, S);
-  // Flaques
-  for (let i = 0; i < 14; i++) {
-    const px = rand() * S;
-    const py = rand() * S;
-    const rad = 10 + rand() * 45;
-    const g = rx.createRadialGradient(px, py, 0, px, py, rad);
-    g.addColorStop(0, '#101010');
-    g.addColorStop(0.7, '#202020');
-    g.addColorStop(1, 'rgba(200,200,200,0)');
-    rx.fillStyle = g;
-    rx.beginPath();
-    rx.ellipse(px, py, rad, rad * (0.4 + rand() * 0.6), rand() * 3, 0, Math.PI * 2);
-    rx.fill();
-    x.fillStyle = 'rgba(0,0,0,0.25)';
+  // Taches plus claires (usure) en formes rondes
+  for (let i = 0; i < 40; i++) {
+    x.fillStyle = `rgba(120,110,190,${0.08 + rand() * 0.08})`;
     x.beginPath();
-    x.ellipse(px, py, rad * 0.8, rad * 0.5, 0, 0, Math.PI * 2);
+    x.ellipse(rand() * S, rand() * S, 10 + rand() * 40, 6 + rand() * 20, rand() * 3, 0, Math.PI * 2);
     x.fill();
   }
-  // Fissures
-  x.strokeStyle = 'rgba(0,0,0,0.5)';
-  for (let i = 0; i < 25; i++) {
-    x.lineWidth = 0.5 + rand() * 1.5;
+  // Flaques : aplat clair + reflet
+  for (let i = 0; i < 9; i++) {
+    const px = rand() * S;
+    const py = rand() * S;
+    const a = 18 + rand() * 30;
+    const b = a * (0.4 + rand() * 0.3);
+    x.fillStyle = '#5a5fa8';
+    x.beginPath();
+    x.ellipse(px, py, a, b, 0, 0, Math.PI * 2);
+    x.fill();
+    x.strokeStyle = 'rgba(190,230,255,0.7)';
+    x.lineWidth = 3;
+    x.beginPath();
+    x.ellipse(px - a * 0.2, py - b * 0.2, a * 0.5, b * 0.35, 0, Math.PI * 1.1, Math.PI * 1.6);
+    x.stroke();
+    rx.fillStyle = '#202020';
+    rx.beginPath();
+    rx.ellipse(px, py, a, b, 0, 0, Math.PI * 2);
+    rx.fill();
+  }
+  // Fissures épaisses arrondies
+  x.strokeStyle = '#231d45';
+  x.lineCap = x.lineJoin = 'round';
+  for (let i = 0; i < 10; i++) {
+    x.lineWidth = 2 + rand() * 2;
     x.beginPath();
     let px = rand() * S;
     let py = rand() * S;
     x.moveTo(px, py);
-    for (let k = 0; k < 6; k++) {
-      px += (rand() - 0.5) * 40;
-      py += (rand() - 0.5) * 40;
+    for (let k = 0; k < 4; k++) {
+      px += (rand() - 0.5) * 50;
+      py += (rand() - 0.5) * 50;
       x.lineTo(px, py);
     }
     x.stroke();
@@ -186,46 +193,40 @@ export function sidewalkTexture() {
   const rand = mulberry32(11);
   const S = 256;
   const [c, x] = canvas(S, S);
-  x.fillStyle = '#5b5c60';
+  x.fillStyle = '#4b4880';
   x.fillRect(0, 0, S, S);
-  grain(x, S, S, rand, 6000, 0.15);
-  x.strokeStyle = 'rgba(20,20,22,0.7)';
-  x.lineWidth = 2;
-  for (let i = 0; i <= 4; i++) {
-    x.beginPath();
-    x.moveTo(i * 64, 0);
-    x.lineTo(i * 64, S);
-    x.moveTo(0, i * 64);
-    x.lineTo(S, i * 64);
-    x.stroke();
+  const tiles = ['#7a76b8', '#8480c2', '#706cae'];
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      x.fillStyle = tiles[Math.floor(rand() * tiles.length)];
+      roundRect(x, i * 64 + 3, j * 64 + 3, 58, 58, 10);
+      x.fill();
+      x.fillStyle = 'rgba(255,255,255,0.12)';
+      roundRect(x, i * 64 + 7, j * 64 + 6, 40, 6, 3);
+      x.fill();
+    }
   }
   const out = tex(c);
   cache.set('sidewalk', out);
   return out;
 }
 
-// Métal nervuré (conteneurs, caisses).
+// Métal nervuré cartoon (conteneurs, caisses) : bandes franches, bosses.
 export function ribbedTexture(color) {
   const key = 'ribbed:' + color;
   if (cache.has(key)) return cache.get(key);
-  const rand = mulberry32(color.length * 31);
   const [c, x] = canvas(256, 256);
   x.fillStyle = color;
   x.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 256; i += 16) {
-    x.fillStyle = 'rgba(0,0,0,0.25)';
-    x.fillRect(i, 0, 5, 256);
-    x.fillStyle = 'rgba(255,255,255,0.08)';
-    x.fillRect(i + 6, 0, 2, 256);
+  for (let i = 0; i < 256; i += 32) {
+    x.fillStyle = 'rgba(20,10,50,0.28)';
+    x.fillRect(i + 22, 0, 8, 256);
+    x.fillStyle = 'rgba(255,255,255,0.22)';
+    x.fillRect(i + 4, 0, 5, 256);
   }
-  // Rouille
-  for (let i = 0; i < 60; i++) {
-    x.fillStyle = `rgba(${90 + rand() * 60},${40 + rand() * 20},10,${rand() * 0.35})`;
-    x.beginPath();
-    x.arc(rand() * 256, rand() * 256, 2 + rand() * 14, 0, Math.PI * 2);
-    x.fill();
-  }
-  grain(x, 256, 256, rand, 3000, 0.1);
+  x.strokeStyle = 'rgba(20,10,50,0.6)';
+  x.lineWidth = 8;
+  x.strokeRect(4, 4, 248, 248);
   const out = tex(c);
   cache.set(key, out);
   return out;
@@ -261,23 +262,30 @@ export function riftTexture(seed = 3) {
   return out;
 }
 
-export function signTexture(text, color, bg = '#08080c') {
-  const key = `sign:${text}:${color}`;
+// Enseigne : lettres épaisses arrondies avec contour (style du logo SuperEssence).
+export function signTexture(text, color, bg = '#1d1640') {
+  const key = `sign:${text}:${color}:${bg}`;
   if (cache.has(key)) return cache.get(key);
   const [c, x] = canvas(512, 128);
   x.fillStyle = bg;
-  x.fillRect(0, 0, 512, 128);
-  x.font = '900 72px system-ui, sans-serif';
+  roundRect(x, 0, 0, 512, 128, 28);
+  x.fill();
+  let size = 76;
+  x.font = `${size}px "Lilita One", "Arial Black", system-ui, sans-serif`;
+  while (x.measureText(text).width > 450 && size > 30) {
+    size -= 4;
+    x.font = `${size}px "Lilita One", "Arial Black", system-ui, sans-serif`;
+  }
   x.textAlign = 'center';
   x.textBaseline = 'middle';
-  x.shadowColor = color;
-  x.shadowBlur = 24;
+  x.lineJoin = 'round';
+  x.lineWidth = 12;
+  x.strokeStyle = '#120a2a';
+  x.strokeText(text, 262, 72);
+  x.fillStyle = '#120a2a';
+  x.fillText(text, 262, 74);
   x.fillStyle = color;
-  x.fillText(text, 256, 68);
-  x.shadowBlur = 0;
-  x.fillStyle = '#ffffff';
-  x.globalAlpha = 0.6;
-  x.fillText(text, 256, 68);
+  x.fillText(text, 256, 66);
   const out = tex(c, { repeat: false });
   cache.set(key, out);
   return out;

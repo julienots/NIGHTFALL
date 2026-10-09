@@ -1,40 +1,7 @@
 // Modèles procéduraux des créatures. Chaque modèle expose `root`, `joints`,
 // des matériaux émissifs (lueur) et `animate(state)`. Face à +Z.
 import * as THREE from 'three';
-
-function skinTexture(base, vein, seed) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const x = c.getContext('2d');
-  x.fillStyle = base;
-  x.fillRect(0, 0, 256, 256);
-  let s = seed;
-  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 3000; i++) {
-    x.fillStyle = `rgba(0,0,0,${r() * 0.12})`;
-    x.fillRect(r() * 256, r() * 256, 2 + r() * 4, 2 + r() * 4);
-  }
-  x.strokeStyle = vein;
-  x.lineCap = 'round';
-  for (let i = 0; i < 26; i++) {
-    let px = r() * 256;
-    let py = r() * 256;
-    x.lineWidth = 0.6 + r() * 1.8;
-    x.globalAlpha = 0.25 + r() * 0.4;
-    x.beginPath();
-    x.moveTo(px, py);
-    for (let k = 0; k < 8; k++) {
-      px += (r() - 0.5) * 30;
-      py += (r() - 0.3) * 30;
-      x.lineTo(px, py);
-    }
-    x.stroke();
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
+import { toon } from '../fx/toon.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -77,7 +44,7 @@ class BaseModel {
 
   // Flash blanc à l'impact + intensité de la lueur.
   setFlash(f) {
-    for (const m of this.skinMats) m.emissiveIntensity = f * 0.9;
+    for (const m of this.skinMats) m.emissiveIntensity = f * 0.7;
   }
 
   // Dissolution à la mort.
@@ -86,6 +53,7 @@ class BaseModel {
     this.body.position.y = -k * 0.8;
     for (const m of this.allMats) {
       m.transparent = k > 0;
+      m.depthWrite = k < 0.5;
       m.opacity = 1 - k;
     }
   }
@@ -95,13 +63,13 @@ class BaseModel {
 export class StalkerModel extends BaseModel {
   constructor() {
     super();
-    const skin = new THREE.MeshStandardMaterial({
-      map: skinTexture('#b4ada3', '#3a5a3a', 7), roughness: 0.55, metalness: 0.05, emissive: '#ffffff', emissiveIntensity: 0,
-    });
-    const dark = new THREE.MeshStandardMaterial({ color: '#2a2622', roughness: 0.4, metalness: 0.2, emissive: '#ffffff', emissiveIntensity: 0 });
-    this.glow = new THREE.MeshStandardMaterial({ color: '#051005', emissive: '#7dff6a', emissiveIntensity: 2.5 });
+    // Pâle et lavande, liseré vert maladif : drôle de silhouette, mais inquiétante.
+    const skin = toon('#cbbde8', { rim: '#7dff6a', rimStrength: 0.8, emissive: '#ffffff', emissiveIntensity: 0, shared: false });
+    const dark = toon('#3a2a5a', { rim: '#7dff6a', rimStrength: 0.6, emissive: '#ffffff', emissiveIntensity: 0, shared: false });
+    this.glow = toon('#7dff6a', { emissive: '#7dff6a', emissiveIntensity: 1.5, shared: false });
     this.skinMats = [skin, dark];
     this.allMats = [skin, dark, this.glow];
+    this.root.traverse((o) => o.isMesh && (o.castShadow = true));
 
     const hips = this.pivot('hips', this.body, 0, 1.25, 0);
     this.mesh(new THREE.SphereGeometry(0.16, 12, 8), skin, hips).scale.set(1.3, 0.8, 1);
@@ -121,9 +89,12 @@ export class StalkerModel extends BaseModel {
     this.mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.32, 8), skin, neck, 0, 0.16, 0, 0.3);
     const head = this.pivot('head', neck, 0, 0.32, 0.08);
     const skull = this.mesh(new THREE.SphereGeometry(0.15, 18, 14), skin, head, 0, 0.06, 0.06);
-    skull.scale.set(0.82, 1.45, 1.25);
-    // Fente verticale lumineuse (pas de visage)
-    this.mesh(new THREE.BoxGeometry(0.02, 0.24, 0.02), this.glow, head, 0, 0.07, 0.24);
+    skull.scale.set(0.95, 1.55, 1.3);
+    head.scale.setScalar(1.35); // grosse tête cartoon
+    // Fente verticale lumineuse (pas de visage) + deux petits yeux
+    const slit = this.mesh(new THREE.CapsuleGeometry(0.022, 0.2, 4, 8), this.glow, head, 0, 0.08, 0.235);
+    slit.scale.z = 0.5;
+    for (const sx of [-1, 1]) this.mesh(new THREE.SphereGeometry(0.025, 8, 6), this.glow, head, sx * 0.07, 0.17, 0.2);
     // Mandibules fendues
     for (const s of [-1, 1]) {
       this.mesh(new THREE.ConeGeometry(0.035, 0.16, 6), dark, head, s * 0.05, -0.12, 0.13, Math.PI * 0.85, 0, s * 0.2);
@@ -248,7 +219,7 @@ export class StalkerModel extends BaseModel {
       this.body.rotation.x = d * 0.3;
     }
     this.joints.hips.position.y = 1.25 - (st.mode === 'windup' ? 0.3 : 0) - (st.mode === 'dead' ? Math.min(1, st.p * 2) * 0.85 : 0);
-    this.glow.emissiveIntensity = st.mode === 'windup' ? 6 + Math.sin(t * 40) * 2 : st.alert ? 3.5 : 2;
+    this.glow.emissiveIntensity = st.mode === 'windup' ? 3.5 + Math.sin(t * 40) * 1.2 : st.alert ? 2.2 : 1.4;
     this.apply(P, st.dt, st.mode === 'lunge' || st.mode === 'windup' ? 22 : 10);
   }
 }
@@ -257,12 +228,11 @@ export class StalkerModel extends BaseModel {
 export class BruteModel extends BaseModel {
   constructor() {
     super();
-    const skin = new THREE.MeshStandardMaterial({
-      map: skinTexture('#5a4a44', '#2a0a08', 13), roughness: 0.7, emissive: '#ffffff', emissiveIntensity: 0,
-    });
-    const plate = new THREE.MeshStandardMaterial({ color: '#2a2422', roughness: 0.35, metalness: 0.3, emissive: '#ffffff', emissiveIntensity: 0 });
-    this.glow = new THREE.MeshStandardMaterial({ color: '#200000', emissive: '#ff3a1a', emissiveIntensity: 2.2 });
-    const bone = new THREE.MeshStandardMaterial({ color: '#d8ccb0', roughness: 0.5 });
+    // Masse mauve, plaques violettes, fissures orange : gros costaud de dessin animé.
+    const skin = toon('#a8577a', { rim: '#ff8a5a', rimStrength: 0.7, emissive: '#ffffff', emissiveIntensity: 0, shared: false });
+    const plate = toon('#432466', { rim: '#ff8a5a', rimStrength: 0.6, emissive: '#ffffff', emissiveIntensity: 0, shared: false });
+    this.glow = toon('#ff7a2a', { emissive: '#ff6a1a', emissiveIntensity: 1.6, shared: false });
+    const bone = toon('#fff4d6', { shared: false });
     this.skinMats = [skin, plate];
     this.allMats = [skin, plate, this.glow, bone];
 
@@ -286,14 +256,18 @@ export class BruteModel extends BaseModel {
     const head = this.pivot('head', spine, 0, 1.25, 0.75);
     const skull = this.mesh(new THREE.SphereGeometry(0.28, 14, 12), skin, head);
     skull.scale.set(1.1, 0.85, 1.1);
-    for (const [ex, ey] of [[-0.1, 0.06], [0.1, 0.06], [-0.17, -0.02], [0.17, -0.02]]) {
-      this.mesh(new THREE.SphereGeometry(0.035, 8, 6), this.glow, head, ex, ey, 0.27);
+    for (const [ex, ey, r] of [[-0.11, 0.07, 0.06], [0.11, 0.07, 0.06], [-0.2, -0.01, 0.035], [0.2, -0.01, 0.035]]) {
+      this.mesh(new THREE.SphereGeometry(r, 10, 8), this.glow, head, ex, ey, 0.26);
     }
+    // Sourcils froncés
+    for (const sx of [-1, 1]) this.mesh(new THREE.BoxGeometry(0.16, 0.04, 0.05), plate, head, sx * 0.11, 0.16, 0.25, 0, 0, sx * -0.35);
     const jaw = this.pivot('jaw', head, 0, -0.12, 0.05);
     this.mesh(new THREE.BoxGeometry(0.4, 0.12, 0.35), skin, jaw, 0, -0.06, 0.1);
     for (let i = 0; i < 6; i++) {
-      this.mesh(new THREE.ConeGeometry(0.025, 0.1, 5), bone, jaw, -0.15 + i * 0.06, 0.03, 0.26);
+      this.mesh(new THREE.ConeGeometry(0.035, 0.13, 5), bone, jaw, -0.16 + i * 0.064, 0.05, 0.27);
     }
+    // Crocs qui dépassent
+    for (const sx of [-1, 1]) this.mesh(new THREE.ConeGeometry(0.045, 0.2, 6), bone, jaw, sx * 0.17, 0.1, 0.26);
     // Bras énormes (marche sur les poings)
     for (const [side, sx] of [['R', -1], ['L', 1]]) {
       const sh = this.pivot('sh' + side, spine, sx * 0.95, 1.05, 0.25);
@@ -433,7 +407,7 @@ export class BruteModel extends BaseModel {
     }
     this.joints.hips.position.y = 1.25 - (st.mode === 'dead' ? Math.min(1, st.p * 1.5) * 0.7 : 0) - (st.mode === 'slam' ? 0.25 : 0);
     const warn = st.mode === 'slamWindup' || st.mode === 'swipeWindup' || st.mode === 'chargeWindup';
-    this.glow.emissiveIntensity = warn ? 6 + Math.sin(t * 30) * 3 : st.alert ? 3 : 2;
+    this.glow.emissiveIntensity = warn ? 3.5 + Math.sin(t * 30) * 1.5 : st.alert ? 2 : 1.4;
     this.apply(P, st.dt, st.mode === 'slam' || st.mode === 'swipe' ? 25 : warn ? 12 : 7);
   }
 }
