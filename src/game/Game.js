@@ -14,8 +14,10 @@ import { Crate } from './world/crate.js';
 import { Effects } from './fx/effects.js';
 import { Hero, MOVES } from './actors/hero.js';
 import { Enemy, ENEMY_TYPES } from './actors/enemy.js';
+import { Colossus } from './actors/colossus.js';
 import { Inventory } from './systems/inventory.js';
 import { Progression } from './systems/progression.js';
+import { SkillTree } from './systems/skills.js';
 import { MissionLog } from './systems/missions.js';
 import { SaveSystem } from './systems/save.js';
 import { loadSettings, saveSettings } from './systems/settings.js';
@@ -141,6 +143,7 @@ export class Game {
       this.inventory.credits = 12;
     }
     this.progression = new Progression(d?.progression);
+    this.skills = new SkillTree(d?.skills);
     this.missions = new MissionLog(d?.missions);
     this.opened = new Set(d?.opened || []);
     this.pendingLoot = d?.pendingLoot || {};
@@ -196,6 +199,18 @@ export class Game {
     this.scene.add(e.model.root);
     this.enemies.push(e);
     return e;
+  }
+
+  spawnBoss(pos) {
+    const b = new Colossus(this, pos);
+    this.enemies.push(b);
+    this.boss = b;
+    return b;
+  }
+
+  crateHidden(c) {
+    const h = c.def.hiddenUntil;
+    return !!h && !this.missions.stepReached(h.mission, h.step);
   }
 
   // Fait apparaître les créatures dont le chapitre est atteint (une seule fois).
@@ -296,6 +311,9 @@ export class Game {
   recomputeStats() {
     const lv = this.progression.levelStats();
     const eq = this.inventory.equipmentStats();
+    const mods = this.skills.mods();
+    this.hero.mods = mods;
+    lv.maxHp = (lv.maxHp || 0) + mods.maxHp;
     const s = { ...BASE_STATS };
     for (const src of [lv, eq]) for (const [k, v] of Object.entries(src)) s[k] = (s[k] || 0) + v;
     s.maxHp = Math.round(s.maxHp);
@@ -306,12 +324,25 @@ export class Game {
     // Équipement visible : couleur des anneaux (noyau) et du sweat (protection).
     this.hero.rings.setColor(w ? ITEMS[w.id].visual.glow : '#5fe3ff');
     const pal = this.hero.model.palette;
-    this.hero.model.mats.hoodie.color.set(a ? ITEMS[a.id].visual.plate : pal.hoodie);
-    this.hero.model.mats.hoodie2.color.set(a ? ITEMS[a.id].visual.trim : pal.hoodie2);
+    // Tenue choisie (cosmétique) prioritaire sur la couleur de la protection.
+    const skin = this.inventory.equippedItem('skin');
+    const hv = skin ? ITEMS[skin.id].visual : a ? { hoodie: ITEMS[a.id].visual.plate, hoodie2: ITEMS[a.id].visual.trim } : pal;
+    this.hero.model.mats.hoodie.color.set(hv.hoodie);
+    this.hero.model.mats.hoodie2.color.set(hv.hoodie2);
   }
 
   onEquipmentChanged() {
     this.recomputeStats();
+  }
+
+  onSkillsChanged() {
+    this.recomputeStats();
+    this.menus.render();
+  }
+
+  nearRefuge() {
+    const t = this.world.targets.terminal;
+    return Math.hypot(this.hero.pos.x - t.x, this.hero.pos.z - t.z) < 12;
   }
 
   // ---------- Boucle ----------
@@ -351,6 +382,7 @@ export class Game {
       else m.show('pause');
     } else if (p.has('inventory') && (!m.isOpen || m.open === 'inventory' || m.open === 'journal')) m.toggle('inventory');
     else if (p.has('journal') && (!m.isOpen || m.open === 'journal' || m.open === 'inventory')) m.toggle('journal');
+    else if (p.has('skills') && this.hero.powers.rings && (!m.isOpen || ['journal', 'inventory', 'skills'].includes(m.open))) m.toggle('skills', { atRefuge: this.nearRefuge() });
     else if (p.has('interact') && m.open === 'reward') m.hide();
   }
 
@@ -377,7 +409,7 @@ export class Game {
     for (const e of this.enemies) e.update(dt);
     this.#separateEnemies();
     for (const c of this.crates) {
-      c.root.visible = hero.powers.rings;
+      c.root.visible = hero.powers.rings && !this.crateHidden(c);
       c.update(dt, this.time);
     }
     this.smokeT = (this.smokeT || 0) - dt;
@@ -427,7 +459,7 @@ export class Game {
     // Nettoyage des cadavres dissous
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
-      if (!e.alive && e.deadT > 3.6) {
+      if (!e.alive && e.deadT > (e.type === 'colossus' ? 5 : 3.6)) {
         this.scene.remove(e.model.root);
         this.enemies.splice(i, 1);
       }
@@ -610,6 +642,7 @@ export class Game {
     // Avant le réveil, Noa n'est qu'un ado : pas de caisses, pas de refuge.
     if (!this.hero.powers.rings) return list;
     for (const c of this.crates) {
+      if (this.crateHidden(c)) continue;
       const pending = this.pendingLoot[c.id]?.length;
       if (c.state === 'opened' && !pending) continue;
       if (c.state === 'opening') continue;
@@ -650,7 +683,7 @@ export class Game {
         html = `<kbd>E</kbd>Ouvrir — <span style="color:${color}">${info.label}</span><div class="sub">${this.#crateHint(c.type)}</div>`;
       } else html = `<kbd>E</kbd>Inspecter — <span style="color:${color}">${info.label}</span>`;
     } else if (near.kind === 'story') html = near.label;
-    else if (near.kind === 'terminal') html = '<kbd>E</kbd>Terminal du refuge — se reposer et sauvegarder';
+    else if (near.kind === 'terminal') html = '<kbd>E</kbd>Terminal de Mara — se reposer, sauvegarder, boutique';
     else html = '<kbd>E</kbd>Établi — atelier d’amélioration';
     this.hud.prompt(html);
 
@@ -678,6 +711,7 @@ export class Game {
       hero.energy = hero.stats.maxEnergy;
       hero.playAnim('interact', 0.8);
       this.save('terminal', true);
+      this.menus.show('shop');
     } else {
       hero.playAnim('interact', 0.6);
       this.menus.show('inventory', { workshop: true });
@@ -816,7 +850,7 @@ export class Game {
       this.recomputeStats();
       this.hero.hp = this.hero.stats.maxHp;
       this.audio.levelUp();
-      this.hud.banner('NIVEAU SUPÉRIEUR', `NIVEAU ${this.progression.level}`, `+${gained} point(s) de compétence · santé, dégâts et énergie augmentés`);
+      this.hud.banner('NIVEAU SUPÉRIEUR', `NIVEAU ${this.progression.level}`, `+${gained} point(s) de compétence — ${this.touch ? 'bouton ★' : 'touche K'} pour les dépenser`);
       this.fx.ring(this.hero.pos, { color: '#ffcd20', from: 0.5, to: 5, life: 0.8 });
     }
   }
@@ -836,6 +870,15 @@ export class Game {
   onEnemyDamaged(e, dmg, heavy) {
     const p = this.#project(new THREE.Vector3(e.pos.x, e.pos.y + e.def.height, e.pos.z));
     if (p) this.hud.damageNumber(p.x, p.y, dmg, heavy);
+  }
+
+  onBossPhase(boss, n) {
+    const lines = {
+      2: ['Il s’arrache des morceaux de la rue ! Esquive les débris.', 'S’il charge, fais-le percuter quelque chose : ses noyaux vont s’ouvrir.'],
+      3: ['Il est furieux… et il appelle du renfort.', 'S’il saute, envole-toi ou fuis le cercle. Après, il sera à bout de souffle.'],
+    }[n];
+    (lines || []).forEach((l) => this.hud.say('Mara (radio)', l, 4));
+    this.hud.banner(`PHASE ${n}`, n === 3 ? 'RAGE' : 'LE COLOSSE S’ÉNERVE', '');
   }
 
   onEnemyBroken(e) {
@@ -859,7 +902,9 @@ export class Game {
     this.hud.toast(`${def.name} éliminé · +${def.xp} XP · ${parts.join(' · ')}`, def.color);
     this.grantXp(def.xp);
     this.missionEvents(this.missions.handle({ type: 'kill', group: e.spawn.group, enemyType: e.type }));
-    if (e.spawn.group !== 'parking') this.respawnQueue.push({ spawn: e.spawn, t: 75 });
+    // Seules les créatures « de quartier » réapparaissent (pas celles des missions).
+    if (['alley', 'avenue', 'corvin', 'north'].includes(e.spawn.group)) this.respawnQueue.push({ spawn: e.spawn, t: 75 });
+    if (e === this.boss) this.boss = null;
   }
 
   onNoPowers() {
@@ -928,7 +973,7 @@ export class Game {
     this.camYaw = sp.yaw;
     this.camPos = null;
     for (const e of this.enemies) {
-      if (!e.alive || e.spawn.group === 'chaser') continue;
+      if (!e.alive || e.spawn.group === 'chaser' || e.type === 'colossus') continue;
       e.pos.copy(e.home);
       e.hp = e.def.hp;
       e.alert = false;
@@ -950,6 +995,7 @@ export class Game {
       hero: { x: h.pos.x, y: h.pos.y, z: h.pos.z, yaw: h.yaw, hp: h.hp, energy: h.energy },
       inventory: this.inventory.serialize(),
       progression: this.progression.serialize(),
+      skills: this.skills.serialize(),
       missions: this.missions.serialize(),
       opened: [...this.opened],
       pendingLoot: this.pendingLoot,
@@ -1013,13 +1059,15 @@ export class Game {
     const bars = [];
     if (!this.menus.isOpen) {
       for (const e of this.enemies) {
-        if (!e.alive || (e.showBar <= 0 && e !== this.lockTarget && !(e.alert && e.pos.distanceTo(h.pos) < 14))) continue;
+        if (!e.alive || e.type === 'colossus' || (e.showBar <= 0 && e !== this.lockTarget && !(e.alert && e.pos.distanceTo(h.pos) < 14))) continue;
         const p = this.#project(new THREE.Vector3(e.pos.x, e.pos.y + e.def.height + 0.5, e.pos.z));
         if (!p?.onScreen) continue;
         bars.push({ id: e.id, x: p.x, y: p.y, name: e.name, hp: e.hp / e.def.hp, poise: e.def.poise ? e.poise / e.def.poise : null, alert: e.alert });
       }
     }
     this.hud.enemyBars(bars);
+    const b = this.boss;
+    this.hud.boss(b && b.alive && b.state !== 'intro' && !this.menus.isOpen ? { name: b.name, hp: b.hp / b.def.hp, stage: b.stage, exposed: b.exposed } : null);
     const lt = this.lockTarget;
     const lp = lt && this.#project(new THREE.Vector3(lt.pos.x, lt.pos.y + lt.def.height * 0.55, lt.pos.z));
     this.hud.reticle(lp?.x, lp?.y, !!lp?.onScreen && !this.menus.isOpen);

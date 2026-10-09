@@ -3,6 +3,9 @@
 import { ITEMS, RARITY_INFO, CATEGORIES, itemStats, upgradeCost, dismantleValue, UPGRADE_MAX } from '../data/items.js';
 import { MISSIONS, MISSION_KIND_LABEL } from '../data/missions.js';
 import { INVENTORY_CAPACITY } from '../systems/inventory.js';
+import { BRANCHES, SKILLS, RESPEC_COST } from '../data/skills.js';
+import { SHOP, SHOP_SECTIONS } from '../data/shop.js';
+import { buy, canBuy } from '../systems/shop.js';
 
 const STAT_LABEL = {
   damage: 'Dégâts', defense: 'Défense', maxHp: 'Santé max', maxEnergy: 'Énergie max', energyGain: 'Énergie / coup', powerDamage: 'Bonus pouvoirs',
@@ -25,7 +28,8 @@ export class Menus {
     this.sort = 'rarity';
     this.sel = null;
     this.el = {};
-    for (const name of ['inventory', 'journal', 'pause', 'reward', 'death']) {
+    this.shopSection = 'featured';
+    for (const name of ['inventory', 'journal', 'pause', 'reward', 'death', 'skills', 'shop']) {
       const d = document.createElement('div');
       d.className = `menu ${name === 'inventory' ? 'inv' : name}`;
       document.body.appendChild(d);
@@ -62,13 +66,13 @@ export class Menus {
 
   toggle(name, opts) {
     if (this.open === name) this.hide();
-    else if (!this.open || this.open === 'inventory' || this.open === 'journal') this.show(name, opts);
+    else if (!this.open || ['inventory', 'journal', 'skills'].includes(this.open)) this.show(name, opts);
   }
 
   render() {
     const r = {
       inventory: () => this.#inventory(), journal: () => this.#journal(), pause: () => this.#pause(),
-      reward: () => this.#reward(), death: () => this.#death(),
+      reward: () => this.#reward(), death: () => this.#death(), skills: () => this.#skills(), shop: () => this.#shop(),
     }[this.open];
     r?.();
   }
@@ -138,6 +142,50 @@ export class Menus {
       <p class="cost">${maxed ? 'Niveau maximal atteint.' : `Amélioration +${(e.level || 0) + 1} : ${cost.scrap} Ferraille${cost.abyss_fragment ? `, ${cost.abyss_fragment} Fragment(s) d'Abysse` : ''}.`}
       ${workshop ? '' : '<br>Les améliorations se font à l\'établi du refuge.'}<br>Démontage : ${dv.scrap} Ferraille${dv.abyss_fragment ? ` + ${dv.abyss_fragment} Fragment` : ''}.</p>`;
     return html;
+  }
+
+  // ---------- Compétences ----------
+  #skills() {
+    const g = this.game;
+    const tree = g.skills;
+    const pts = g.progression.skillPoints;
+    const cols = Object.entries(BRANCHES).map(([b, info]) => {
+      const nodes = Object.entries(SKILLS).filter(([, sk]) => sk.branch === b).sort((x, y) => x[1].tier - y[1].tier).map(([id, sk]) => {
+        const r = tree.rank(id);
+        const block = tree.blocker(id, pts);
+        const pips = Array.from({ length: sk.max }, (_, i) => `<i class="${i < r ? 'on' : ''}"></i>`).join('');
+        return `<div class="skill ${r ? 'got' : ''} ${block && !r ? 'locked' : ''}" style="--bc:${info.color}">
+          <div class="sk-n">${esc(sk.name)}</div><div class="pips">${pips}</div><div class="sk-d">${esc(sk.desc)}</div>
+          <button class="btn ${block ? '' : 'primary'}" data-act="learn" data-id="${id}" ${block ? 'disabled' : ''} title="${esc(block || '')}">${r >= sk.max ? 'Max' : `Apprendre · ${sk.cost} pt`}</button></div>`;
+      }).join('<div class="sk-link"></div>');
+      return `<div class="branch"><div class="b-h" style="color:${info.color}">${info.label}</div><div class="b-d">${info.desc}</div>${nodes}</div>`;
+    }).join('');
+    const atRefuge = !!this.opts.atRefuge;
+    this.el.skills.innerHTML = `<div class="head"><h2>COMPÉTENCES</h2><div class="meta"><span class="pts">${pts} point(s) disponible(s)</span>
+      <button class="btn" data-act="respec" ${atRefuge && tree.spent() && g.inventory.credits >= RESPEC_COST ? '' : 'disabled'}>Réinitialiser (${RESPEC_COST} Credits${atRefuge ? '' : ', au refuge'})</button>
+      <button class="btn" data-act="close">Fermer</button></div></div><div class="tree">${cols}</div>`;
+  }
+
+  // ---------- Boutique ----------
+  #shop() {
+    const g = this.game;
+    const inv = g.inventory;
+    const tabs = Object.entries(SHOP_SECTIONS).map(([k, l]) => `<button class="btn ${this.shopSection === k ? 'on' : ''}" data-section="${k}">${l}</button>`).join('');
+    const cards = SHOP.filter((e) => e.section === this.shopSection).map((e) => {
+      const def = ITEMS[e.item];
+      const rc = RARITY_INFO[def.rarity].color;
+      const reason = canBuy(e, inv);
+      const price = e.price.credits ? `${e.price.credits} Credits` : `${e.price.shards} Abyss Shards`;
+      const st = def.stats ? Object.entries(itemStats({ id: e.item, level: 0 })).map(([k, v]) => `${STAT_LABEL[k]} ${fmt(k, v)}`).join(' · ') : '';
+      return `<div class="card shopcard" style="--rc:${rc}"><div class="r">${RARITY_INFO[def.rarity].label}</div>${shape(def)}
+        <div class="n">${esc(e.label || def.name)}${e.qty > 1 ? ` ×${e.qty}` : ''}</div><div class="sk-d">${esc(e.desc || def.desc)}</div>
+        ${st ? `<div class="cost">${st}</div>` : ''}
+        <button class="btn ${reason ? '' : 'primary'}" data-act="buy" data-key="${e.key}" ${reason ? 'disabled' : ''}>${reason || price}</button></div>`;
+    }).join('');
+    this.el.shop.innerHTML = `<div class="head"><h2>BOUTIQUE DE MARA</h2><div class="meta"><span>Credits ${inv.credits}</span><span>Abyss Shards ${inv.shards}</span>
+      <span>${inv.usedSlots} / ${INVENTORY_CAPACITY}</span><button class="btn" data-act="skills">Compétences</button><button class="btn" data-act="close">Fermer</button></div></div>
+      <div class="left"><div class="tabs">${tabs}</div><div class="grid shopgrid">${cards}</div>
+      <p class="cost">Aucun achat avec de l'argent réel : tout s'obtient en jouant.</p></div>`;
   }
 
   // ---------- Journal ----------
@@ -224,13 +272,17 @@ export class Menus {
 
   // ---------- Événements ----------
   #onClick(e) {
-    const t = e.target.closest('[data-act],[data-sel],[data-filter]');
+    const t = e.target.closest('[data-act],[data-sel],[data-filter],[data-section]');
     if (!t) return;
     const g = this.game;
     const inv = g.inventory;
     g.audio.ui();
     if (t.dataset.sel) {
       this.sel = t.dataset.sel;
+      return this.render();
+    }
+    if (t.dataset.section) {
+      this.shopSection = t.dataset.section;
       return this.render();
     }
     if (t.dataset.filter) {
@@ -259,6 +311,34 @@ export class Menus {
       }
       case 'use': g.useMedkit(); break;
       case 'track': g.missions.track(t.dataset.id); break;
+      case 'learn':
+        if (g.skills.learn(t.dataset.id, g.progression)) {
+          g.audio.levelUp();
+          g.onSkillsChanged();
+          g.save('skills');
+        } else g.audio.denied();
+        break;
+      case 'respec':
+        if (inv.credits >= RESPEC_COST) {
+          inv.credits -= RESPEC_COST;
+          g.skills.reset(g.progression);
+          g.onSkillsChanged();
+          g.save('skills');
+        }
+        break;
+      case 'buy': {
+        const r = buy(t.dataset.key, inv);
+        if (r.ok) {
+          g.audio.crateOpen(false);
+          g.hud.toast(`Acheté : ${r.entry.label || ITEMS[r.entry.item].name}`, '#5fd068');
+          g.save('shop');
+        } else {
+          g.audio.denied();
+          g.hud.toast(r.reason, '#ff6a6a');
+        }
+        break;
+      }
+      case 'skills': this.show('skills', { atRefuge: true }); return;
       case 'save': g.save('manual', true); break;
       case 'load': this.hide(); g.loadLast(); return;
       case 'quit': this.hide(); g.quitToTitle(); return;

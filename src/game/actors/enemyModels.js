@@ -411,3 +411,101 @@ export class BruteModel extends BaseModel {
     this.apply(P, st.dt, st.mode === 'slam' || st.mode === 'swipe' ? 25 : warn ? 12 : 7);
   }
 }
+
+// ----------------------------------------------------------------------------
+// THE CRAWLER : prédateur d'embuscade, corps bas, 4 longues pattes arquées,
+// grappe d'yeux orange. Se plaque au sol, bondit, mord.
+export class CrawlerModel extends BaseModel {
+  constructor() {
+    super();
+    const shell = toon('#2f4a5a', { rim: '#ff9a3d', rimStrength: 0.7, emissive: '#ffffff', emissiveIntensity: 0, shared: false });
+    const dark = toon('#1d2a36', { rim: '#ff9a3d', rimStrength: 0.5, emissive: '#ffffff', emissiveIntensity: 0, shared: false });
+    this.glow = toon('#ff9a3d', { emissive: '#ff7a1a', emissiveIntensity: 1.6, shared: false });
+    this.skinMats = [shell, dark];
+    this.allMats = [shell, dark, this.glow];
+    const hips = this.pivot('hips', this.body, 0, 0.55, 0);
+    const torso = this.mesh(new THREE.SphereGeometry(0.42, 16, 12), shell, hips, 0, 0, 0);
+    torso.scale.set(0.95, 0.55, 1.5);
+    // Plaques dorsales + épines
+    for (let i = 0; i < 4; i++) {
+      const pl = this.mesh(new THREE.SphereGeometry(0.22, 10, 8), dark, hips, 0, 0.18, -0.35 + i * 0.22);
+      pl.scale.set(1.2, 0.35, 0.8);
+      this.mesh(new THREE.ConeGeometry(0.04, 0.18, 5), this.glow, hips, 0, 0.3, -0.35 + i * 0.22);
+    }
+    // Queue en dard
+    const tail = this.pivot('tail', hips, 0, 0.05, -0.6);
+    this.mesh(new THREE.ConeGeometry(0.09, 0.7, 8), dark, tail, 0, 0.1, -0.3, -Math.PI / 2 - 0.4);
+    // Tête : mandibules + grappe d'yeux
+    const head = this.pivot('head', hips, 0, 0.02, 0.62);
+    const skull = this.mesh(new THREE.SphereGeometry(0.22, 14, 10), shell, head);
+    skull.scale.set(1.05, 0.7, 1.1);
+    for (const [x, y, r] of [[-0.08, 0.08, 0.045], [0.08, 0.08, 0.045], [-0.15, 0.03, 0.03], [0.15, 0.03, 0.03], [-0.04, 0.13, 0.025], [0.04, 0.13, 0.025]]) {
+      this.mesh(new THREE.SphereGeometry(r, 8, 6), this.glow, head, x, y, 0.19);
+    }
+    for (const sx of [-1, 1]) {
+      const jaw = this.pivot('jaw' + (sx < 0 ? 'R' : 'L'), head, sx * 0.08, -0.06, 0.15);
+      this.mesh(new THREE.ConeGeometry(0.035, 0.22, 6), dark, jaw, 0, 0, 0.1, Math.PI / 2, 0, sx * 0.3);
+    }
+    // 4 pattes à deux segments, arquées au-dessus du corps
+    for (const [name, sx, sz] of [['FR', -1, 1], ['FL', 1, 1], ['BR', -1, -1], ['BL', 1, -1]]) {
+      const leg = this.pivot('leg' + name, hips, sx * 0.3, 0.05, sz * 0.3);
+      this.mesh(new THREE.CapsuleGeometry(0.05, 0.6, 4, 8), dark, leg, sx * 0.3, 0.22, 0, 0, 0, sx * 1.0);
+      const knee = this.pivot('knee' + name, leg, sx * 0.58, 0.42, 0);
+      this.mesh(new THREE.SphereGeometry(0.07, 8, 6), this.glow, knee);
+      this.mesh(new THREE.ConeGeometry(0.05, 1.0, 6), shell, knee, sx * 0.18, -0.45, 0, Math.PI, 0, sx * -0.35);
+    }
+  }
+
+  animate(st) {
+    this.t += st.dt;
+    const t = this.t;
+    const P = {};
+    const set = (k, x, y = 0, z = 0) => (P[k] = [x, y, z]);
+    const sp = Math.min(2, st.speed);
+    const ph = st.phase;
+    // Démarche en diagonale (pattes opposées ensemble), corps qui ondule.
+    const legs = [['FR', 0], ['BL', 0], ['FL', Math.PI], ['BR', Math.PI]];
+    for (const [n, off] of legs) {
+      const s = Math.sin(ph + off);
+      set('leg' + n, s * 0.45 * sp, Math.cos(ph + off) * 0.25 * sp, 0);
+      set('knee' + n, 0, 0, (n.endsWith('R') ? -1 : 1) * Math.max(0, s) * 0.4 * sp);
+    }
+    set('head', Math.sin(t * 3) * 0.08, Math.sin(t * 1.7) * 0.25);
+    set('tail', -0.3 + Math.sin(t * 4) * 0.2, Math.sin(t * 2.2) * 0.4);
+    set('jawR', 0, 0, 0.2 + Math.max(0, Math.sin(t * 6)) * 0.2);
+    set('jawL', 0, 0, -0.2 - Math.max(0, Math.sin(t * 6)) * 0.2);
+    let hipY = 0.55 + Math.abs(Math.sin(ph)) * 0.04 * sp;
+    if (st.mode === 'lurk') {
+      // Plaqué au sol, immobile, pattes écartées.
+      hipY = 0.18;
+      for (const [n] of legs) set('knee' + n, 0, 0, (n.endsWith('R') ? -1 : 1) * -0.5);
+      set('head', 0.3, Math.sin(t * 0.6) * 0.15);
+    }
+    if (st.mode === 'windup') {
+      hipY = 0.3;
+      set('head', -0.4);
+      for (const [n] of legs) set('knee' + n, 0, 0, (n.endsWith('R') ? -1 : 1) * 0.6);
+      set('jawR', 0, 0, 0.7);
+      set('jawL', 0, 0, -0.7);
+    }
+    if (st.mode === 'lunge') {
+      set('legFR', -1.0);
+      set('legFL', -1.0);
+      set('legBR', 0.8);
+      set('legBL', 0.8);
+      set('head', -0.2);
+      set('jawR', 0, 0, 0.8);
+      set('jawL', 0, 0, -0.8);
+    }
+    if (st.mode === 'stagger') hipY = 0.4 + Math.sin(t * 25) * 0.05;
+    if (st.mode === 'dead') {
+      const d = Math.min(1, st.p * 2);
+      hipY = 0.55 - d * 0.4;
+      for (const [n] of legs) set('knee' + n, 0, 0, (n.endsWith('R') ? -1 : 1) * -1.2 * d);
+      this.body.rotation.z = d * 2.6;
+    }
+    this.joints.hips.position.y += (hipY - this.joints.hips.position.y) * Math.min(1, st.dt * 12);
+    this.glow.emissiveIntensity = st.mode === 'windup' ? 4 + Math.sin(t * 40) * 1.5 : st.mode === 'lurk' ? 0.4 : st.alert ? 2 : 1.3;
+    this.apply(P, st.dt, st.mode === 'lunge' || st.mode === 'windup' ? 20 : 12);
+  }
+}

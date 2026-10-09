@@ -336,6 +336,110 @@ await place(-33, 0.15, 23, 0);
 await sim(0.3);
 check('chapitre 1 : retour au refuge', await G(() => window.__nightfall.missions.isDone('m01_first_contact')));
 
+// ================= BOUTIQUE & COMPÉTENCES (vraie interface) =================
+await G(() => { const g = window.__nightfall; g.inventory.credits += 500; g.progression.skillPoints += 3; });
+await place(-31, 0.15, 30.8, 0);
+await press('interact', 0.1);
+await page.waitForTimeout(200);
+check('terminal : boutique ouverte', await page.isVisible('.menu.shop.on'));
+await page.click('[data-section=skins]');
+const cr0 = await G(() => window.__nightfall.inventory.credits);
+await page.click('[data-key=skin_ember]');
+const shopR = await G(() => ({ cr: window.__nightfall.inventory.credits, own: window.__nightfall.inventory.owns('hoodie_ember') }));
+check('achat en boutique', shopR.own && shopR.cr === cr0 - 300, JSON.stringify(shopR));
+await G(() => { const g = window.__nightfall; const it = g.inventory.items.find((i) => i.id === 'hoodie_ember'); g.inventory.equip(it.uid); g.onEquipmentChanged(); });
+check('la tenue change le sweat de Noa', (await G(() => '#' + window.__nightfall.hero.model.mats.hoodie.color.getHexString())) === '#e8553f');
+await page.click('[data-act=skills]');
+const d0 = await G(() => window.__nightfall.hero.mods.damageMult);
+await page.click('[data-act=learn][data-id=f1]');
+await page.click('[data-act=learn][data-id=s1]');
+const sk = await G(() => ({ d: window.__nightfall.hero.mods.damageMult, hp: window.__nightfall.hero.stats.maxHp, pts: window.__nightfall.progression.skillPoints }));
+check('compétences apprises et appliquées', sk.d > d0 && sk.pts >= 1, JSON.stringify(sk));
+await shot('19_competences');
+await page.click('.menu.skills.on [data-act=close]');
+await sim(0.2);
+
+// ================= CHAPITRE 1 (suite) : L'écho d'Aegis =================
+await sim(16); // SMS de maman puis appel de Mara
+check('mission « L’écho d’Aegis » active', (await G(() => window.__nightfall.missions.state.m02_aegis_echo?.status)) === 'active');
+await G(() => { const g = window.__nightfall; g.hero.takeDamage = ((o) => (...a) => { const r = o(...a); if (g.hero.hp < 40) g.hero.hp = g.hero.stats.maxHp; return r; })(g.hero.takeDamage.bind(g.hero)); });
+await place(20, 0.15, 30, 0);
+await sim(2.5);
+const crawl = await G(() => window.__nightfall.enemies.filter((e) => e.type === 'crawler').map((e) => e.state));
+check('embuscade : 3 Crawlers tombent des toits', crawl.length === 3, crawl.join(','));
+const fightGroup = async (group, maxIter, label) => {
+  for (let i = 0; i < maxIter; i++) {
+    const left = await G((group) => {
+      const g = window.__nightfall;
+      const alive = g.enemies.filter((e) => e.alive && e.spawn.group === group);
+      if (!alive.length) return 0;
+      const e = alive.sort((a, b) => a.pos.distanceTo(g.hero.pos) - b.pos.distanceTo(g.hero.pos))[0];
+      const dx = e.pos.x - g.hero.pos.x, dz = e.pos.z - g.hero.pos.z, d = Math.hypot(dx, dz);
+      g.camYaw = Math.atan2(dx, dz);
+      if (d > 2.4 + e.radius) { g.input.down.add('up'); g.simulate(0.15); g.input.down.delete('up'); }
+      else if (g.hero.energy >= 30 && g.hero.powerCd <= 0) { g.input.pressed.add('power'); g.simulate(0.2); }
+      else { g.input.pressed.add(Math.random() < 0.3 ? 'heavy' : 'light'); g.simulate(0.15); }
+      return alive.length;
+    }, group);
+    if (!left) return true;
+    if (i === 20 && label) await shot(label);
+  }
+  return false;
+};
+check('Crawlers vaincus', await fightGroup('crawlers', 400, '20_crawlers'));
+const dpos = await G(() => ({ ...window.__nightfall.world.targets.aegis_drone }));
+await place(dpos.x - 1.2, 0.15, dpos.z, Math.PI / 2);
+await sim(0.2);
+await press('interact', 0.1);
+await sim(2);
+check('enregistrement du père récupéré', (await G(() => window.__nightfall.missions.state.m02_aegis_echo.step)) === 3);
+await place(-33, 0.15, 23, 0);
+await sim(0.5);
+check('« L’écho d’Aegis » terminée, « Le Colosse » commence', await G(() => window.__nightfall.missions.isDone('m02_aegis_echo') && window.__nightfall.missions.state.m03_colossus?.status === 'active'));
+
+// ================= BOSS : LE COLOSSE =================
+await sim(10);
+await place(0, 0.15, 10, Math.PI);
+await sim(0.3);
+check('cinématique d’apparition du Colosse', await G(() => window.__nightfall.story.inCinematic && !!window.__nightfall.boss));
+await sim(5);
+await shot('21_colosse_emerge');
+await sim(9);
+const bossInfo = await G(() => { const b = window.__nightfall.boss; return { st: b.state, y: b.pos.y, hp: b.hp }; });
+check('le Colosse est sorti et combat', bossInfo.st !== 'intro' && bossInfo.y > 0, JSON.stringify(bossInfo));
+const armor = await G(() => {
+  const g = window.__nightfall; const b = g.boss; const dir = { x: 0, y: 0, z: 1 };
+  b.state = 'walk'; b.exposed = false; let h0 = b.hp; b.takeHit({ damage: 100, dir }); const closed = h0 - b.hp;
+  b.stagger(3); b.update(0.016); h0 = b.hp; b.takeHit({ damage: 100, dir }); const open = h0 - b.hp;
+  return { closed, open, exposed: b.exposed };
+});
+check('armure vs noyaux exposés (la parade l’étourdit)', armor.open > armor.closed * 4 && armor.exposed, JSON.stringify(armor));
+const seen = new Set();
+for (let i = 0; i < 220; i++) {
+  const st = await G(() => { const g = window.__nightfall; g.simulate(0.1); const b = g.boss; return b ? b.state : 'none'; });
+  seen.add(st);
+}
+console.log('   attaques du Colosse observées :', [...seen].join(', '));
+check('le Colosse utilise plusieurs attaques', ['slamWindup', 'sweepWindup', 'stompWindup', 'slam', 'sweep', 'stomp'].filter((x) => seen.has(x)).length >= 2);
+await shot('22_combat_colosse');
+const ph = await G(() => { const g = window.__nightfall; const b = g.boss; b.state = 'walk'; b.exposed = true; b.takeHit({ damage: b.hp - b.def.hp * 0.3 + 10, dir: { x: 0, y: 0, z: 1 } }); return b.stage; });
+check('passage en phase 3 (rage + renforts)', ph === 3 && (await G(() => window.__nightfall.enemies.filter((e) => e.spawn.group === 'colossus_adds').length)) === 2);
+await G(() => { const g = window.__nightfall; const b = g.boss; b.state = 'stun'; b.exposed = true; b.hp = 50; });
+await fightGroup('colossus', 200);
+await sim(6);
+check('Colosse vaincu', await G(() => window.__nightfall.missions.state.m03_colossus.step === 2));
+const cache = await G(() => window.__nightfall.crates.find((c) => c.id === 'boss_cache').root.visible);
+check('la cache du Colosse apparaît', cache);
+await place(-13, 0.15, -14.6, 0);
+await press('interact', 0.1);
+await press('interact', 0.1);
+await page.waitForTimeout(1200);
+await sim(1.2);
+await shot('23_cache_colosse');
+await press('interact', 0.05);
+check('fin du chapitre 1', await G(() => window.__nightfall.missions.isDone('m03_colossus')));
+check('butin de boss (Noyau du Vide)', await G(() => window.__nightfall.inventory.owns('void_phalanx')));
+
 // ================= SAUVEGARDE / RECHARGEMENT =================
 await sim(0.5);
 await G(() => window.__nightfall.save('test', true));

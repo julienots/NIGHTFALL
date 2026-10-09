@@ -11,7 +11,7 @@ const HINTS = {
     <span class="kbd">Ctrl/C</span>rouler · <span class="kbd">E</span>parler / interagir · <span class="kbd">J</span>journal · <span class="kbd">Échap</span>pause`,
   rings: `<span class="kbd">Clic G</span>coups d'anneaux · <span class="kbd">Clic D</span>fouet d'anneaux · <span class="kbd">F</span>rafale<br>
     <span class="kbd">G</span>bouclier (le lever au dernier moment = parade) · <span class="kbd">Ctrl/C</span>rouler<br>
-    <span class="kbd">R</span>verrouiller · <span class="kbd">H</span>soin · <span class="kbd">I</span>inventaire · <span class="kbd">J</span>journal`,
+    <span class="kbd">R</span>verrouiller · <span class="kbd">H</span>soin · <span class="kbd">I</span>inventaire · <span class="kbd">J</span>journal · <span class="kbd">K</span>compétences`,
   flight: `<span class="kbd">V</span>décoller / se poser · <span class="kbd">ZQSD</span>voler vers où tu regardes<br>
     <span class="kbd">Espace</span>monter · <span class="kbd">Ctrl/C</span>descendre · <span class="kbd">Maj</span>boost · <span class="kbd">Clic G</span>piqué fracassant`,
 };
@@ -89,12 +89,127 @@ export class Story {
       this.#ensureCase(true);
       if (!g.missions.stepReached('p03_rings', 1)) this.#spawnChaser(V(34, 0.15, -44), false);
     }
+    // Reprise en cours de chapitre 1
+    const m02 = g.missions.state.m02_aegis_echo;
+    if (m02?.status === 'active' && m02.step === 1) this.#spawnCrawlers(3 - m02.progress, false);
+    if (m02?.status === 'active' && m02.step === 2) this.#ensureDrone();
+    const m03 = g.missions.state.m03_colossus;
+    if (m03?.status === 'active' && m03.step === 1 && !g.boss) {
+      const b = g.spawnBoss({ x: 0, z: -14 });
+      b.introDur = 0.1;
+    }
+  }
+
+  // ---------- Chapitre 1 (suite) ----------
+  #spawnCrawlers(n, fromRoofs = true) {
+    const g = this.game;
+    const spots = [[17, 30], [24, 36], [27, 30]];
+    for (let i = 0; i < n; i++) {
+      const [x, z] = spots[i];
+      const e = g.spawnEnemy({ type: 'crawler', x, z, group: 'crawlers', patrol: [[x, z]] });
+      if (fromRoofs) {
+        // Tombent des toits de la ruelle.
+        e.pos.y = 12 + i * 2;
+        e.vy = -2;
+      }
+      e.alertTo(g.hero.pos);
+    }
+  }
+
+  #ensureDrone() {
+    if (this.drone) return;
+    const g = this.game;
+    const t = g.world.targets.aegis_drone;
+    const grp = new THREE.Group();
+    const white = new THREE.MeshToonMaterial({ color: '#e8ecff' });
+    const dark = new THREE.MeshToonMaterial({ color: '#2b2050' });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.22, 0.7), white);
+    body.position.y = 0.2;
+    grp.add(body);
+    for (const [x, z] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.5), dark);
+      arm.position.set(x * 0.6, 0.22, z * 0.6);
+      arm.rotation.y = Math.atan2(x, z);
+      const rotor = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.02, 12), dark);
+      rotor.position.set(x, 0.3, z);
+      rotor.rotation.z = Math.random() * 0.5;
+      grp.add(arm, rotor);
+    }
+    const led = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: '#5fe3ff' }));
+    led.position.set(0, 0.34, 0.3);
+    grp.add(led);
+    grp.position.set(t.x, t.y, t.z);
+    grp.rotation.set(0.25, 0.6, 0.15);
+    g.scene.add(grp);
+    this.drone = { grp, led, done: false };
+  }
+
+  #playRecording() {
+    const g = this.game;
+    this.drone.done = true;
+    g.hero.playAnim('interact', 1.2);
+    g.audio.phoneBuzz();
+    const L = [
+      ['Julien Vant (enregistrement)', 'Journal du projet ANNEAU, entrée quarante-trois. Si ce message est lu, c’est que les anneaux se sont activés.'],
+      ['Julien Vant (enregistrement)', '… Noa. Si c’est toi qui entends ça, je suis désolé. Je n’ai pas eu le temps de t’expliquer.'],
+      ['Julien Vant (enregistrement)', 'Aegis voulait une arme. Je leur ai donné des plans. Mais ces anneaux-là, je les ai faits pour te protéger.'],
+      ['Julien Vant (enregistrement)', 'Ils écoutent le cœur de celui qui les porte. Ne les laisse jamais décider de qui tu es.'],
+      ['Julien Vant (enregistrement)', 'Et méfie-toi de Hollis. Il sait ce qu’il y a sous la ville. Il l’a toujours su.'],
+      ['Noa', '… Papa.'],
+    ];
+    L.forEach(([w, t]) => this.#say(w, t, 5));
+    this.#run([{ wait: 1.2, do: () => g.missionEvents(g.missions.handle({ type: 'interact', target: 'aegis_drone' })) }]);
+  }
+
+  // Le Colosse sort de la faille de la place Halden.
+  #colossusIntro() {
+    const g = this.game;
+    const hp = g.hero.pos.clone();
+    let boss = null;
+    this.#run([
+      { wait: 0, do: () => {
+        g.audio.rumble(6);
+        g.shake(0.6);
+        this.cine = { pos: V(10, 2.2, 12), look: V(0, 2, -14) };
+        this.#say('Noa', 'Le sol… il se soulève.', 3);
+      } },
+      { wait: 1.6, do: () => {
+        boss = g.spawnBoss({ x: 0, z: -14 });
+        boss.introDur = 4;
+        boss.yaw = Math.atan2(hp.x, hp.z + 14);
+        g.fx.ring({ x: 0, y: 0.15, z: -14 }, { color: '#b070ff', from: 1, to: 14, life: 1.2 });
+        this.cine = { pos: V(8, 1.2, 4), look: V(0, 6, -14), lerp: 0.8 };
+      } },
+      { wait: 3.6, do: () => {
+        this.cine = { pos: V(4, 3, 2), look: V(0, 8, -14), lerp: 1.2 };
+        g.hud.chapter('BOSS', 'Le Colosse', 'Son armure encaisse. Trouve l’ouverture.', 4);
+      } },
+      { wait: 2.6, do: () => this.#say('Mara (radio)', 'Ses noyaux brillent quand il s’épuise. C’est là qu’il faut frapper, Noa.', 4) },
+    ], { cinematic: true });
+  }
+
+  #ending() {
+    const g = this.game;
+    this.#run([
+      { wait: 1.5, do: () => g.hud.chapter('FIN DU CHAPITRE 1', 'Vesper Downtown', 'Le quartier respire. Pour cette nuit.', 5) },
+      { wait: 5.5, do: () => {
+        this.#say('Mara (radio)', 'Tu l’as fait. Un lycéen contre ça. Je n’y croyais pas moi-même.', 4);
+        this.#say('Mara (radio)', 'Le nom que ton père a donné : Hollis. Directeur de la recherche d’Aegis. Ses labos sont dans la forêt de Blackwood.', 5);
+      } },
+      { wait: 9, do: () => {
+        g.audio.phoneBuzz();
+        g.hud.phone('Inès', 'Noa ?? Y’a une vidéo d’un mec qui VOLE au-dessus d’Halden. Il a TON sweat. Rappelle-moi. Maintenant.', 8);
+      } },
+      { wait: 3, do: () => this.#say('Noa', '… Oh non.', 2.5) },
+      { wait: 4, do: () => g.hud.chapter('CHAPITRE 2', 'Blackwood', 'À suivre…', 5) },
+    ]);
   }
 
   // Point de réapparition après une mort (selon le chapitre).
   checkpoint() {
     const st = this.stage();
     const w = this.game.world;
+    if (this.game.missions.state.m03_colossus?.status === 'active') return { x: 0, y: 0.15, z: 24, yaw: Math.PI };
     if (st === 'prologue') return w.schoolSpawn;
     if (st === 'chase') return { x: 0, y: 0.15, z: -9, yaw: Math.PI * 0.75 };
     if (st === 'tutorial') return { x: 36, y: 0.15, z: -46, yaw: 0 };
@@ -168,6 +283,9 @@ export class Story {
   interactables() {
     const out = [];
     const st = this.stage();
+    if (this.drone && !this.drone.done && this.game.missions.currentStep('m02_aegis_echo')?.target === 'aegis_drone') {
+      out.push({ kind: 'story', id: 'aegis_drone', pos: this.game.world.targets.aegis_drone, label: '<kbd>E</kbd>Récupérer l’enregistrement — <span style="color:#5fe3ff">drone Aegis</span>' });
+    }
     if (st === 'prologue' && this.ines && !this.seq && !this.missions.stepReached('p01_after_school', 1)) {
       out.push({ kind: 'story', id: 'ines', pos: this.ines.pos, label: '<kbd>E</kbd>Parler — <span style="color:#ff9cf0">Inès</span>' });
     }
@@ -180,6 +298,7 @@ export class Story {
   interact(it) {
     if (it.id === 'ines') this.#talkToInes();
     if (it.id === 'aegis_case') this.#awakening();
+    if (it.id === 'aegis_drone') this.#playRecording();
   }
 
   // ---------- Séquences ----------
@@ -439,6 +558,42 @@ export class Story {
       g.hud.chapter('CHAPITRE 1', 'Vesper Downtown', 'La ville a besoin d’un héros. Elle n’a qu’un lycéen.', 5);
       g.spawnGated();
     }
+    if (ev.type === 'missionComplete' && ev.id === 'm01_first_contact') {
+      this.#run([
+        { wait: 9, do: () => {
+          g.audio.phoneBuzz();
+          g.hud.phone('Maman', 'Tu dors ? Les infos parlent de coupures et d’émeutes à Halden. Réponds-moi s’il te plaît.', 7);
+        } },
+        { wait: 3.5, do: () => this.#say('Noa', '« Je suis à la maison, t’inquiète. » … Envoyé.', 3) },
+        { wait: 3, do: () => this.#say('Noa', 'Premier mensonge. Sûrement pas le dernier.', 3) },
+        { wait: 3, do: () => this.#say('Mara (radio)', 'Noa. Je capte un signal Aegis dans la ruelle derrière Nova Market. On dirait… une voix.', 4.5) },
+      ]);
+    }
+    if (ev.type === 'stepComplete' && ev.id === 'm02_aegis_echo') {
+      const step = g.missions.state.m02_aegis_echo.step;
+      if (step === 1) {
+        this.#say('Noa', 'Le signal vient d’ici… Attends. Ça bouge sur les toits.', 3);
+        this.#spawnCrawlers(3, true);
+      } else if (step === 2) {
+        this.#say('Noa', 'Un drone Aegis, écrasé. Sa lumière clignote encore.', 3);
+        this.#ensureDrone();
+      } else if (step === 3) {
+        this.#say('Mara (radio)', 'J’ai tout entendu, Noa. Reviens au refuge. Prends ton temps.', 4);
+      }
+    }
+    if (ev.type === 'missionComplete' && ev.id === 'm02_aegis_echo') {
+      this.#say('Mara (radio)', 'Hollis… Je connais ce nom. On en reparlera. Pour l’instant, regarde dehors.', 4);
+      this.#say('Mara (radio)', 'La faille de la place Halden s’élargit. Le sol se soulève. Il faut que tu y ailles.', 4.5);
+    }
+    if (ev.type === 'stepComplete' && ev.id === 'm03_colossus') {
+      const step = g.missions.state.m03_colossus.step;
+      if (step === 1) this.#colossusIntro();
+      if (step === 2) {
+        this.#say('Noa', 'Il… il est tombé. Je tremble encore.', 3);
+        this.#say('Mara (radio)', 'Il a laissé quelque chose derrière lui, au coin de la rue Corvin.', 4);
+      }
+    }
+    if (ev.type === 'missionComplete' && ev.id === 'm03_colossus') this.#ending();
     if (ev.type === 'missionStart') g.spawnGated();
   }
 

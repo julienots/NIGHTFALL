@@ -28,6 +28,16 @@ export const CRATE_TYPES = {
       { credits: [80, 150], weight: 40 },
     ],
   },
+  boss: {
+    label: 'Cache du Colosse', color: '#ffcd20',
+    rolls: 2,
+    guaranteed: [{ id: 'void_phalanx' }, { shards: [10, 14] }, { id: 'abyss_fragment', qty: [3, 5] }],
+    table: [
+      { id: 'nightfall_shell', weight: 40 },
+      { id: 'hoodie_abyss', weight: 15 },
+      { credits: [200, 350], weight: 45 },
+    ],
+  },
   elite: {
     label: 'Elite Crate', color: '#b05cff',
     rolls: 3,

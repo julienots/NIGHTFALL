@@ -21,6 +21,7 @@ export class Hud {
       <div class="hint"></div>
       <div class="letterbox"><i></i><i></i></div>
       <div class="phone"><div class="ph-app">Messages</div><div class="ph-from"></div><div class="ph-text"></div></div>
+      <div class="bossbar"><div class="bn"></div><div class="bar"><i></i></div><div class="bs"></div></div>
       <div class="chapter"><div class="c1"></div><div class="c2"></div><div class="c3"></div></div>
       <div class="vitals">
         <div class="name">NOA <small class="lvl">NIV. 1</small></div>
@@ -148,6 +149,17 @@ export class Hud {
     c.classList.add('on');
     clearTimeout(this.chapT);
     this.chapT = setTimeout(() => c.classList.remove('on'), dur * 1000);
+  }
+
+  boss(st) {
+    const el = this.el.querySelector('.bossbar');
+    el.classList.toggle('on', !!st);
+    if (!st) return;
+    el.querySelector('.bn').textContent = st.name;
+    el.querySelector('.bar > i').style.transform = `scaleX(${Math.max(0, st.hp)})`;
+    el.classList.toggle('rage', st.stage === 3);
+    el.querySelector('.bs').textContent = st.exposed ? '◆ NOYAUX EXPOSÉS — FRAPPE MAINTENANT ◆' : `Phase ${st.stage} / 3`;
+    el.classList.toggle('exposed', st.exposed);
   }
 
   setName(name) {

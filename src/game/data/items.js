@@ -14,8 +14,9 @@ export const RARITY_INFO = {
 };
 
 export const CATEGORIES = {
-  weapon: 'Armes',
-  armor: 'Armures',
+  weapon: 'Noyaux',
+  armor: 'Protections',
+  cosmetic: 'Tenues',
   resource: 'Ressources',
 };
 
@@ -57,6 +58,23 @@ export const ITEMS = {
     name: 'Coupe-vent Nightfall', category: 'armor', slot: 'armor', rarity: 'epic',
     stats: { defense: 15, maxHp: 45, maxEnergy: 20 }, visual: { plate: '#3a1d6e', trim: '#d08cff' },
     desc: "Tissu organique qui semble respirer. Augmente la réserve d'énergie.",
+  },
+  // --- Tenues (cosmétiques : changent l'apparence de Noa) ---
+  hoodie_midnight: {
+    name: 'Sweat Minuit', category: 'cosmetic', slot: 'skin', rarity: 'uncommon',
+    visual: { hoodie: '#2b2f6a', hoodie2: '#1d1f48' }, desc: 'Bleu nuit, pour passer inaperçu.',
+  },
+  hoodie_ember: {
+    name: 'Sweat Braise', category: 'cosmetic', slot: 'skin', rarity: 'rare',
+    visual: { hoodie: '#e8553f', hoodie2: '#b8402f' }, desc: 'Rouge vif. Tout le contraire de la discrétion.',
+  },
+  hoodie_lime: {
+    name: 'Sweat Citron vert', category: 'cosmetic', slot: 'skin', rarity: 'rare',
+    visual: { hoodie: '#9be35a', hoodie2: '#6fb83a' }, desc: 'Acheté en solde. Porté avec fierté.',
+  },
+  hoodie_abyss: {
+    name: 'Sweat Abyssal', category: 'cosmetic', slot: 'skin', rarity: 'legendary',
+    visual: { hoodie: '#3a1a6a', hoodie2: '#7b4ad6' }, desc: 'Tissé de fibres qui absorbent la lumière de la faille.',
   },
   // --- Ressources ---
   scrap: {

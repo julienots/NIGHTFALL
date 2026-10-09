@@ -4,7 +4,7 @@
 // Spécifiques : Stalker (observe, contourne, bondit) et Brute (rugit, frappe
 // le sol, balaie, charge), avec attaques télégraphiées.
 import * as THREE from 'three';
-import { StalkerModel, BruteModel } from './enemyModels.js';
+import { StalkerModel, BruteModel, CrawlerModel } from './enemyModels.js';
 
 export const ENEMY_TYPES = {
   stalker: {
@@ -12,6 +12,12 @@ export const ENEMY_TYPES = {
     walk: 2.2, run: 7.2, sight: 26, fov: 2.2, hearing: 14, poise: 0,
     xp: 40, credits: [8, 18], color: '#7dff6a', leash: 40, forget: 5,
     loot: [{ id: 'scrap', chance: 0.5, qty: [1, 2] }, { id: 'abyss_fragment', chance: 0.12, qty: [1, 1] }],
+  },
+  crawler: {
+    name: 'Crawler', Model: CrawlerModel, hp: 55, radius: 0.6, height: 1.0, mass: 1.2,
+    walk: 2.5, run: 8.5, sight: 18, fov: 2.6, hearing: 12, poise: 0,
+    xp: 35, credits: [6, 14], color: '#ff9a3d', leash: 40, forget: 5,
+    loot: [{ id: 'scrap', chance: 0.6, qty: [1, 2] }, { id: 'abyss_fragment', chance: 0.1, qty: [1, 1] }],
   },
   brute: {
     name: 'Brute', Model: BruteModel, hp: 340, radius: 1.05, height: 3.0, mass: 0.22,
@@ -46,7 +52,7 @@ export class Enemy {
     this.hp = this.def.hp;
     this.poise = this.def.poise;
     this.alive = true;
-    this.state = 'patrol';
+    this.state = spawn.ambush ? 'lurk' : 'patrol';
     this.stateT = 0;
     this.wait = Math.random() * 2;
     this.lastKnown = null;
@@ -100,6 +106,19 @@ export class Enemy {
       }
       return;
     }
+    if (this.state === 'lurk') {
+      // Embuscade : ne bouge que si la proie passe tout près.
+      const dd = hero.pos.distanceTo(this.pos);
+      if (dd < 8.5) {
+        this.alert = true;
+        this.sees = true;
+        this.lastKnown = hero.pos.clone();
+        this.sinceSeen = 0;
+        this.game.onEnemyAlert(this);
+        this.#set('windup');
+      }
+      return;
+    }
     const range = this.alert ? this.def.sight * 1.3 : this.def.sight;
     if (d < range) {
       const ang = Math.abs(angleDiff(this.yaw, Math.atan2(dx, dz)));
@@ -127,7 +146,10 @@ export class Enemy {
   #onSpot() {
     this.alert = true;
     this.game.onEnemyAlert(this);
-    if (this.type === 'stalker') {
+    if (this.type === 'crawler') {
+      this.game.audio.stalkerClick(this.pos);
+      this.#set('circle');
+    } else if (this.type === 'stalker') {
       this.game.audio.stalkerClick(this.pos);
       this.#set('observe');
       this.observeFor = 1.2 + Math.random() * 1.6;
@@ -143,7 +165,7 @@ export class Enemy {
     this.lastKnown = pos.clone();
     this.alert = true;
     this.sinceSeen = 0.5;
-    this.#set(this.type === 'stalker' ? 'circle' : 'chase');
+    this.#set(this.type === 'brute' ? 'chase' : 'circle');
   }
 
   // ---------- Dégâts reçus ----------
@@ -166,7 +188,7 @@ export class Enemy {
       this.#die();
       return true;
     }
-    if (this.type === 'stalker') {
+    if (this.type !== 'brute') {
       // Interrompu sauf pendant le bond déjà lancé.
       if (this.state !== 'lunge' || heavy) this.#set('stagger');
       this.staggerFor = heavy ? 0.7 : 0.35;
@@ -268,6 +290,7 @@ export class Enemy {
     }
 
     if (this.type === 'stalker') this.#stalkerAI(dt);
+    else if (this.type === 'crawler') this.#crawlerAI(dt);
     else this.#bruteAI(dt);
 
     this.#physics(dt);
@@ -313,7 +336,7 @@ export class Enemy {
           if (this.retreatAfter) {
             this.retreatAfter = false;
             this.#set('retreat');
-          } else this.#set(this.type === 'stalker' ? 'circle' : 'chase');
+          } else this.#set(this.type === 'brute' ? 'chase' : 'circle');
         }
         return true;
       default:
@@ -395,6 +418,69 @@ export class Enemy {
         if (this.stateT > 2.2) this.#set('circle');
         break;
       }
+      default:
+        this.#set('patrol');
+    }
+  }
+
+  // ---------- Crawler ----------
+  #crawlerAI(dt) {
+    if (this.state === 'lurk') return;
+    if (this.#commonStates(dt)) return;
+    const hero = this.game.hero;
+    const d = this.#heroDist();
+    switch (this.state) {
+      case 'circle': {
+        // Trottine en cercle serré, change de sens, puis bondit.
+        if (this.stateT < dt * 1.5) this.strafeDir = Math.random() < 0.5 ? -1 : 1;
+        const toMe = Math.atan2(this.pos.x - hero.pos.x, this.pos.z - hero.pos.z) + this.strafeDir * 0.8;
+        const target = new THREE.Vector3(hero.pos.x + Math.sin(toMe) * 5.5, 0, hero.pos.z + Math.cos(toMe) * 5.5);
+        this.#moveTo(target, this.def.run * 0.8, dt, 9);
+        if (d < 1.8 && this.game.attackToken(this)) this.#set('bite');
+        else if (this.stateT > 1.3 + Math.random() * 1.2 && d < 10 && this.game.attackToken(this)) this.#set('windup');
+        break;
+      }
+      case 'windup':
+        // Télégraphe : se ramasse, yeux qui flashent, cri.
+        this.#faceHero(dt, 12);
+        if (this.stateT < dt * 1.5) {
+          this.game.audio.stalkerHiss(this.pos);
+          this.game.fx.flash({ x: this.pos.x, y: this.pos.y + 0.8, z: this.pos.z }, '#ff7a1a', 10, 0.4);
+        }
+        if (this.stateT > 0.4) {
+          // Bond en cloche vers la position visée
+          const h = this.game.hero;
+          const aim = h.pos.clone().addScaledVector(h.vel, 0.3);
+          const dist = Math.min(11, aim.distanceTo(this.pos));
+          this.lungeDir = aim.sub(this.pos).setY(0).normalize().multiplyScalar(dist / 0.62);
+          this.vy = 7.5;
+          this.pos.y += 0.05;
+          this.#set('lunge');
+        }
+        break;
+      case 'lunge':
+        this.desired.copy(this.lungeDir);
+        if (!this.attackHit && d < this.radius + hero.radius + 0.6 && Math.abs(hero.pos.y - this.pos.y) < 1.6) this.#strike(13, { knock: 6 });
+        if (this.stateT > 0.25 && this.vy === 0) {
+          this.game.fx.dustRing(this.pos, 0.8, 6, '#9a8c7a');
+          this.#set('recover');
+        }
+        if (this.stateT > 1.4) this.#set('recover');
+        break;
+      case 'bite':
+        this.#faceHero(dt, 12);
+        if (!this.attackHit && this.stateT > 0.25) {
+          if (d < 2.2 && Math.abs(hero.pos.y - this.pos.y) < 1.6) this.#strike(9, { knock: 3 });
+          else this.attackHit = true;
+        }
+        if (this.stateT > 0.5) this.#set('recover');
+        break;
+      case 'recover':
+        if (this.stateT > 0.6) {
+          this.game.releaseToken(this);
+          this.#set('circle');
+        }
+        break;
       default:
         this.#set('patrol');
     }
@@ -531,15 +617,18 @@ export class Enemy {
       this.vy -= 25 * dt;
       this.pos.y = Math.max(gh, this.pos.y + this.vy * dt);
       if (this.pos.y <= gh) this.vy = 0;
-    } else this.pos.y = gh;
+    } else {
+      this.pos.y = gh;
+      this.vy = 0;
+    }
     this.speedNow = Math.hypot(this.pos.x - before.x, this.pos.z - before.z) / Math.max(dt, 1e-4);
   }
 
   #animate(dt) {
-    const sp = this.speedNow / (this.type === 'brute' ? 3 : 4);
-    this.phase += dt * (this.type === 'brute' ? 5 : 9) * Math.min(1.6, sp);
+    const sp = this.speedNow / (this.type === 'brute' ? 3 : this.type === 'crawler' ? 3 : 4);
+    this.phase += dt * (this.type === 'brute' ? 5 : this.type === 'crawler' ? 14 : 9) * Math.min(1.6, sp);
     const mode = {
-      observe: 'observe', windup: 'windup', lunge: 'lunge', swipeWindup: this.type === 'brute' ? 'swipeWindup' : 'windup',
+      observe: 'observe', windup: 'windup', lunge: 'lunge', lurk: 'lurk', bite: 'windup', swipeWindup: this.type === 'brute' ? 'swipeWindup' : 'windup',
       swipe: 'swipe', recover: 'recover', stagger: 'stagger', roar: 'roar', slamWindup: 'slamWindup', slam: 'slam',
       chargeWindup: 'chargeWindup', charge: 'charge',
     }[this.state] || 'move';

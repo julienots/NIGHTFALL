@@ -8,7 +8,7 @@ export class Inventory {
   constructor(data) {
     this.items = []; // { uid, id, level, fav }
     this.stacks = {}; // id -> quantité
-    this.equipped = { weapon: null, armor: null }; // uid
+    this.equipped = { weapon: null, armor: null, skin: null }; // uid
     this.credits = 0;
     this.shards = 0;
     this.nextUid = 1;
@@ -64,6 +64,10 @@ export class Inventory {
     }
     this.#emit();
     return overflow;
+  }
+
+  owns(id) {
+    return this.items.some((i) => i.id === id);
   }
 
   count(id) {
@@ -179,7 +183,7 @@ export class Inventory {
   load(d) {
     this.items = (d.items || []).filter((i) => ITEMS[i.id]);
     this.stacks = Object.fromEntries(Object.entries(d.stacks || {}).filter(([k]) => ITEMS[k]));
-    this.equipped = { weapon: null, armor: null, ...(d.equipped || {}) };
+    this.equipped = { weapon: null, armor: null, skin: null, ...(d.equipped || {}) };
     for (const slot of Object.keys(this.equipped)) {
       if (this.equipped[slot] != null && !this.get(this.equipped[slot])) this.equipped[slot] = null;
     }

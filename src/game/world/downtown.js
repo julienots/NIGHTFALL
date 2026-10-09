@@ -836,6 +836,8 @@ export function buildDowntown(scene, col, quality) {
     parking_entry: { x: 22, y: 0.15, z: -14 },
     aegis_case: { x: 38.6, y: 0.15, z: -49.6 },
     lumen_roof: { x: 51.5, y: 26, z: 45.5 },
+    nova_alley: { x: 20, y: 0.15, z: 33 },
+    aegis_drone: { x: 37, y: 0.15, z: 31 },
     terminal: { x: -31, y: 0.15, z: 32.2 },
     workbench: { x: -40, y: 0.15, z: 31.2 },
   };
@@ -860,6 +862,7 @@ export function buildDowntown(scene, col, quality) {
     { id: 'crate_supply_alley', type: 'supply', x: 41, y: 0.15, z: 33, rot: 0.2 },
     { id: 'crate_supply_safehouse', type: 'supply', x: -26, y: 0.15, z: 30, rot: 1.2 },
     { id: 'crate_supply_corvin', type: 'supply', x: -55, y: 0.15, z: -20, rot: 0.6 },
+    { id: 'boss_cache', type: 'boss', x: -13, y: 0.15, z: -13, rot: 0.8, hiddenUntil: { mission: 'm03_colossus', step: 2 } },
     { id: 'crate_supply_van', type: 'supply', x: 66, y: 2.15, z: 20, rot: 0.1 },
   ];
 

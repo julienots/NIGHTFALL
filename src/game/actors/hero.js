@@ -65,6 +65,10 @@ export class Hero {
     this.landT = 0;
     this.shieldT = -1;
     this.cinematic = false;
+    this.mods = { damageMult: 1, whipRange: 0, whipArc: 0, punchPierce: false, sprintMult: 1, dodgeIFrames: 0, dodgeCd: 0, flightMult: 1, energyRegen: 0, volleyTargets: 0, volleyCost: 0, volleyDmg: 1, blockReduce: 0.15, blockCostMult: 1, secondWind: false, parryWindow: 0.25, riposte: false, comboBonus: false };
+    this.chain = 0;
+    this.chainT = 0;
+    this.secondWindT = 0;
     this.stats = { maxHp: 100, maxEnergy: 100, damage: 10, defense: 0, energyGain: 0, powerDamage: 0 };
     this.hp = 100;
     this.energy = 60;
@@ -162,9 +166,21 @@ export class Hero {
     if (def.whip) this.rings.set('whip');
   }
 
+  // Multiplicateur de compétences : force, enchaînement, riposte.
+  #dmgMult() {
+    let m = this.mods.damageMult;
+    if (this.mods.comboBonus) m *= 1 + Math.min(0.4, 0.05 * this.chain);
+    if (this.riposteReady) {
+      m *= 2;
+      this.riposteReady = false;
+      this.game.hud.toast('RIPOSTE ×2', '#ffcd20');
+    }
+    return m;
+  }
+
   #resolveHit(def) {
     let hits = 0;
-    const base = this.stats.damage * def.mult * (def === MOVES.power ? 1 + this.stats.powerDamage : 1);
+    const base = this.stats.damage * def.mult * (def === MOVES.power ? 1 + this.stats.powerDamage : 1) * this.#dmgMult();
     const hit = (e, dir) => {
       const dmg = Math.round(base * (0.92 + Math.random() * 0.16));
       if (e.takeHit({ damage: dmg, dir, knock: def.knock, poise: def.poise, heavy: !!def.heavy, power: def === MOVES.power })) hits++;
@@ -176,12 +192,12 @@ export class Hero {
         .filter((e) => e.alive && e.pos.distanceTo(this.pos) < def.range)
         .filter((e) => e.pos.clone().sub(this.pos).setY(0).normalize().dot(f) > 0.3 || e === this.game.lockTarget)
         .sort((a, b) => a.pos.distanceTo(this.pos) - b.pos.distanceTo(this.pos))
-        .slice(0, def.maxTargets);
+        .slice(0, def.maxTargets + this.mods.volleyTargets);
       const tg = list.length
         ? list.map((e) => ({ x: e.pos.x, y: e.pos.y + e.def.height * 0.55, z: e.pos.z }))
         : [this.pos.clone().addScaledVector(f, 9).add(new THREE.Vector3(0, 1.2, 0))];
       this.rings.launch(tg, 0.9);
-      this.pendingVolley = { t: 0.3, list };
+      this.pendingVolley = { t: 0.3, list, mult: base / (this.stats.damage * def.mult * (1 + this.stats.powerDamage)) };
       return list.length;
     }
     const f = this.facing();
@@ -194,11 +210,15 @@ export class Hero {
       else {
         const ang = Math.abs(angleDiff(this.yaw, Math.atan2(e.pos.x - this.pos.x, e.pos.z - this.pos.z)));
         const dd = Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z);
-        ok = dd <= def.range + e.radius && (ang <= def.arc / 2 || dd < e.radius + RADIUS + 0.3);
+        const range = def.range + (def.whip ? this.mods.whipRange : 0) + (def.ringShot && this.mods.punchPierce ? 1.5 : 0);
+        const arc = def.arc + (def.whip ? this.mods.whipArc : 0);
+        ok = dd <= range + e.radius && (ang <= arc / 2 || dd < e.radius + RADIUS + 0.3);
       }
       if (ok) hit(e, new THREE.Vector3(e.pos.x - this.pos.x, 0, e.pos.z - this.pos.z).normalize());
     }
     if (hits) {
+      this.chain++;
+      this.chainT = 2;
       this.energy = Math.min(this.stats.maxEnergy, this.energy + hits * (5 + this.stats.energyGain));
       this.game.hitStop(def.heavy ? 0.09 : 0.05);
       this.game.shake(def.heavy ? 0.35 : 0.15);
@@ -215,7 +235,7 @@ export class Hero {
     if (v.t > 0) return;
     this.pendingVolley = null;
     const def = MOVES.power;
-    const base = this.stats.damage * def.mult * (1 + this.stats.powerDamage);
+    const base = this.stats.damage * def.mult * (1 + this.stats.powerDamage) * this.mods.volleyDmg * (v.mult || 1);
     for (const e of v.list) {
       if (!e.alive) continue;
       const dmg = Math.round(base * (0.92 + Math.random() * 0.16));
@@ -232,7 +252,7 @@ export class Hero {
   // Renvoie 'dodged' | 'parried' | 'blocked' | true (touché) | false (ignoré).
   takeDamage(amount, from, { knock = 4, heavy = false, source = null } = {}) {
     if (this.dead || this.cinematic) return false;
-    if (this.action?.kind === 'dodge' && this.action.t < 0.3) {
+    if (this.action?.kind === 'dodge' && this.action.t < 0.3 + this.mods.dodgeIFrames) {
       this.energy = Math.min(this.stats.maxEnergy, this.energy + 15);
       this.game.onPerfectDodge();
       return 'dodged';
@@ -241,15 +261,16 @@ export class Hero {
     if (this.shielding) {
       const ang = Math.abs(angleDiff(this.yaw, Math.atan2(from.x - this.pos.x, from.z - this.pos.z)));
       if (ang < 1.6) {
-        if (this.shieldT < 0.25) {
+        if (this.shieldT < this.mods.parryWindow) {
           this.energy = Math.min(this.stats.maxEnergy, this.energy + 20);
+          if (this.mods.riposte) this.riposteReady = true;
           this.game.onParry(source, from);
           return 'parried';
         }
-        this.energy = Math.max(0, this.energy - (heavy ? 18 : 8));
+        this.energy = Math.max(0, this.energy - (heavy ? 18 : 8) * this.mods.blockCostMult);
         this.game.onBlock(from);
         if (this.energy > 0) {
-          this.hp -= Math.max(1, Math.round(amount * 0.15));
+          this.hp -= Math.max(1, Math.round(amount * this.mods.blockReduce));
           this.vel.addScaledVector(new THREE.Vector3(this.pos.x - from.x, 0, this.pos.z - from.z).normalize(), knock * 0.4);
           if (this.hp <= 0) this.#die();
           return 'blocked';
@@ -273,6 +294,14 @@ export class Hero {
   }
 
   #die() {
+    // Second souffle : survit une fois à un coup mortel.
+    if (this.mods.secondWind && this.secondWindT <= 0) {
+      this.hp = 1;
+      this.secondWindT = 90;
+      this.game.hud.toast('SECOND SOUFFLE !', '#4fc3f7');
+      this.game.slowT = 0.6;
+      return;
+    }
     this.hp = 0;
     this.dead = true;
     this.action = null;
@@ -318,9 +347,9 @@ export class Hero {
     const right = new THREE.Vector3(-Math.cos(camYaw), 0, Math.sin(camYaw));
     const dir = new THREE.Vector3().addScaledVector(look, mv.y).addScaledVector(right, mv.x);
     if (dir.lengthSq() > 1) dir.normalize();
-    const speed = boosting ? FLY.boost : wishLen > 0.1 ? FLY.cruise : 0;
+    const speed = (boosting ? FLY.boost : wishLen > 0.1 ? FLY.cruise : 0) * this.mods.flightMult;
     const target = dir.multiplyScalar(speed);
-    if (input.is('jump')) target.y += FLY.climb;
+    if (input.is('jump')) target.y += FLY.climb * this.mods.flightMult;
     if (input.is('dodge')) target.y -= FLY.climb * 1.3;
     const acc = boosting ? 3.2 : 4.5;
     const k = 1 - Math.exp(-acc * dt);
@@ -330,7 +359,7 @@ export class Hero {
 
     const hs = Math.hypot(this.vel.x, this.vel.z);
     const prevMode = this.flightMode;
-    this.flightMode = hs > 24 ? 'boost' : hs > 4 ? 'fly' : 'hover';
+    this.flightMode = hs > 24 * this.mods.flightMult ? 'boost' : hs > 4 ? 'fly' : 'hover';
     if (this.flightMode === 'boost' && prevMode !== 'boost') {
       // « Bang » d'air au passage en boost
       this.game.fx.ring(this.pos.clone().add(new THREE.Vector3(0, 1, 0)), { color: '#ffffff', from: 0.5, to: 6, life: 0.35, y: 0 });
@@ -389,7 +418,10 @@ export class Hero {
     if (this.comboReset <= 0) this.combo = 0;
     this.flash = Math.max(0, this.flash - dt * 2);
     this.hurtT = Math.max(0, this.hurtT - dt * 4);
-    if (this.powers.rings) this.energy = Math.min(this.stats.maxEnergy, this.energy + dt * 3);
+    if (this.powers.rings) this.energy = Math.min(this.stats.maxEnergy, this.energy + dt * (3 + this.mods.energyRegen));
+    this.secondWindT = Math.max(0, this.secondWindT - dt);
+    this.chainT -= dt;
+    if (this.chainT <= 0) this.chain = 0;
     this.#updateVolley(dt);
 
     if (this.dead || this.cinematic) {
@@ -430,16 +462,17 @@ export class Hero {
         const dir = wishDir || this.facing().negate();
         this.action = { kind: 'dodge', t: 0, dur: 0.42, dir };
         if (wishDir) this.yaw = Math.atan2(dir.x, dir.z);
-        this.dodgeCd = 0.55;
+        this.dodgeCd = 0.55 - this.mods.dodgeCd;
         this.game.audio.dodge();
         this.game.fx.dustRing(this.pos, 0.8, 7, '#c9b8ff');
       } else if (input.was('power') || input.was('light') || input.was('heavy')) {
         if (!R) this.game.onNoPowers();
         else if (input.was('power')) {
           const def = MOVES.power;
-          if (this.powerCd > 0 || this.energy < def.energy) this.game.onPowerDenied(this.powerCd > 0 ? 'cooldown' : 'energy');
+          const cost = def.energy - this.mods.volleyCost;
+          if (this.powerCd > 0 || this.energy < cost) this.game.onPowerDenied(this.powerCd > 0 ? 'cooldown' : 'energy');
           else if (!a || canCancel || a.kind === 'attack') {
-            this.energy -= def.energy;
+            this.energy -= cost;
             this.powerCd = def.cooldown;
             this.#startMove(def, 'power', wishDir);
             this.game.audio.powerCharge();
@@ -549,7 +582,7 @@ export class Hero {
     // --- Locomotion au sol ---
     const free = !this.action || this.action.lockMove === false;
     const sprint = input.is('sprint') && wishLen > 0.3;
-    const maxSpeed = this.shielding ? 2.5 : sprint ? 9.5 : 5.8;
+    const maxSpeed = this.shielding ? 2.5 : sprint ? 9.5 * this.mods.sprintMult : 5.8;
     const targetV = free && wishDir ? wish.clone().multiplyScalar(maxSpeed) : new THREE.Vector3();
     const accel = this.grounded ? 14 : 4;
     const kv = 1 - Math.exp(-accel * dt);

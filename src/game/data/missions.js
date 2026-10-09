@@ -53,6 +53,31 @@ export const MISSIONS = {
     ],
     reward: { xp: 300, credits: 200, shards: 5, items: [{ id: 'medkit', qty: 2 }] },
   },
+  m02_aegis_echo: {
+    kind: 'main',
+    title: 'L’écho d’Aegis',
+    intro: "Mara a capté un signal Aegis dans la ruelle derrière Nova Market. Une boucle audio. Elle ressemble à la voix de ton père.",
+    requires: 'm01_first_contact',
+    steps: [
+      { type: 'reach', target: 'nova_alley', radius: 6, text: 'Suivre le signal dans la ruelle Nova' },
+      { type: 'kill', group: 'crawlers', count: 3, text: 'Survivre à l’embuscade des Crawlers' },
+      { type: 'interact', target: 'aegis_drone', text: 'Récupérer l’enregistrement du drone Aegis' },
+      { type: 'reach', target: 'safehouse', radius: 5, text: 'Rapporter l’enregistrement à Mara' },
+    ],
+    reward: { xp: 350, credits: 250, items: [{ id: 'medkit', qty: 1 }] },
+  },
+  m03_colossus: {
+    kind: 'main',
+    title: 'Le Colosse',
+    intro: "La faille de la place Halden s'élargit. Quelque chose d'immense essaie d'en sortir. Et tout le quartier est encore dans son rayon.",
+    requires: 'm02_aegis_echo',
+    steps: [
+      { type: 'reach', target: 'rally', radius: 12, text: 'Rejoindre la place Halden' },
+      { type: 'kill', group: 'colossus', count: 1, text: 'Vaincre le Colosse' },
+      { type: 'interact', target: 'boss_cache', text: 'Ouvrir la cache du Colosse' },
+    ],
+    reward: { xp: 800, credits: 600, shards: 15 },
+  },
   s01_rooftop_signal: {
     kind: 'side',
     title: 'Le signal du toit',

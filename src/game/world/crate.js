@@ -9,6 +9,7 @@ const STYLE = {
   supply: { body: '#c98a4a', trim: '#6a3a2a', size: [1.2, 0.75, 0.8] },
   tactical: { body: '#3d8fd1', trim: '#fff27a', size: [1.4, 0.8, 0.9] },
   elite: { body: '#7b4ad6', trim: '#ff9cf0', size: [1.5, 0.9, 1.0] },
+  boss: { body: '#2a2040', trim: '#ffcd20', size: [1.9, 1.1, 1.3] },
 };
 
 export class Crate {

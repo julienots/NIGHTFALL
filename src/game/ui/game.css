@@ -221,3 +221,35 @@ body.touch .hud .subtitle { bottom: 18px; max-width: 46vw; font-size: .9em; }
 body.touch .hud .toasts { top: 58px; }
 body.touch .phone { top: 90px; transform-origin: top right; }
 body.touch .hud .vitals { width: min(280px, 34vw); }
+
+/* --- Compétences & boutique --- */
+.skills, .shop { flex-direction: column; }
+.tree { flex: 1; display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 14px; padding: 16px 24px; overflow: auto; }
+.branch { background: var(--panel); border: 3px solid var(--ink-dark); border-radius: 18px; padding: 12px; box-shadow: 0 5px 0 var(--ink-dark); }
+.b-h { font: 1.4em var(--display); }
+.b-d { color: var(--dim); font-size: .8em; margin-bottom: 10px; }
+.skill { border: 3px solid var(--ink-dark); border-radius: 14px; padding: 10px; background: #3a2270; }
+.skill.got { background: color-mix(in srgb, var(--bc) 30%, #2a1260); border-color: var(--bc); }
+.skill.locked { opacity: .55; }
+.sk-n { font: 1.05em var(--display); }
+.sk-d { color: #d8d0f0; font-size: .8em; margin: 4px 0 8px; line-height: 1.35; }
+.pips { display: flex; gap: 4px; margin-top: 4px; }
+.pips i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ink-dark); background: #1d0f3a; }
+.pips i.on { background: var(--bc); }
+.sk-link { width: 4px; height: 12px; margin: 0 auto; background: var(--ink-dark); }
+.skill .btn { font-size: .8em; padding: 6px 10px; width: 100%; }
+.pts { color: var(--amber); font: 1.1em var(--display); }
+.shop .left { flex: 1; padding: 16px 32px; overflow: auto; }
+.shopgrid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.shopcard { cursor: default; display: flex; flex-direction: column; }
+.shopcard .btn { margin-top: auto; }
+.tabs .btn.on { background: var(--amber); }
+
+.bossbar { position: absolute; left: 50%; top: 58px; transform: translateX(-50%); width: min(620px, 70vw); text-align: center; display: none; }
+.bossbar.on { display: block; }
+.bossbar .bn { font: 1.5em var(--display); letter-spacing: .1em; -webkit-text-stroke: 1px var(--ink-dark); }
+.bossbar .bar { height: 20px; } .bossbar .bar > i { background: linear-gradient(90deg, #7b4ad6, #c38cff); }
+.bossbar.rage .bar > i { background: linear-gradient(90deg, #c0302a, #ff5a3a); }
+.bossbar .bs { font-size: .85em; color: var(--dim); margin-top: 3px; }
+.bossbar.exposed .bs { color: var(--amber); animation: ready .6s ease-in-out infinite; }
+body.touch .bossbar { top: 54px; width: 46vw; }

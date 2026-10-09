@@ -152,3 +152,45 @@ test('sauvegarde : fermeture pendant l’écriture (tmp écrit, main intact)', (
   store.setItem('nightfall.save.tmp', '{"v":1,"body":"{\\"n\\":');
   assert.equal(save.load().data.n, 1);
 });
+
+import { SkillTree } from '../src/game/systems/skills.js';
+import { buy } from '../src/game/systems/shop.js';
+
+test('compétences : coût, prérequis, effets et réinitialisation', () => {
+  const p = new Progression();
+  p.skillPoints = 4;
+  const t = new SkillTree();
+  assert.equal(t.learn('f2', p), false, 'niveau 2 bloqué sans niveau 1');
+  assert.equal(t.learn('f1', p), true);
+  assert.equal(t.learn('f2', p), true);
+  assert.equal(p.skillPoints, 2);
+  assert.equal(t.learn('f3', p), true, 'niveau 3 coûte 2 points');
+  assert.equal(p.skillPoints, 0);
+  assert.equal(t.learn('s1', p), false, 'plus de points');
+  const m = t.mods();
+  assert.ok(m.damageMult > 1 && m.whipRange > 0 && m.punchPierce);
+  t.reset(p);
+  assert.equal(p.skillPoints, 4);
+  assert.equal(t.mods().damageMult, 1);
+  const t2 = new SkillTree(t.serialize());
+  assert.deepEqual(t2.ranks, {});
+});
+
+test('boutique : monnaies, unicité, inventaire plein', () => {
+  const inv = new Inventory();
+  assert.equal(buy('core_amber', inv).ok, false);
+  inv.credits = 1000;
+  inv.shards = 30;
+  assert.equal(buy('core_amber', inv).ok, true);
+  assert.equal(inv.credits, 650);
+  assert.equal(buy('skin_abyss', inv).ok, true);
+  assert.equal(buy('skin_abyss', inv).reason, 'Déjà possédé');
+  assert.equal(inv.shards, 10);
+  const before = inv.count('medkit');
+  assert.equal(buy('pack_medkits', inv).ok, true);
+  assert.equal(inv.count('medkit'), before + 3);
+  while (!inv.isFull()) inv.add('patrol_gloves');
+  const c = inv.credits;
+  assert.equal(buy('core_amber', inv).reason, 'Inventaire plein');
+  assert.equal(inv.credits, c, 'rien n’est débité si l’achat échoue');
+});

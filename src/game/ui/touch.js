@@ -20,6 +20,7 @@ const TOP = [
   ['pause', 'pause', '☰'],
   ['inventory', 'inventory', '🎒'],
   ['journal', 'journal', '📖'],
+  ['skills', 'skills', '★'],
   ['lock', 'lock', '◇'],
   ['heal', 'heal', '✚'],
 ];

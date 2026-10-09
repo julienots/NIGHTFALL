@@ -17,6 +17,7 @@ const KEYMAP = {
   KeyH: 'heal',
   KeyN: 'markers',
   KeyV: 'fly',
+  KeyK: 'skills',
   KeyG: 'shield',
 };
 
