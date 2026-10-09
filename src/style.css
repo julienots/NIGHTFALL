@@ -1,0 +1,21 @@
+html, body { margin: 0; height: 100%; background: #000; color: #eee; overflow: hidden;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif; }
+.screen { position: fixed; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; }
+canvas.screen { display: block; }
+.hidden { display: none !important; }
+.start { background: none; border: 1px solid #ffcd2066; color: #ffcd20; padding: 14px 28px;
+  font: 600 14px/1 inherit; letter-spacing: .25em; text-transform: uppercase; cursor: pointer;
+  animation: breathe 2.4s ease-in-out infinite; }
+.skip { position: fixed; right: 24px; bottom: 18px; margin: 0; font-size: 12px; letter-spacing: .2em;
+  text-transform: uppercase; color: #ffffff55; }
+#title { background: radial-gradient(ellipse at 50% 60%, #1c1238 0%, #05030c 60%, #000 100%);
+  animation: fadein 1.2s ease-out; }
+#title h1 { margin: 0; font-size: clamp(48px, 11vw, 160px); letter-spacing: .12em; font-weight: 900;
+  color: #e9e6f5; text-shadow: 0 0 40px #6a3cff88; }
+#title h2 { margin: .2em 0 0; font-size: clamp(14px, 2.4vw, 32px); letter-spacing: .5em; color: #ffcd20; }
+#title .press { margin-top: 3em; letter-spacing: .3em; text-transform: uppercase; font-size: 13px;
+  color: #ffffffaa; animation: breathe 2s ease-in-out infinite; }
+#title .studio { position: absolute; bottom: 16px; font-size: 11px; color: #ffffff44; }
+@keyframes breathe { 50% { opacity: .45; } }
+@keyframes fadein { from { opacity: 0; } }

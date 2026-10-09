@@ -1,0 +1,129 @@
+{
+  "source": "superessence_logo_source.jpg",
+  "width": 1486,
+  "height": 208,
+  "shadow": {
+    "dx": 9,
+    "dy": 19,
+    "color": "#1f1f1f"
+  },
+  "letters": [
+    {
+      "char": "S",
+      "file": "letters/se_00.png",
+      "x": 0,
+      "y": 0,
+      "w": 127,
+      "h": 208,
+      "group": "super"
+    },
+    {
+      "char": "u",
+      "file": "letters/se_01.png",
+      "x": 128,
+      "y": 0,
+      "w": 131,
+      "h": 208,
+      "group": "super"
+    },
+    {
+      "char": "p",
+      "file": "letters/se_02.png",
+      "x": 254,
+      "y": 0,
+      "w": 135,
+      "h": 208,
+      "group": "super"
+    },
+    {
+      "char": "e",
+      "file": "letters/se_03.png",
+      "x": 387,
+      "y": 0,
+      "w": 120,
+      "h": 208,
+      "group": "super"
+    },
+    {
+      "char": "r",
+      "file": "letters/se_04.png",
+      "x": 502,
+      "y": 0,
+      "w": 107,
+      "h": 208,
+      "group": "super"
+    },
+    {
+      "char": "E",
+      "file": "letters/se_05.png",
+      "x": 606,
+      "y": 0,
+      "w": 114,
+      "h": 208,
+      "group": "essence"
+    },
+    {
+      "char": "s",
+      "file": "letters/se_06.png",
+      "x": 720,
+      "y": 0,
+      "w": 112,
+      "h": 208,
+      "group": "essence"
+    },
+    {
+      "char": "s",
+      "file": "letters/se_07.png",
+      "x": 830,
+      "y": 0,
+      "w": 113,
+      "h": 208,
+      "group": "essence"
+    },
+    {
+      "char": "e",
+      "file": "letters/se_08.png",
+      "x": 939,
+      "y": 0,
+      "w": 121,
+      "h": 208,
+      "group": "essence"
+    },
+    {
+      "char": "n",
+      "file": "letters/se_09.png",
+      "x": 1055,
+      "y": 0,
+      "w": 132,
+      "h": 208,
+      "group": "essence"
+    },
+    {
+      "char": "c",
+      "file": "letters/se_10.png",
+      "x": 1187,
+      "y": 0,
+      "w": 111,
+      "h": 208,
+      "group": "essence"
+    },
+    {
+      "char": "e",
+      "file": "letters/se_11.png",
+      "x": 1291,
+      "y": 0,
+      "w": 121,
+      "h": 208,
+      "group": "essence"
+    },
+    {
+      "char": ".",
+      "file": "letters/se_12.png",
+      "x": 1419,
+      "y": 0,
+      "w": 67,
+      "h": 208,
+      "group": "essence"
+    }
+  ]
+}
