@@ -400,7 +400,7 @@ check('« L’écho d’Aegis » terminée, « Le Colosse » commence', await G(
 // ================= BOSS : LE COLOSSE =================
 await sim(10);
 await place(0, 0.15, 10, Math.PI);
-await sim(0.3);
+await sim(2.2);
 check('cinématique d’apparition du Colosse', await G(() => window.__nightfall.story.inCinematic && !!window.__nightfall.boss));
 await sim(5);
 await shot('21_colosse_emerge');
@@ -422,7 +422,7 @@ for (let i = 0; i < 220; i++) {
 console.log('   attaques du Colosse observées :', [...seen].join(', '));
 check('le Colosse utilise plusieurs attaques', ['slamWindup', 'sweepWindup', 'stompWindup', 'slam', 'sweep', 'stomp'].filter((x) => seen.has(x)).length >= 2);
 await shot('22_combat_colosse');
-const ph = await G(() => { const g = window.__nightfall; const b = g.boss; b.state = 'walk'; b.exposed = true; b.takeHit({ damage: b.hp - b.def.hp * 0.3 + 10, dir: { x: 0, y: 0, z: 1 } }); return b.stage; });
+const ph = await G(() => { const g = window.__nightfall; const b = g.boss; b.state = 'walk'; b.exposed = true; b.takeHit({ damage: Math.ceil((b.hp - b.def.hp * 0.3 + 10) / 2.5), dir: { x: 0, y: 0, z: 1 } }); return b.stage; });
 check('passage en phase 3 (rage + renforts)', ph === 3 && (await G(() => window.__nightfall.enemies.filter((e) => e.spawn.group === 'colossus_adds').length)) === 2);
 await G(() => { const g = window.__nightfall; const b = g.boss; b.state = 'stun'; b.exposed = true; b.hp = 50; });
 await fightGroup('colossus', 200);
