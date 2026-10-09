@@ -18,22 +18,21 @@ export class Hud {
       <div class="toasts"></div>
       <div class="prompt"></div>
       <div class="subtitle"></div>
-      <div class="hint">
-        <span class="kbd">ZQSD/WASD</span>déplacer · <span class="kbd">Maj</span>sprint · <span class="kbd">Espace</span>saut<br>
-        <span class="kbd">Clic G</span>combo · <span class="kbd">Clic D</span>coup lourd · <span class="kbd">Ctrl/C</span>esquive<br>
-        <span class="kbd">F</span>Void Strike · <span class="kbd">R</span>verrouiller · <span class="kbd">E</span>interagir · <span class="kbd">H</span>soin<br>
-        <span class="kbd">I</span>inventaire · <span class="kbd">J</span>journal · <span class="kbd">Échap</span>pause
-      </div>
+      <div class="hint"></div>
+      <div class="letterbox"><i></i><i></i></div>
+      <div class="phone"><div class="ph-app">Messages</div><div class="ph-from"></div><div class="ph-text"></div></div>
+      <div class="chapter"><div class="c1"></div><div class="c2"></div><div class="c3"></div></div>
       <div class="vitals">
-        <div class="name">VANT <small class="lvl">NIV. 1</small></div>
+        <div class="name">NOA <small class="lvl">NIV. 1</small></div>
         <div class="bar hp"><b></b><i></i><span class="bar-label hpv"></span></div>
         <div class="bar en"><i></i><span class="bar-label env"></span></div>
         <div class="bar xp"><i></i></div>
       </div>
       <div class="abilities">
-        <div class="weapon"><div class="lbl">ARME</div><div class="wn"></div></div>
+        <div class="weapon"><div class="lbl">NOYAU</div><div class="wn"></div></div>
         <div class="slot small med">${MED_ICON}<span class="qty">0</span><span class="key">H</span></div>
         <div class="slot pw">${POWER_ICON}<div class="cd"></div><span class="key">F</span></div>
+        <div class="slot small fly"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3c2 3 2 6 0 9-2-3-2-6 0-9zM4 14c3-1 5 0 8 3 3-3 5-4 8-3-2 3-5 5-8 6-3-1-6-3-8-6z" fill="#7fe3ff"/></svg><span class="key">V</span></div>
       </div>`;
     parent.appendChild(this.el);
     const q = (s) => this.el.querySelector(s);
@@ -69,6 +68,9 @@ export class Hud {
     this.#setText('cr', this.$.cr, s.credits.toLocaleString('fr-FR'));
     this.#setText('sh', this.$.sh, String(s.shards));
     this.#setText('med', this.$.med, String(s.medkits));
+    this.el.classList.toggle('no-powers', !s.rings);
+    this.el.querySelector('.fly').style.display = s.flight ? '' : 'none';
+    this.el.querySelector('.fly').classList.toggle('ready', !!s.flying);
     const cdK = s.powerCd > 0 ? (s.powerCd / s.powerCdMax) * 100 : s.energy < s.powerCost ? 100 : 0;
     this.$.pwcd.style.setProperty('--cd', `${cdK}%`);
     this.$.pw.classList.toggle('ready', cdK === 0);
@@ -115,6 +117,43 @@ export class Hud {
     this.$.hint.classList.toggle('off', !on);
   }
 
+  setHint(html) {
+    if (this.last.hint === html) return;
+    this.last.hint = html;
+    this.$.hint.innerHTML = html;
+  }
+
+  // Bandes noires de cinématique ; masque le reste du HUD.
+  cinematic(on) {
+    this.el.classList.toggle('cine', on);
+  }
+
+  phone(from, text, dur = 6) {
+    const p = this.el.querySelector('.phone');
+    p.querySelector('.ph-from').textContent = from;
+    p.querySelector('.ph-text').textContent = text;
+    p.classList.add('on');
+    clearTimeout(this.phoneT);
+    this.phoneT = setTimeout(() => p.classList.remove('on'), dur * 1000);
+  }
+
+  // Carton de chapitre (titre plein écran)
+  chapter(c1, c2, c3 = '', dur = 4.5) {
+    const c = this.el.querySelector('.chapter');
+    c.querySelector('.c1').textContent = c1;
+    c.querySelector('.c2').textContent = c2;
+    c.querySelector('.c3').textContent = c3;
+    c.classList.remove('on');
+    void c.offsetWidth;
+    c.classList.add('on');
+    clearTimeout(this.chapT);
+    this.chapT = setTimeout(() => c.classList.remove('on'), dur * 1000);
+  }
+
+  setName(name) {
+    this.el.querySelector('.name').firstChild.textContent = name + ' ';
+  }
+
   prompt(html) {
     if (this.last.prompt === html) return;
     this.last.prompt = html;
@@ -153,6 +192,15 @@ export class Hud {
     this.subQueue.push({ speaker, text, dur });
   }
 
+  clearSay() {
+    this.subQueue = [];
+    this.subT = 0;
+  }
+
+  get talking() {
+    return this.subT > 0 || this.subQueue.length > 0;
+  }
+
   setSubtitlesEnabled(on) {
     this.subsOn = on;
   }
@@ -167,7 +215,8 @@ export class Hud {
     }
     this.subT = next.dur;
     if (this.subsOn === false) return;
-    this.$.sub.innerHTML = `<b>${next.speaker} :</b> ${next.text}`;
+    const cls = /^noa/i.test(next.speaker) ? 'noa' : /^in/i.test(next.speaker) ? 'ines' : '';
+    this.$.sub.innerHTML = `<b class="${cls}">${next.speaker} :</b> ${next.text}`;
     this.$.sub.classList.add('on');
   }
 

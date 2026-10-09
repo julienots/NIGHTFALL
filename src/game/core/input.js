@@ -16,12 +16,14 @@ const KEYMAP = {
   Escape: 'pause', KeyP: 'pause',
   KeyH: 'heal',
   KeyN: 'markers',
+  KeyV: 'fly',
+  KeyG: 'shield',
 };
 
 // Boutons manette (mapping « standard »).
 const PADMAP = {
   0: 'jump', 1: 'dodge', 2: 'light', 3: 'heavy', 4: 'lock', 5: 'power',
-  10: 'sprint', 9: 'pause', 8: 'inventory', 12: 'interact', 13: 'heal',
+  10: 'sprint', 9: 'pause', 8: 'inventory', 12: 'interact', 13: 'heal', 11: 'fly', 14: 'shield', 6: 'shield',
 };
 
 export class Input {

@@ -2,7 +2,7 @@
 // 1. écriture dans un emplacement temporaire, 2. vérification par relecture,
 // 3. l'ancienne sauvegarde devient la sauvegarde de secours, 4. promotion.
 // Au chargement : sauvegarde principale, sinon temporaire valide, sinon secours.
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2; // v2 : nouvelle histoire (prologue lycéen)
 const KEY = 'nightfall.save';
 
 function checksum(str) {
@@ -30,6 +30,8 @@ function unpack(raw) {
 // Point d'entrée des migrations futures (v1 -> v2, ...).
 function migrate(version, data) {
   if (version > SAVE_VERSION) return null;
+  // v1 (histoire précédente) : chapitres incompatibles, on repart du prologue.
+  if (version < 2) return null;
   return data;
 }
 

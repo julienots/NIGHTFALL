@@ -89,6 +89,17 @@ export class Enemy {
     const dz = hero.pos.z - this.pos.z;
     const d = Math.hypot(dx, dz);
     let sees = false;
+    if (this.spawn.chaser) {
+      // Poursuivant scripté du prologue : sait toujours où est sa proie.
+      this.sees = true;
+      this.lastKnown = hero.pos.clone();
+      this.sinceSeen = 0;
+      if (!this.alert) {
+        this.alert = true;
+        this.#set('circle');
+      }
+      return;
+    }
     const range = this.alert ? this.def.sight * 1.3 : this.def.sight;
     if (d < range) {
       const ang = Math.abs(angleDiff(this.yaw, Math.atan2(dx, dz)));
@@ -175,6 +186,15 @@ export class Enemy {
     return true;
   }
 
+  // Déséquilibre externe (parade du joueur).
+  stagger(t = 1.2) {
+    if (!this.alive) return;
+    this.game.releaseToken(this);
+    this.#set('stagger');
+    this.staggerFor = t;
+    this.poise = this.def.poise;
+  }
+
   #die() {
     this.alive = false;
     this.#set('dead');
@@ -184,7 +204,7 @@ export class Enemy {
 
   // ---------- Attaques vers le héros ----------
   #strike(damage, opts) {
-    const r = this.game.hero.takeDamage(damage, this.pos, opts);
+    const r = this.game.hero.takeDamage(damage, this.pos, { ...opts, source: this });
     this.attackHit = true;
     return r;
   }
@@ -345,7 +365,7 @@ export class Enemy {
         break;
       case 'lunge':
         this.desired.copy(this.lungeDir).multiplyScalar(16 * Math.max(0.2, 1 - this.stateT / 0.45));
-        if (!this.attackHit && d < this.radius + hero.radius + 0.9) this.#strike(16, { knock: 7 });
+        if (!this.attackHit && d < this.radius + hero.radius + 0.9 && Math.abs(hero.pos.y - this.pos.y) < 2) this.#strike(this.spawn.chaser ? 12 : 16, { knock: 7 });
         if (this.stateT > 0.45) this.#set('recover');
         break;
       case 'swipeWindup':
@@ -356,7 +376,7 @@ export class Enemy {
       case 'swipe': {
         if (!this.attackHit && this.stateT > 0.08) {
           const ang = Math.abs(angleDiff(this.yaw, Math.atan2(hero.pos.x - this.pos.x, hero.pos.z - this.pos.z)));
-          if (d < 2.6 && ang < 1.1) this.#strike(11, { knock: 4 });
+          if (d < 2.6 && ang < 1.1 && Math.abs(hero.pos.y - this.pos.y) < 2) this.#strike(11, { knock: 4 });
           else this.attackHit = true;
         }
         if (this.stateT > 0.35) this.#set('recover');
@@ -443,7 +463,7 @@ export class Enemy {
       case 'swipe': {
         if (!this.attackHit && this.stateT > 0.05) {
           const ang = Math.abs(angleDiff(this.yaw, Math.atan2(hero.pos.x - this.pos.x, hero.pos.z - this.pos.z)));
-          if (d < 3.9 + hero.radius && ang < 1.2) this.#strike(20, { knock: 9, heavy: true });
+          if (d < 3.9 + hero.radius && ang < 1.2 && Math.abs(hero.pos.y - this.pos.y) < 2.5) this.#strike(20, { knock: 9, heavy: true });
           else this.attackHit = true;
           this.game.audio.swing(true);
         }
@@ -476,7 +496,7 @@ export class Enemy {
         }
         this.desired.copy(this.chargeDir).multiplyScalar(15);
         if (Math.random() < dt * 20) this.game.fx.emit({ x: this.pos.x, y: 0.2, z: this.pos.z }, { count: 2, color: '#8a7a6a', speed: 3, size: 0.4, life: 0.5, gravity: 4 });
-        if (!this.attackHit && d < this.radius + hero.radius + 0.6) this.#strike(28, { knock: 15, heavy: true });
+        if (!this.attackHit && d < this.radius + hero.radius + 0.6 && Math.abs(hero.pos.y - this.pos.y) < 2.5) this.#strike(28, { knock: 15, heavy: true });
         if (this.hitWall) {
           // Percute un obstacle : étourdi, vulnérable.
           this.game.shake(0.4, this.pos);

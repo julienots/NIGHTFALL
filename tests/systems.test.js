@@ -82,20 +82,40 @@ test('progression : montée de niveau et points de compétence', () => {
   assert.equal(p.xp, 5);
 });
 
-test('missions : étapes reach / kill / interact', () => {
+test('missions : prologue, chaînage et types d’étapes', () => {
   const log = new MissionLog();
-  const targets = (n) => ({ rally: { x: 10, z: 10 }, safehouse: { x: 0, z: 0 } })[n];
+  const targets = (n) => ({ rally: { x: 0, z: 0 }, parking_entry: { x: 20, z: -14 }, lumen_roof: { x: 50, y: 26, z: 45 }, safehouse: { x: -34, z: 24 } })[n];
+  assert.equal(log.tracked, 'p01_after_school');
+  assert.equal(log.state.m01_first_contact, undefined, 'chapitre 1 verrouillé au début');
+  log.handle({ type: 'interact', target: 'ines' });
+  const ev = log.checkPosition({ x: 1, y: 0, z: 0 }, targets);
+  assert.ok(ev.some((e) => e.type === 'missionStart' && e.id === 'p02_nightfall'));
+  assert.equal(log.tracked, 'p02_nightfall');
+  log.checkPosition({ x: 20, y: 0, z: -14 }, targets);
+  log.handle({ type: 'interact', target: 'aegis_case' });
+  assert.equal(log.tracked, 'p03_rings');
+  log.handle({ type: 'kill', group: 'chaser', enemyType: 'stalker' });
+  assert.equal(log.state.c01_stalker_hunt, undefined);
+  for (const id of ['volley', 'shield', 'flight']) log.handle({ type: 'event', id });
+  assert.equal(log.checkPosition({ x: 50, y: 10, z: 45 }, targets).length, 0, 'il faut être sur le toit, pas en dessous');
+  const done = log.checkPosition({ x: 50, y: 26, z: 45 }, targets);
+  assert.ok(done.some((e) => e.type === 'missionComplete' && e.id === 'p03_rings'));
+  assert.ok(log.state.m01_first_contact && log.state.c01_stalker_hunt && log.state.s01_rooftop_signal);
   assert.equal(log.tracked, 'm01_first_contact');
-  assert.equal(log.checkPosition({ x: 50, y: 0, z: 50 }, targets).length, 0);
-  log.checkPosition({ x: 11, y: 0, z: 10 }, targets);
-  assert.equal(log.currentStep('m01_first_contact').type, 'kill');
   for (let i = 0; i < 4; i++) log.handle({ type: 'kill', group: 'parking', enemyType: 'stalker' });
-  assert.equal(log.currentStep('m01_first_contact').type, 'interact');
   assert.equal(log.state.c01_stalker_hunt.progress, 4, 'le contrat compte aussi les kills');
   log.handle({ type: 'interact', target: 'crate_tactical_1' });
-  const done = log.checkPosition({ x: 0, y: 0, z: 0 }, targets);
-  assert.ok(done.some((e) => e.type === 'missionComplete'));
+  log.checkPosition({ x: -34, y: 0, z: 24 }, targets);
   assert.equal(log.isDone('m01_first_contact'), true);
+});
+
+test('sauvegarde v1 (ancienne histoire) ignorée proprement', () => {
+  const store = new MemStorage();
+  const body = JSON.stringify({ n: 1 });
+  let h = 0;
+  for (let i = 0; i < body.length; i++) h = (Math.imul(h, 31) + body.charCodeAt(i)) | 0;
+  store.setItem('nightfall.save.main', JSON.stringify({ v: 1, t: 0, sum: h >>> 0, body }));
+  assert.equal(new SaveSystem(store).load(), null);
 });
 
 test('sauvegarde : aller-retour complet', () => {

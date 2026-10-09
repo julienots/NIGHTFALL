@@ -122,7 +122,8 @@ export class AudioEngine {
     hp.type = 'highpass';
     hp.frequency.value = 1200;
     const rg = c.createGain();
-    rg.gain.value = 0.12;
+    rg.gain.value = this.rainOn === false ? 0 : 0.12;
+    this.rainGain = rg;
     rain.connect(hp).connect(rg).connect(this.amb);
     rain.start();
     // Vent / grondement lointain modulé
@@ -294,6 +295,86 @@ export class AudioEngine {
   levelUp() {
     if (!this.ctx) return;
     [392, 523, 659, 784, 1047].forEach((f, i) => this.#tone({ type: 'triangle', f0: f, dur: 0.6, peak: 0.12, delay: i * 0.09 }));
+  }
+
+  setRain(on) {
+    this.rainOn = on;
+    if (this.rainGain) this.rainGain.gain.setTargetAtTime(on ? 0.12 : 0, this.ctx.currentTime, 1.5);
+  }
+
+  startRain() {
+    this.setRain(true);
+  }
+
+  takeoff() {
+    if (!this.ctx) return;
+    this.#burst({ type: 'lowpass', f0: 300, f1: 2400, dur: 0.5, peak: 0.45 });
+    this.#tone({ type: 'sine', f0: 180, f1: 720, dur: 0.45, peak: 0.18 });
+  }
+
+  boost() {
+    if (!this.ctx) return;
+    this.#tone({ f0: 90, f1: 35, dur: 0.6, peak: 0.6 });
+    this.#burst({ f0: 5000, f1: 800, q: 0.8, dur: 0.5, peak: 0.35 });
+  }
+
+  // Souffle continu du vol (appelé chaque image) : intensité 0..1
+  wind(level) {
+    if (!this.ctx) return;
+    if (!this.windSrc) {
+      this.windSrc = this.#noiseSrc(true);
+      this.windF = this.ctx.createBiquadFilter();
+      this.windF.type = 'bandpass';
+      this.windF.Q.value = 0.8;
+      this.windG = this.ctx.createGain();
+      this.windG.gain.value = 0;
+      this.windSrc.connect(this.windF).connect(this.windG).connect(this.sfx);
+      this.windSrc.start();
+    }
+    const t = this.ctx.currentTime;
+    this.windG.gain.setTargetAtTime(level * 0.35, t, 0.15);
+    this.windF.frequency.setTargetAtTime(400 + level * 1800, t, 0.15);
+  }
+
+  shield() {
+    if (!this.ctx) return;
+    this.#tone({ type: 'triangle', f0: 600, f1: 1200, dur: 0.15, peak: 0.12 });
+  }
+
+  parry() {
+    if (!this.ctx) return;
+    this.#tone({ type: 'triangle', f0: 1760, dur: 0.5, peak: 0.25 });
+    this.#tone({ type: 'triangle', f0: 2637, dur: 0.4, peak: 0.12, delay: 0.03 });
+    this.#burst({ type: 'highpass', f0: 3000, dur: 0.1, peak: 0.3 });
+  }
+
+  block() {
+    if (!this.ctx) return;
+    this.#tone({ type: 'square', f0: 300, f1: 150, dur: 0.12, peak: 0.15 });
+  }
+
+  // Cinématiques
+  rumble(dur = 4) {
+    if (!this.ctx) return;
+    this.#tone({ type: 'sawtooth', f0: 38, f1: 30, dur, peak: 0.5, attack: 0.8 });
+    this.#burst({ type: 'lowpass', f0: 200, dur, peak: 0.6, attack: 0.6 });
+  }
+
+  blackout() {
+    if (!this.ctx) return;
+    this.#tone({ type: 'square', f0: 120, f1: 30, dur: 0.6, peak: 0.25 });
+    this.#burst({ type: 'highpass', f0: 4000, dur: 0.08, peak: 0.4 });
+  }
+
+  awaken() {
+    if (!this.ctx) return;
+    [220, 330, 440, 660, 880].forEach((f, i) => this.#tone({ type: 'triangle', f0: f, dur: 2.5, peak: 0.08, attack: 0.6, delay: i * 0.35 }));
+    this.#tone({ type: 'sawtooth', f0: 55, f1: 110, dur: 3.5, peak: 0.25, attack: 1 });
+  }
+
+  phoneBuzz() {
+    if (!this.ctx) return;
+    for (let i = 0; i < 2; i++) this.#tone({ type: 'square', f0: 180, dur: 0.12, peak: 0.08, delay: i * 0.18 });
   }
 
   ui() {

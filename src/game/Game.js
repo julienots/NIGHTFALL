@@ -23,6 +23,7 @@ import { rollCrate, CRATE_TYPES } from './systems/loot.js';
 import { ITEMS, RARITY_INFO } from './data/items.js';
 import { MISSIONS, MISSION_KIND_LABEL } from './data/missions.js';
 import { Hud } from './ui/hud.js';
+import { Story } from './story/story.js';
 import { Menus } from './ui/menus.js';
 import './ui/game.css';
 
@@ -30,19 +31,18 @@ const BASE_STATS = { maxHp: 120, maxEnergy: 100, damage: 8, defense: 0, energyGa
 
 // Dialogues radio (cellule de survivants).
 const RADIO = {
-  start: ["Vant, tu m'entends ? Ici Mara. Des survivants signalent des cris vers la place Halden.", 'Va voir. Et reste dans la lumière : ces choses détestent la lumière.'],
-  'm01_first_contact:1': ["Le bruit vient du parking Halden, au sud-est. Nettoie la zone, je n'ai personne d'autre à envoyer."],
-  'm01_first_contact:2': ["C'est fini ? Il y a une camionnette Aegis renversée au fond du parking. Ouvre sa caisse, je veux savoir ce qu'ils transportaient."],
-  'm01_first_contact:3': ['« Sujet V-7 »… Vant. Reviens au refuge. Tout de suite. Il faut qu’on parle.'],
-  'm01_first_contact:done': ['Tu es rentré. Repose-toi au terminal, améliore ton équipement à l’établi.', 'Demain, on remonte la piste d’Aegis.'],
-  's01_rooftop_signal:1': ['Un émetteur Aegis sur un toit… Ils surveillaient le quartier. Regarde ce qu’il protège.'],
-  firstStalker: ['Attention : un Stalker. Ils t’observent avant d’attaquer.', 'Quand sa fente s’illumine en vert, esquive au dernier moment !'],
-  firstBrute: ['Celui-là est énorme. Sors du cercle rouge avant qu’il frappe le sol, puis punis-le.', 'Les coups lourds et Void Strike brisent sa garde.'],
+  'm01_first_contact:1': ["C'est fini ? Bien joué, gamin. Il y a une caisse Aegis au fond du parking, près de la camionnette.", 'Ouvre-la. Je veux savoir ce qu’ils transportaient d’autre.'],
+  'm01_first_contact:2': ['… Julien Vant. Ton père. Noa, rejoins-moi au refuge, dans le garage en face de chez toi. Il faut qu’on parle.'],
+  'm01_first_contact:done': ['Te voilà. Repose-toi au terminal, et utilise l’établi pour renforcer tes anneaux.', 'Ton père n’a pas seulement travaillé pour Aegis, Noa. Il a construit ces anneaux. Pour toi.'],
+  's01_rooftop_signal:1': ['Un émetteur Aegis sur un toit… Ils surveillent le quartier. Regarde ce qu’il protège.'],
+  firstStalker: ['Un Stalker. Ils t’observent avant d’attaquer.', 'Quand sa fente s’illumine en vert, roule au dernier moment… ou lève ton bouclier pile à temps.'],
+  firstBrute: ['Celui-là est énorme. Sors du cercle rouge avant qu’il frappe le sol, puis punis-le.', 'Le fouet et la rafale d’anneaux brisent sa garde. Et si ça tourne mal : envole-toi.'],
 };
 
 const LORE = {
-  crate_tactical_1: `<b>BON DE TRANSFERT — AEGIS LABORATORIES</b><br>Objet : prototype « Éclipse », gantelets de conduction.<br>
-    Destinataire : Sujet V-7, unité de confinement 3.<br><br><i>Note manuscrite : « Ils ne doivent PAS lui parvenir. Il commence à se souvenir. — Dr H. »</i>`,
+  crate_tactical_1: `<b>BON DE TRANSFERT — AEGIS LABORATORIES</b><br>Objet : module « Éclipse », amplificateur pour anneaux magnétiques (série V).<br>
+    Responsable du projet : Dr Julien Vant — <i>dossier clos (décès)</i>.<br><br>
+    <i>Note manuscrite : « Son fils a seize ans. Si les anneaux se lient à lui, il faut qu'on le trouve avant EUX. — Dr H. »</i>`,
   crate_elite_roof: `<b>JOURNAL D'ÉMETTEUR — RELAIS 14</b><br>Signal capté sous Vesper : 0,3 Hz, en hausse constante depuis 41 jours.<br>
     Les créatures convergent vers la source. Ce n'est pas une invasion. C'est un <i>appel</i>.`,
 };
@@ -98,7 +98,8 @@ export class Game {
     scene.environmentIntensity = 0.0;
 
     this.camera = new THREE.PerspectiveCamera(62, 16 / 9, 0.1, 1500);
-    scene.add(new THREE.HemisphereLight('#d6d0ff', '#6a4a5a', 1.35));
+    this.hemi = new THREE.HemisphereLight('#d6d0ff', '#6a4a5a', 1.35);
+    scene.add(this.hemi);
     const moon = (this.moon = new THREE.DirectionalLight('#e8f0ff', 1.6));
     moon.shadow.camera.left = moon.shadow.camera.bottom = -36;
     moon.shadow.camera.right = moon.shadow.camera.top = 36;
@@ -131,10 +132,11 @@ export class Game {
     this.seed = d?.seed ?? Math.floor(Math.random() * 1e9);
     this.inventory = new Inventory(d?.inventory);
     if (!d) {
+      // Les « noyaux » d'anneaux remplacent les gants ; un ado n'a que quelques euros.
       this.inventory.add('patrol_gloves');
       this.inventory.equip(this.inventory.items[0].uid);
       this.inventory.add('medkit', 1);
-      this.inventory.credits = 50;
+      this.inventory.credits = 12;
     }
     this.progression = new Progression(d?.progression);
     this.missions = new MissionLog(d?.missions);
@@ -156,20 +158,9 @@ export class Game {
       this.hero.energy = d.hero.energy ?? 50;
     } else this.hero.hp = this.hero.stats.maxHp;
 
-    // --- Ennemis (le groupe de mission déjà éliminé ne réapparaît pas) ---
-    const m01 = this.missions.state.m01_first_contact;
-    const parkingDone = this.missions.stepReached('m01_first_contact', 2);
-    let parkingSkip = m01 && m01.step === 1 ? m01.progress : 0;
-    for (const s of this.world.enemySpawns) {
-      if (s.group === 'parking') {
-        if (parkingDone) continue;
-        if (parkingSkip > 0 && s.type === 'stalker') {
-          parkingSkip--;
-          continue;
-        }
-      }
-      this.#spawnEnemy(s);
-    }
+    // --- Ennemis : apparaissent selon l'avancée de l'histoire ---
+    this.spawned = new Set();
+    this.spawnGated();
 
     // --- Caisses ---
     for (const c of this.world.crates) {
@@ -187,22 +178,58 @@ export class Game {
     this.#resize();
 
     window.__nightfall = this; // accès de test/débogage
-    if (!d) {
-      RADIO.start.forEach((l) => this.hud.say('MARA (radio)', l, 5));
-      setTimeout(() => this.hud.showHint(false), 30000);
-    } else this.hud.showHint(false);
+    this.story = new Story(this);
+    this.story.init(!d);
     this.audio.resume();
     this.audio.startAmbience();
     this.running = true;
     this.renderer.setAnimationLoop(() => this.#frame());
   }
 
-  #spawnEnemy(spawn) {
+  spawnEnemy(spawn) {
     const e = new Enemy(this, spawn);
     e.id = `${spawn.group}:${spawn.x}:${spawn.z}`;
     this.scene.add(e.model.root);
     this.enemies.push(e);
     return e;
+  }
+
+  // Fait apparaître les créatures dont le chapitre est atteint (une seule fois).
+  // Le groupe du parking déjà éliminé ne réapparaît pas.
+  spawnGated() {
+    const m = this.missions;
+    const m01 = m.state.m01_first_contact;
+    const parkingDone = m.stepReached('m01_first_contact', 1);
+    let parkingSkip = m01 && m01.step === 0 ? m01.progress : 0;
+    for (const s of this.world.enemySpawns) {
+      const key = `${s.group}:${s.x}:${s.z}`;
+      if (this.spawned.has(key) || (s.after && !m.isDone(s.after))) continue;
+      this.spawned.add(key);
+      if (s.group === 'parking') {
+        if (parkingDone) continue;
+        if (parkingSkip > 0 && s.type === 'stalker') {
+          parkingSkip--;
+          continue;
+        }
+      }
+      this.spawnEnemy(s);
+    }
+  }
+
+  // Ambiance : 0 = crépuscule doré (prologue), 1 = nuit violette du Nightfall.
+  setNight(k) {
+    this.night = k;
+    this.world.setNight(k);
+    const c = (a, b) => new THREE.Color(a).lerp(new THREE.Color(b), k);
+    this.hemi.color.copy(c('#ffe0c8', '#d6d0ff'));
+    this.hemi.groundColor.copy(c('#7a5a6a', '#6a4a5a'));
+    this.hemi.intensity = 1.5 - k * 0.15;
+    this.moon.color.copy(c('#ffc08a', '#e8f0ff'));
+    this.moon.intensity = 2.0 - k * 0.4;
+    this.scene.fog.color.copy(c('#e8a0a8', '#4a2f7a'));
+    this.scene.fog.density = 0.0035 + k * 0.002;
+    this.scene.background.copy(c('#e8a0a8', '#1a0d36'));
+    this.audio.setRain?.(k > 0.5);
   }
 
   // ---------- Outils de test automatisé ----------
@@ -271,7 +298,11 @@ export class Game {
     this.hero.setStats(s);
     const w = this.inventory.equippedItem('weapon');
     const a = this.inventory.equippedItem('armor');
-    this.hero.model.setEquipment(w && ITEMS[w.id].visual, a && ITEMS[a.id].visual);
+    // Équipement visible : couleur des anneaux (noyau) et du sweat (protection).
+    this.hero.rings.setColor(w ? ITEMS[w.id].visual.glow : '#5fe3ff');
+    const pal = this.hero.model.palette;
+    this.hero.model.mats.hoodie.color.set(a ? ITEMS[a.id].visual.plate : pal.hoodie);
+    this.hero.model.mats.hoodie2.color.set(a ? ITEMS[a.id].visual.trim : pal.hoodie2);
   }
 
   onEquipmentChanged() {
@@ -325,7 +356,10 @@ export class Game {
     const hero = this.hero;
     const input = this.input;
 
-    hero.update(dt, input, this.camYaw);
+    this.story.update(dt);
+    if (this.story.inCinematic && input.was('interact')) this.story.skip();
+    hero.update(dt, input, this.camYaw, this.camPitch);
+    this.audio.wind(hero.flying ? Math.min(1, Math.hypot(hero.vel.x, hero.vel.z, hero.vy) / 34) : 0);
 
     // Bruit émis par le joueur (perçu par l'ouïe des créatures)
     const moving = Math.hypot(hero.vel.x, hero.vel.z);
@@ -333,7 +367,10 @@ export class Game {
 
     for (const e of this.enemies) e.update(dt);
     this.#separateEnemies();
-    for (const c of this.crates) c.update(dt, this.time);
+    for (const c of this.crates) {
+      c.root.visible = hero.powers.rings;
+      c.update(dt, this.time);
+    }
     this.smokeT = (this.smokeT || 0) - dt;
     if (this.smokeT <= 0) {
       this.smokeT = 0.25;
@@ -359,7 +396,7 @@ export class Game {
     this.#interactions();
 
     // Missions : positions
-    if (!hero.dead) this.#missionEvents(this.missions.checkPosition(hero.pos, (n) => this.#target(n)));
+    if (!hero.dead) this.missionEvents(this.missions.checkPosition(hero.pos, (n) => this.#target(n)));
 
     // Combat & musique
     this.inCombat = this.enemies.some((e) => e.alive && e.alert && e.pos.distanceTo(hero.pos) < 32);
@@ -371,7 +408,7 @@ export class Game {
       const r = this.respawnQueue[i];
       r.t -= dt;
       if (r.t <= 0 && Math.hypot(hero.pos.x - r.spawn.x, hero.pos.z - r.spawn.z) > 45) {
-        this.#spawnEnemy(r.spawn);
+        this.spawnEnemy(r.spawn);
         this.respawnQueue.splice(i, 1);
       }
     }
@@ -457,9 +494,35 @@ export class Game {
       }
     }
     const hero = this.hero;
+    // Caméra de cinématique (mise en scène de l'histoire)
+    const cine = this.story?.cine;
+    if (cine) {
+      const k = 1 - Math.exp(-(cine.lerp || 3) * (dt || 0.016));
+      if (!this.cineLook || this.cineFresh !== cine) {
+        if (!this.cineLook || !cine.lerp) {
+          this.camPos = cine.pos.clone();
+          this.cineLook = cine.look.clone();
+        }
+        this.cineFresh = cine;
+      }
+      this.camPos.lerp(cine.pos, k);
+      this.cineLook.lerp(cine.look, k);
+      this.camera.position.copy(this.camPos);
+      this.camera.lookAt(this.cineLook);
+      if (this.shakeAmp > 0.001 && dt > 0) {
+        this.shakeAmp *= Math.exp(-5 * dt);
+        this.camera.position.x += (Math.random() - 0.5) * this.shakeAmp * 0.3;
+        this.camera.position.y += (Math.random() - 0.5) * this.shakeAmp * 0.3;
+      }
+      this.camera.fov += (55 - this.camera.fov) * (1 - Math.exp(-3 * (dt || 0.016)));
+      this.camera.updateProjectionMatrix();
+      return;
+    }
+    this.cineLook = null;
     const f = new THREE.Vector3(Math.sin(this.camYaw), 0, Math.cos(this.camYaw));
     const right = new THREE.Vector3(-f.z, 0, f.x);
-    const targetDist = this.lockTarget ? 5.6 : this.inCombat ? 5.0 : 4.6;
+    const fs = hero.flying ? Math.hypot(hero.vel.x, hero.vel.z) : 0;
+    const targetDist = hero.flying ? 6 + fs / 12 : this.lockTarget ? 5.6 : this.inCombat ? 5.0 : 4.4;
     this.camDist += (targetDist - this.camDist) * (1 - Math.exp(-3 * (dt || 0.016)));
     const pivot = hero.pos.clone().add(new THREE.Vector3(0, 1.6, 0)).addScaledVector(right, 0.55);
     const dir = new THREE.Vector3(
@@ -489,7 +552,7 @@ export class Game {
     }
     // Léger élargissement du champ en sprint / pouvoir
     const sprint = this.input.is('sprint') && Math.hypot(hero.vel.x, hero.vel.z) > 7;
-    const fov = hero.action?.kind === 'power' ? 68 : sprint ? 67 : 62;
+    const fov = hero.flying ? 62 + Math.min(16, fs / 2.2) : hero.action?.kind === 'power' ? 68 : sprint ? 67 : 62;
     this.camera.fov += (fov - this.camera.fov) * (1 - Math.exp(-6 * (dt || 0.016)));
     this.camera.updateProjectionMatrix();
   }
@@ -531,7 +594,9 @@ export class Game {
 
   // ---------- Interactions ----------
   #interactables() {
-    const list = [];
+    const list = [...this.story.interactables()];
+    // Avant le réveil, Noa n'est qu'un ado : pas de caisses, pas de refuge.
+    if (!this.hero.powers.rings) return list;
     for (const c of this.crates) {
       const pending = this.pendingLoot[c.id]?.length;
       if (c.state === 'opened' && !pending) continue;
@@ -545,7 +610,7 @@ export class Game {
 
   #interactions() {
     const hero = this.hero;
-    if (hero.dead) return this.hud.prompt('');
+    if (hero.dead || this.story.inCinematic) return this.hud.prompt(this.story.inCinematic ? '<kbd>E</kbd>Passer la cinématique' : '');
     let near = null;
     let nd = 2.6;
     for (const it of this.#interactables()) {
@@ -571,11 +636,13 @@ export class Game {
       } else if (this.inspected === c) {
         html = `<kbd>E</kbd>Ouvrir — <span style="color:${color}">${info.label}</span><div class="sub">${this.#crateHint(c.type)}</div>`;
       } else html = `<kbd>E</kbd>Inspecter — <span style="color:${color}">${info.label}</span>`;
-    } else if (near.kind === 'terminal') html = '<kbd>E</kbd>Terminal du refuge — se reposer et sauvegarder';
+    } else if (near.kind === 'story') html = near.label;
+    else if (near.kind === 'terminal') html = '<kbd>E</kbd>Terminal du refuge — se reposer et sauvegarder';
     else html = '<kbd>E</kbd>Établi — atelier d’amélioration';
     this.hud.prompt(html);
 
     if (!this.input.was('interact') || hero.busy) return;
+    if (near.kind === 'story') return this.story.interact(near);
     if (near.kind === 'crate') {
       const c = near.crate;
       if (c.locked) {
@@ -625,7 +692,7 @@ export class Game {
       this.fx.emit({ x: c.pos.x, y: c.pos.y + 0.8, z: c.pos.z }, { count: rare ? 50 : 20, color: CRATE_TYPES[c.type].color, speed: 4, up: 4, size: 0.25, life: 1, gravity: 2 });
       const overflow = this.inventory.grant(rewards);
       if (overflow.length) this.pendingLoot[c.id] = overflow;
-      this.#missionEvents(this.missions.handle({ type: 'interact', target: c.id }));
+      this.missionEvents(this.missions.handle({ type: 'interact', target: c.id }));
       this.recomputeStats();
       this.menus.show('reward', { title: CRATE_TYPES[c.type].label, color: CRATE_TYPES[c.type].color, rewards, overflow, lore: LORE[c.id] });
       this.save('crate');
@@ -700,9 +767,12 @@ export class Game {
     return best;
   }
 
-  #missionEvents(events) {
+  missionEvents(events) {
     for (const ev of events) {
-      if (ev.type === 'stepComplete') {
+      this.story?.onMissionEvent(ev);
+      if (ev.type === 'missionStart') {
+        if (MISSIONS[ev.id].kind !== 'story') this.hud.toast(`Nouvelle mission : ${ev.title}`, '#7fe3ff');
+      } else if (ev.type === 'stepComplete') {
         this.audio.pickup();
         this.hud.toast(`Nouvel objectif : ${ev.text}`);
         const st = this.missions.state[ev.id];
@@ -717,9 +787,10 @@ export class Game {
         for (const it of rw.items || []) granted.push({ kind: 'item', id: it.id, qty: it.qty });
         this.inventory.grant(granted);
         this.audio.levelUp();
-        this.hud.banner(MISSION_KIND_LABEL[MISSIONS[ev.id].kind].toUpperCase() + ' TERMINÉE', ev.title, [rw.xp && `+${rw.xp} XP`, rw.credits && `+${rw.credits} Credits`, rw.shards && `+${rw.shards} Abyss Shards`].filter(Boolean).join('   '));
+        if (MISSIONS[ev.id].kind !== 'story' || rw.xp) this.hud.banner(MISSION_KIND_LABEL[MISSIONS[ev.id].kind].toUpperCase() + ' TERMINÉE', ev.title, [rw.xp && `+${rw.xp} XP`, rw.credits && `+${rw.credits} Credits`, rw.shards && `+${rw.shards} Abyss Shards`].filter(Boolean).join('   '));
         (RADIO[`${ev.id}:done`] || []).forEach((l) => this.hud.say('MARA (radio)', l, 5));
-        if (!this.inCombat && !this.hero.busy) this.hero.playAnim('victory', 1.8);
+        if (!this.inCombat && !this.hero.busy && !this.hero.flying && MISSIONS[ev.id].kind !== 'story') this.hero.playAnim('victory', 1.8);
+        this.#refreshCrateLocks();
         if (rw.xp) this.grantXp(rw.xp);
         this.save('mission');
       }
@@ -743,7 +814,7 @@ export class Game {
       if (o !== e && o.alive && !o.alert && o.pos.distanceTo(e.pos) < 18) o.alertTo(this.hero.pos);
     }
     const key = e.type === 'stalker' ? 'firstStalker' : 'firstBrute';
-    if (!this.saidOnce.has(key)) {
+    if (this.story.stage() === 'free' && !this.saidOnce.has(key)) {
       this.saidOnce.add(key);
       RADIO[key].forEach((l) => this.hud.say('MARA (radio)', l, 4.5));
     }
@@ -774,8 +845,38 @@ export class Game {
     const parts = drops.map((d) => (d.kind === 'credits' ? `+${d.amount} Credits` : `+${d.qty} ${ITEMS[d.id].name}`));
     this.hud.toast(`${def.name} éliminé · +${def.xp} XP · ${parts.join(' · ')}`, def.color);
     this.grantXp(def.xp);
-    this.#missionEvents(this.missions.handle({ type: 'kill', group: e.spawn.group, enemyType: e.type }));
+    this.missionEvents(this.missions.handle({ type: 'kill', group: e.spawn.group, enemyType: e.type }));
     if (e.spawn.group !== 'parking') this.respawnQueue.push({ spawn: e.spawn, t: 75 });
+  }
+
+  onNoPowers() {
+    const now = performance.now();
+    if (now - (this.noPowAt || 0) < 2500) return;
+    this.noPowAt = now;
+    const lines = ['Je sais pas me battre… Faut que je cours !', 'Me battre contre ÇA ? Je suis pas fou.', 'Fuis, Noa. Fuis !'];
+    this.hud.say('Noa', lines[Math.floor(Math.random() * lines.length)], 2.5);
+  }
+
+  onVolley() {
+    this.missionEvents(this.missions.handle({ type: 'event', id: 'volley' }));
+  }
+
+  onFlightStart() {
+    this.missionEvents(this.missions.handle({ type: 'event', id: 'flight' }));
+  }
+
+  onParry(source, from) {
+    this.audio.parry();
+    this.slowT = 0.45;
+    this.fx.ring(this.hero.pos, { color: '#ffffff', from: 0.3, to: 3.5, life: 0.35, y: 1 });
+    this.fx.starBurst(this.hero.pos.clone().add(new THREE.Vector3(0, 1.3, 0)).lerp(from, 0.3), '#7fe3ff', 2.2);
+    source?.stagger?.(1.6);
+    this.hud.toast('PARADE ! · +20 énergie', '#7fe3ff');
+  }
+
+  onBlock() {
+    this.audio.block();
+    this.fx.starBurst(this.hero.pos.clone().add(new THREE.Vector3(0, 1.2, 0)).addScaledVector(this.hero.facing(), 0.8), '#bff6ff', 1.2);
   }
 
   onHeroHurt(dmg) {
@@ -808,13 +909,13 @@ export class Game {
   }
 
   #respawn() {
-    const sp = this.world.spawn;
+    const sp = this.story.checkpoint();
     this.hero.placeAt(sp, sp.yaw);
     this.hero.revive();
     this.camYaw = sp.yaw;
     this.camPos = null;
     for (const e of this.enemies) {
-      if (!e.alive) continue;
+      if (!e.alive || e.spawn.group === 'chaser') continue;
       e.pos.copy(e.home);
       e.hp = e.def.hp;
       e.alert = false;
@@ -823,7 +924,8 @@ export class Game {
       e.state = 'patrol';
       e.stateT = 0;
     }
-    this.hud.toast('De retour au refuge');
+    this.story.onRespawn();
+    this.hud.toast(this.story.stage() === 'free' ? 'De retour au refuge' : 'Point de passage');
   }
 
   // ---------- Sauvegarde ----------
@@ -887,6 +989,7 @@ export class Game {
       objDist,
       objBearing: op && this.settings.markers ? Math.atan2(op.x - h.pos.x, op.z - h.pos.z) : null,
       camYaw: this.camYaw,
+      rings: h.powers.rings, flight: h.powers.flight, flying: h.flying,
     });
     // Marqueur d'objectif
     if (op && this.settings.markers && !this.menus.isOpen) {

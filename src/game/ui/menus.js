@@ -136,7 +136,7 @@ export class Menus {
       <button class="btn" data-act="fav" data-uid="${e.uid}">${e.fav ? '★ Favori' : '☆ Favori'}</button>
       <button class="btn" data-act="dismantle" data-uid="${e.uid}" ${equipped || e.fav ? 'disabled' : ''}>Démonter</button></div>
       <p class="cost">${maxed ? 'Niveau maximal atteint.' : `Amélioration +${(e.level || 0) + 1} : ${cost.scrap} Ferraille${cost.abyss_fragment ? `, ${cost.abyss_fragment} Fragment(s) d'Abysse` : ''}.`}
-      ${workshop ? '' : '<br>Les améliorations se font à l\'atelier du refuge.'}<br>Démontage : ${dv.scrap} Ferraille${dv.abyss_fragment ? ` + ${dv.abyss_fragment} Fragment` : ''}.</p>`;
+      ${workshop ? '' : '<br>Les améliorations se font à l\'établi du refuge.'}<br>Démontage : ${dv.scrap} Ferraille${dv.abyss_fragment ? ` + ${dv.abyss_fragment} Fragment` : ''}.</p>`;
     return html;
   }
 

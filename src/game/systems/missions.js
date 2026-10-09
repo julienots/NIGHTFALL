@@ -11,15 +11,24 @@ export class MissionLog {
       this.state = structuredClone(data.state || {});
       this.tracked = data.tracked || null;
     }
-    for (const [id, def] of Object.entries(defs)) {
-      if (def.autoStart && !this.state[id]) this.state[id] = { status: 'active', step: 0, progress: 0 };
-    }
+    this.#startAvailable();
     if (!this.tracked || this.state[this.tracked]?.status !== 'active') this.#retrack();
+  }
+
+  // Démarre les missions automatiques et celles dont le prérequis est terminé.
+  #startAvailable(out) {
+    for (const [id, def] of Object.entries(this.defs)) {
+      if (this.state[id]) continue;
+      if (def.autoStart || (def.requires && this.state[def.requires]?.status === 'done')) {
+        this.state[id] = { status: 'active', step: 0, progress: 0 };
+        out?.push({ type: 'missionStart', id, title: def.title });
+      }
+    }
   }
 
   #retrack() {
     const active = this.activeIds();
-    this.tracked = active.find((id) => this.defs[id].kind === 'main') || active[0] || null;
+    this.tracked = active.find((id) => this.defs[id].kind === 'story') || active.find((id) => this.defs[id].kind === 'main') || active[0] || null;
   }
 
   activeIds() {
@@ -55,7 +64,8 @@ export class MissionLog {
     if (s.step >= def.steps.length) {
       s.status = 'done';
       out.push({ type: 'missionComplete', id, title: def.title, reward: def.reward });
-      if (this.tracked === id) this.#retrack();
+      this.#startAvailable(out);
+      if (this.tracked === id || !this.tracked) this.#retrack();
     } else {
       out.push({ type: 'stepComplete', id, text: def.steps[s.step].text });
     }
@@ -74,7 +84,9 @@ export class MissionLog {
           out.push({ type: 'progress', id });
           if (this.state[id].progress >= step.count) this.#advance(id, out);
         }
-      } else if (event.type === 'interact' && step.type === 'interact' && step.target === event.target) {
+      } else if (event.type === 'interact' && (step.type === 'interact' || step.type === 'talk') && step.target === event.target) {
+        this.#advance(id, out);
+      } else if (event.type === 'event' && step.type === 'event' && step.id === event.id) {
         this.#advance(id, out);
       }
     }

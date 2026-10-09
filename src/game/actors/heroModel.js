@@ -1,13 +1,15 @@
-// Modèle procédural du héros VANT : squelette de pivots, pièces d'armure
-// interchangeables, visière et veines d'énergie émissives, écharpe animée.
-// Le modèle fait face à +Z ; son côté droit est en -X.
+// Modèle procédural d'un personnage « ado » (Noa, Inès, passants) en style
+// cartoon : sweat à capuche, jean, baskets, visage expressif. Squelette de
+// pivots animé procéduralement. Face à +Z ; côté droit en -X.
+// Un groupe « tilt » au niveau du bassin permet d'incliner tout le corps
+// (vol à plat, virages, atterrissage).
 import * as THREE from 'three';
 import { toon } from '../fx/toon.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => t * t * (3 - 2 * t);
+const HIP_Y = 0.94;
 
-// Interpolation entre images clés {p, pose} selon la progression p.
 function keyed(keys, p) {
   if (p <= keys[0].p) return keys[0].pose;
   for (let i = 0; i < keys.length - 1; i++) {
@@ -27,7 +29,8 @@ function keyed(keys, p) {
   return keys[keys.length - 1].pose;
 }
 
-// Poses d'attaque (rotations euler en radians). Clés : spine, head, shR, elR, shL, elL, hipR, knR, hipL, knL, hips.
+// Animations clés (rotations en radians). Clés : spine, head, shR, elR, shL, elL,
+// hipR, knR, hipL, knL, hips, drop (translation verticale du bassin).
 export const ATTACK_ANIMS = {
   jabR: [
     { p: 0, pose: { spine: [0, 0.35, 0], shR: [-0.6, 0, -0.2], elR: [-1.9, 0, 0], shL: [-0.9, 0, 0.3], elL: [-2.1, 0, 0] } },
@@ -39,26 +42,34 @@ export const ATTACK_ANIMS = {
     { p: 0.3, pose: { spine: [0.1, 0.5, 0], shL: [-1.55, 0, -0.05], elL: [-0.05, 0, 0], shR: [-0.7, 0, -0.3], elR: [-2.2, 0, 0], hipR: [-0.4, 0, 0], knR: [0.3, 0, 0] } },
     { p: 1, pose: { spine: [0, -0.1, 0], shL: [-0.7, 0, 0.2], elL: [-1.8, 0, 0], shR: [-0.8, 0, -0.3], elR: [-2.0, 0, 0] } },
   ],
-  hook: [
-    { p: 0, pose: { spine: [0.1, 0.7, 0], shR: [-0.3, 0.3, -0.9], elR: [-1.7, 0, 0], shL: [-0.8, 0, 0.3], elL: [-2, 0, 0], hips: [0, 0.3, 0] } },
-    { p: 0.4, pose: { spine: [-0.15, -0.9, 0.1], shR: [-2.4, 0.2, 0.2], elR: [-0.5, 0, 0], shL: [-0.5, 0, 0.5], elL: [-1.8, 0, 0], hips: [0, -0.4, 0], hipR: [0.3, 0, 0], knR: [0.5, 0, 0], hipL: [-0.5, 0, 0], knL: [0.4, 0, 0] } },
-    { p: 1, pose: { spine: [0, -0.2, 0], shR: [-0.8, 0, -0.2], elR: [-1.8, 0, 0], shL: [-0.8, 0, 0.3], elL: [-2, 0, 0] } },
+  // Coup d'anneaux : poing droit tendu, les anneaux partent en avant.
+  ringPunch: [
+    { p: 0, pose: { spine: [0.1, 0.8, 0], shR: [0.3, 0.3, -0.4], elR: [-2.0, 0, 0], shL: [-1.1, 0, 0.5], elL: [-0.6, 0, 0], hipL: [-0.5, 0, 0], knL: [0.5, 0, 0], drop: [0, -0.15, 0] } },
+    { p: 0.38, pose: { spine: [0.15, -0.7, 0], shR: [-1.6, 0, 0], elR: [0, 0, 0], shL: [0.2, 0, 0.5], elL: [-1.4, 0, 0], hipL: [-0.8, 0, 0], knL: [0.5, 0, 0], hipR: [0.5, 0, 0], knR: [0.2, 0, 0], drop: [0, -0.25, 0] } },
+    { p: 1, pose: { spine: [0, -0.1, 0], shR: [-0.7, 0, -0.2], elR: [-1.6, 0, 0], shL: [-0.6, 0, 0.2], elL: [-1.5, 0, 0] } },
   ],
-  slam: [
-    { p: 0, pose: { spine: [0.2, 0, 0], shR: [-0.6, 0, 0], shL: [-0.6, 0, 0], elR: [-1.2, 0, 0], elL: [-1.2, 0, 0] } },
-    { p: 0.4, pose: { spine: [-0.45, 0, 0], shR: [-3.0, 0, 0.3], shL: [-3.0, 0, -0.3], elR: [-0.8, 0, 0], elL: [-0.8, 0, 0], hipR: [0.2, 0, 0], hipL: [0.2, 0, 0], head: [-0.2, 0, 0] } },
-    { p: 0.55, pose: { spine: [0.75, 0, 0], shR: [-1.2, 0, 0.1], shL: [-1.2, 0, -0.1], elR: [-0.2, 0, 0], elL: [-0.2, 0, 0], hipR: [-1.0, 0, 0], knR: [1.2, 0, 0], hipL: [0.5, 0, 0], knL: [0.9, 0, 0], hips: [0, 0, 0], drop: [0, -0.35, 0] } },
-    { p: 1, pose: { spine: [0.1, 0, 0], shR: [-0.6, 0, -0.2], shL: [-0.6, 0, 0.2], elR: [-1.5, 0, 0], elL: [-1.5, 0, 0] } },
+  // Fouet d'anneaux : grand balayage horizontal du bras droit.
+  whip: [
+    { p: 0, pose: { spine: [0.1, 1.1, 0], shR: [-1.4, 0.2, -1.2], elR: [-0.4, 0, 0], shL: [-0.6, 0, 0.4], elL: [-1.6, 0, 0], hips: [0, 0.5, 0] } },
+    { p: 0.45, pose: { spine: [0.05, -1.0, 0], shR: [-1.5, -0.2, 0.9], elR: [-0.1, 0, 0], shL: [-0.4, 0, 0.6], elL: [-1.4, 0, 0], hips: [0, -0.5, 0], hipR: [0.3, 0, 0], knR: [0.4, 0, 0], hipL: [-0.5, 0, 0], knL: [0.4, 0, 0], drop: [0, -0.15, 0] } },
+    { p: 1, pose: { spine: [0, -0.2, 0], shR: [-0.7, 0, -0.2], elR: [-1.5, 0, 0], shL: [-0.6, 0, 0.2], elL: [-1.5, 0, 0] } },
   ],
-  voidStrike: [
-    { p: 0, pose: { spine: [0, 0.8, 0], shR: [0.6, 0.2, -0.4], elR: [-2.2, 0, 0], shL: [-1.2, 0, 0.6], elL: [-0.4, 0, 0], hipL: [-0.5, 0, 0], knL: [0.6, 0, 0], hipR: [0.4, 0, 0], knR: [0.4, 0, 0], drop: [0, -0.2, 0] } },
-    { p: 0.35, pose: { spine: [0.15, 0.9, 0], shR: [0.9, 0.2, -0.5], elR: [-2.4, 0, 0], shL: [-1.3, 0, 0.7], elL: [-0.3, 0, 0], hipL: [-0.6, 0, 0], knL: [0.7, 0, 0], hipR: [0.5, 0, 0], knR: [0.5, 0, 0], drop: [0, -0.3, 0] } },
-    { p: 0.45, pose: { spine: [0.2, -0.6, 0], shR: [-1.6, 0, 0], elR: [0, 0, 0], shL: [0.3, 0, 0.5], elL: [-1.2, 0, 0], hipL: [-0.9, 0, 0], knL: [0.5, 0, 0], hipR: [0.6, 0, 0], knR: [0.2, 0, 0], drop: [0, -0.35, 0] } },
-    { p: 1, pose: { spine: [0, 0, 0], shR: [-0.6, 0, -0.2], elR: [-1.5, 0, 0], shL: [-0.5, 0, 0.2], elL: [-1.4, 0, 0] } },
+  // Rafale : les deux bras projettent les anneaux vers l'avant.
+  volley: [
+    { p: 0, pose: { spine: [-0.15, 0, 0], shR: [-0.2, 0, -0.9], elR: [-1.6, 0, 0], shL: [-0.2, 0, 0.9], elL: [-1.6, 0, 0], drop: [0, -0.1, 0] } },
+    { p: 0.3, pose: { spine: [-0.2, 0, 0], shR: [0.3, 0, -1.1], elR: [-1.9, 0, 0], shL: [0.3, 0, 1.1], elL: [-1.9, 0, 0], hipL: [-0.5, 0, 0], knL: [0.7, 0, 0], hipR: [0.4, 0, 0], knR: [0.5, 0, 0], drop: [0, -0.3, 0] } },
+    { p: 0.45, pose: { spine: [0.3, 0, 0], shR: [-1.5, 0, 0.15], elR: [0, 0, 0], shL: [-1.5, 0, -0.15], elL: [0, 0, 0], hipL: [-0.9, 0, 0], knL: [0.5, 0, 0], hipR: [0.6, 0, 0], knR: [0.2, 0, 0], drop: [0, -0.3, 0] } },
+    { p: 1, pose: { spine: [0, 0, 0], shR: [-0.6, 0, -0.2], elR: [-1.5, 0, 0], shL: [-0.6, 0, 0.2], elL: [-1.5, 0, 0] } },
   ],
   diveImpact: [
     { p: 0, pose: { spine: [0.6, 0, 0], shR: [-2.0, 0, 0], shL: [-2.0, 0, 0], elR: [-0.3, 0, 0], elL: [-0.3, 0, 0], hipR: [-1.2, 0, 0], knR: [1.6, 0, 0], hipL: [-0.6, 0, 0], knL: [1.8, 0, 0], drop: [0, -0.45, 0] } },
     { p: 1, pose: { spine: [0.1, 0, 0], shR: [-0.6, 0, -0.2], shL: [-0.6, 0, 0.2], elR: [-1.5, 0, 0], elL: [-1.5, 0, 0] } },
+  ],
+  // Atterrissage de super-héros : genou à terre, poing au sol, puis relevé.
+  superLanding: [
+    { p: 0, pose: { spine: [0.75, 0, 0], head: [-0.4, 0, 0], shR: [-0.9, 0, 0.1], elR: [-0.1, 0, 0], shL: [-0.2, 0, 0.9], elL: [-0.5, 0, 0], hipR: [-1.5, 0, 0], knR: [1.4, 0, 0], hipL: [0.3, 0, 0], knL: [2.3, 0, 0], drop: [0, -0.55, 0] } },
+    { p: 0.6, pose: { spine: [0.6, 0, 0], head: [-0.6, 0, 0], shR: [-0.9, 0, 0.1], elR: [-0.1, 0, 0], shL: [-0.2, 0, 0.9], elL: [-0.5, 0, 0], hipR: [-1.4, 0, 0], knR: [1.4, 0, 0], hipL: [0.3, 0, 0], knL: [2.2, 0, 0], drop: [0, -0.52, 0] } },
+    { p: 1, pose: {} },
   ],
   interact: [
     { p: 0, pose: {} },
@@ -71,34 +82,63 @@ export const ATTACK_ANIMS = {
     { p: 0.8, pose: { shR: [-2.9, 0, 0.2], elR: [-0.4, 0, 0], shL: [-0.3, 0, 0.3], elL: [-1.2, 0, 0], head: [-0.25, 0, 0], spine: [-0.1, 0, 0] } },
     { p: 1, pose: {} },
   ],
+  // Regarde son téléphone (main droite devant le visage).
+  phone: [
+    { p: 0, pose: {} },
+    { p: 0.15, pose: { head: [0.45, 0, 0], shR: [-0.5, 0.4, 0.2], elR: [-1.9, 0, 0], spine: [0.08, 0, 0] } },
+    { p: 0.85, pose: { head: [0.45, 0, 0], shR: [-0.5, 0.4, 0.2], elR: [-1.9, 0, 0], spine: [0.08, 0, 0] } },
+    { p: 1, pose: {} },
+  ],
+  // Se protège, terrifié.
+  scared: [
+    { p: 0, pose: {} },
+    { p: 0.2, pose: { spine: [-0.25, 0, 0], head: [0.3, 0, 0], shR: [-1.9, 0.3, 0.4], elR: [-1.6, 0, 0], shL: [-1.9, -0.3, -0.4], elL: [-1.6, 0, 0], hipR: [0.2, 0, 0], knR: [0.3, 0, 0], drop: [0, -0.08, 0] } },
+    { p: 0.85, pose: { spine: [-0.25, 0, 0], head: [0.3, 0, 0], shR: [-1.9, 0.3, 0.4], elR: [-1.6, 0, 0], shL: [-1.9, -0.3, -0.4], elL: [-1.6, 0, 0], hipR: [0.2, 0, 0], knR: [0.3, 0, 0], drop: [0, -0.08, 0] } },
+    { p: 1, pose: {} },
+  ],
+  // Éveil : soulevé par les anneaux, bras écartés.
+  awaken: [
+    { p: 0, pose: { spine: [-0.1, 0, 0], shR: [-0.3, 0, -0.4], shL: [-0.3, 0, 0.4] } },
+    { p: 0.4, pose: { spine: [-0.35, 0, 0], head: [-0.5, 0, 0], shR: [-0.2, 0, -1.3], elR: [-0.2, 0, 0], shL: [-0.2, 0, 1.3], elL: [-0.2, 0, 0], hipR: [0.1, 0, 0], knR: [0.4, 0, 0], hipL: [-0.1, 0, 0], knL: [0.3, 0, 0] } },
+    { p: 0.8, pose: { spine: [0.2, 0, 0], head: [0.1, 0, 0], shR: [-1.3, 0, -0.3], elR: [-1.2, 0, 0], shL: [-1.3, 0, 0.3], elL: [-1.2, 0, 0], hipR: [-0.4, 0, 0], knR: [0.6, 0, 0], drop: [0, -0.15, 0] } },
+    { p: 1, pose: { shR: [-0.5, 0, -0.2], elR: [-1.4, 0, 0], shL: [-0.5, 0, 0.2], elL: [-1.4, 0, 0] } },
+  ],
+};
+
+// Palettes : héros + passants.
+export const PALETTES = {
+  noa: { skin: '#e8b48a', hair: '#2b1d16', hoodie: '#2f8f9f', hoodie2: '#246f7c', pants: '#3a5ba8', shoe: '#f2efe6', sole: '#e8553f', bag: '#ff9a3d', hairStyle: 'messy' },
+  ines: { skin: '#a8714a', hair: '#1a1210', hoodie: '#f2b84b', hoodie2: '#d99a2e', pants: '#2b2b4a', shoe: '#f2efe6', sole: '#7b4ad6', bag: null, hairStyle: 'ponytail' },
 };
 
 export class HeroModel {
-  constructor() {
+  constructor(palette = PALETTES.noa, { backpack = true, rim = '#9fd8ff' } = {}) {
     this.root = new THREE.Group();
+    this.tilt = new THREE.Group();
+    this.tilt.position.y = HIP_Y;
+    this.root.add(this.tilt);
     this.joints = {};
     this.time = 0;
     this.current = {};
-    const rim = { rim: '#9fd8ff', rimStrength: 0.75, shared: false };
+    this.palette = palette;
+    const R = { rim, rimStrength: 0.6, shared: false };
     this.mats = {
-      suit: toon('#2f4bd1', rim),
-      armor: toon('#26307a', rim),
-      trim: toon('#ff9a3d', rim),
-      helmet: toon('#1d2463', { ...rim, rimStrength: 1 }),
-      visor: toon('#ffb020', { emissive: '#ffb020', emissiveIntensity: 1.6, shared: false }),
-      vein: toon('#a060ff', { emissive: '#a060ff', emissiveIntensity: 1.2, shared: false }),
-      gauntlet: toon('#8a93b8', rim),
-      glow: toon('#ffb347', { emissive: '#ffb347', emissiveIntensity: 1.4, shared: false }),
-      scarf: toon('#ff7a2a', { ...rim, side: THREE.DoubleSide }),
-      boot: toon('#1d2463', rim),
-      skin: toon('#f2c6a0', rim),
+      skin: toon(palette.skin, R),
+      hair: toon(palette.hair, R),
+      hoodie: toon(palette.hoodie, R),
+      hoodie2: toon(palette.hoodie2, R),
+      pants: toon(palette.pants, R),
+      shoe: toon(palette.shoe, R),
+      sole: toon(palette.sole, R),
+      bag: toon(palette.bag || '#555', R),
+      white: toon('#ffffff', { shared: false }),
+      pupil: toon('#1d0f3a', { shared: false }),
+      mouth: toon('#7a2f3a', { shared: false }),
+      phone: toon('#1d0f3a', { emissive: '#7fe3ff', emissiveIntensity: 0, shared: false }),
     };
-    this.#build();
+    this.#build(backpack && palette.bag);
     this.root.traverse((o) => {
-      if (o.isMesh) {
-        o.castShadow = true;
-        o.receiveShadow = true;
-      }
+      if (o.isMesh) o.castShadow = true;
     });
   }
 
@@ -118,156 +158,180 @@ export class HeroModel {
     return m;
   }
 
-  #build() {
+  #build(withBag) {
     const M = this.mats;
-    const hips = this.#pivot('hips', this.root, 0, 0.98, 0);
-    // Bassin + ceinture
-    this.#mesh(new THREE.CapsuleGeometry(0.17, 0.12, 4, 12), M.suit, hips, 0, 0.02, 0, 0, 0, Math.PI / 2);
-    this.#mesh(new THREE.TorusGeometry(0.19, 0.035, 8, 20), M.trim, hips, 0, 0.1, 0, Math.PI / 2);
-    this.#mesh(new THREE.BoxGeometry(0.12, 0.08, 0.05), M.glow, hips, 0, 0.1, 0.18);
-
-    const spine = this.#pivot('spine', hips, 0, 0.12, 0);
-    // Abdomen et torse
-    this.#mesh(new THREE.CapsuleGeometry(0.135, 0.18, 4, 12), M.suit, spine, 0, 0.14, 0);
-    const chest = this.#mesh(new THREE.CapsuleGeometry(0.2, 0.2, 6, 16), M.suit, spine, 0, 0.42, 0);
-    chest.scale.set(1.35, 1.05, 0.9); // torse en V héroïque
-    // Plastron (armure)
-    this.armorParts = [];
-    const plate = this.#mesh(new THREE.SphereGeometry(0.25, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.armor, spine, 0, 0.38, 0.03, Math.PI / 2 - 0.1);
-    plate.scale.set(1.1, 0.75, 0.85);
-    this.armorParts.push(plate);
-    // Abdominaux segmentés
-    for (let i = 0; i < 3; i++) {
-      this.#mesh(new THREE.BoxGeometry(0.2 - i * 0.02, 0.055, 0.06), M.armor, spine, 0, 0.27 - i * 0.07, 0.14 + i * 0.005);
-    }
-    // Noyau d'énergie au centre du torse
-    this.core = this.#mesh(new THREE.OctahedronGeometry(0.065, 0), M.vein, spine, 0, 0.44, 0.255);
-    this.#mesh(new THREE.TorusGeometry(0.085, 0.014, 6, 20), M.trim, spine, 0, 0.44, 0.235);
-    // Dos : module dorsal
-    this.#mesh(new THREE.BoxGeometry(0.3, 0.32, 0.1), M.armor, spine, 0, 0.4, -0.2);
-    for (const s of [-1, 1]) this.#mesh(new THREE.BoxGeometry(0.03, 0.26, 0.03), M.vein, spine, s * 0.09, 0.4, -0.26);
-
-    // Tête
-    const neck = this.#pivot('head', spine, 0, 0.66, 0);
-    this.#mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.1, 10), M.suit, neck, 0, 0.0, 0);
-    const helm = this.#mesh(new THREE.SphereGeometry(0.135, 24, 18), M.helmet, neck, 0, 0.14, 0.01);
-    helm.scale.set(0.95, 1.08, 1.05);
-    neck.scale.setScalar(1.4); // tête cartoon plus grosse
-    // Visière en V
-    for (const s of [-1, 1]) {
-      this.#mesh(new THREE.BoxGeometry(0.11, 0.028, 0.04), M.visor, neck, s * 0.05, 0.15, 0.125, 0, s * 0.35, s * 0.22);
-    }
-    // Mentonnière et crête
-    this.#mesh(new THREE.BoxGeometry(0.13, 0.06, 0.07), M.armor, neck, 0, 0.06, 0.1);
-    this.#mesh(new THREE.BoxGeometry(0.025, 0.06, 0.2), M.trim, neck, 0, 0.29, -0.01);
-    for (const s of [-1, 1]) this.#mesh(new THREE.BoxGeometry(0.02, 0.05, 0.12), M.trim, neck, s * 0.13, 0.16, -0.03, 0, 0, s * 0.2);
-
-    // Écharpe : 3 segments chaînés
-    this.scarf = [];
-    let parent = this.#pivot('scarfRoot', spine, 0, 0.6, -0.12);
-    this.#mesh(new THREE.TorusGeometry(0.12, 0.045, 8, 16), M.scarf, spine, 0, 0.6, 0, Math.PI / 2);
-    for (let i = 0; i < 4; i++) {
-      const seg = new THREE.Group();
-      seg.position.set(0, i === 0 ? 0 : -0.16, 0);
-      parent.add(seg);
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.16 - i * 0.02, 0.17), M.scarf);
-      m.position.y = -0.08;
-      m.castShadow = true;
-      seg.add(m);
-      this.scarf.push(seg);
-      parent = seg;
+    const P = this.palette;
+    const hips = this.#pivot('hips', this.tilt, 0, 0, 0);
+    // Bassin (jean) + bas du sweat
+    this.#mesh(new THREE.CapsuleGeometry(0.15, 0.1, 4, 12), M.pants, hips, 0, 0.02, 0, 0, 0, Math.PI / 2).scale.set(1, 1.05, 0.9);
+    const spine = this.#pivot('spine', hips, 0, 0.1, 0);
+    // Sweat à capuche : buste un peu ample, poche kangourou, cordons
+    const torso = this.#mesh(new THREE.CapsuleGeometry(0.19, 0.3, 6, 16), M.hoodie, spine, 0, 0.27, 0);
+    torso.scale.set(1.18, 1, 0.82);
+    this.#mesh(new THREE.TorusGeometry(0.2, 0.05, 8, 20), M.hoodie2, spine, 0, 0.06, 0, Math.PI / 2).scale.set(1.12, 0.8, 1);
+    const pocket = this.#mesh(new THREE.BoxGeometry(0.24, 0.1, 0.03), M.hoodie2, spine, 0, 0.17, 0.155);
+    pocket.rotation.x = -0.1;
+    // Capuche repliée dans le dos + cordons
+    const hood = this.#mesh(new THREE.TorusGeometry(0.13, 0.065, 8, 18), M.hoodie2, spine, 0, 0.53, -0.04, Math.PI / 2 - 0.4);
+    hood.scale.set(1.1, 1, 1);
+    for (const sx of [-1, 1]) this.#mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.16, 4), M.white, spine, sx * 0.05, 0.42, 0.15, 0.15);
+    // Sac à dos
+    if (withBag) {
+      const bag = this.#mesh(new THREE.CapsuleGeometry(0.14, 0.16, 4, 12), M.bag, spine, 0, 0.3, -0.22);
+      bag.scale.set(1.2, 1, 0.7);
+      this.#mesh(new THREE.BoxGeometry(0.2, 0.1, 0.05), M.hoodie2, spine, 0, 0.22, -0.31);
+      for (const sx of [-1, 1]) this.#mesh(new THREE.TorusGeometry(0.11, 0.015, 6, 12, Math.PI), M.bag, spine, sx * 0.12, 0.38, -0.05, 0, Math.PI / 2, 0);
+      this.backpack = bag;
     }
 
-    // Bras
-    for (const [side, sx] of [['R', -1], ['L', 1]]) {
-      const sh = this.#pivot('sh' + side, spine, sx * 0.29, 0.5, 0);
-      // Épaulière (armure)
-      const pad = this.#mesh(new THREE.SphereGeometry(0.12, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.armor, sh, sx * 0.03, 0.03, 0);
-      pad.scale.set(1.45, 1.1, 1.45);
-      this.armorParts.push(pad);
-      this.#mesh(new THREE.BoxGeometry(0.02, 0.02, 0.18), M.trim, sh, sx * 0.08, 0.09, 0, 0, 0, sx * 0.6);
-      this.#mesh(new THREE.CapsuleGeometry(0.068, 0.2, 4, 10), M.suit, sh, 0, -0.16, 0);
-      // Veine d'énergie le long du bras
-      this.#mesh(new THREE.BoxGeometry(0.015, 0.2, 0.015), M.vein, sh, sx * 0.06, -0.16, 0.03);
-      const el = this.#pivot('el' + side, sh, 0, -0.33, 0);
-      this.#mesh(new THREE.CapsuleGeometry(0.06, 0.18, 4, 10), M.suit, el, 0, -0.13, 0);
-      // Gantelet (arme)
-      const g = this.#mesh(new THREE.CylinderGeometry(0.1, 0.075, 0.22, 14), M.gauntlet, el, 0, -0.18, 0);
-      g.scale.z = 1.1;
-      for (let k = 0; k < 2; k++) {
-        this.#mesh(new THREE.TorusGeometry(0.095 - k * 0.012, 0.012, 6, 16), M.glow, el, 0, -0.12 - k * 0.08, 0, Math.PI / 2);
+    // Tête cartoon (grosse) : visage, yeux, cheveux
+    const head = this.#pivot('head', spine, 0, 0.56, 0.01);
+    this.#mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.1, 10), M.skin, head, 0, 0.0, 0);
+    const face = new THREE.Group();
+    face.position.y = 0.17;
+    face.scale.setScalar(1.3);
+    head.add(face);
+    this.face = face;
+    const skull = this.#mesh(new THREE.SphereGeometry(0.12, 24, 18), M.skin, face);
+    skull.scale.set(0.95, 1.05, 1.0);
+    for (const sx of [-1, 1]) {
+      // Oreilles
+      this.#mesh(new THREE.SphereGeometry(0.03, 10, 8), M.skin, face, sx * 0.115, 0, 0).scale.set(0.6, 1, 1);
+      // Yeux : blanc + pupille + éclat
+      const eye = this.#mesh(new THREE.SphereGeometry(0.026, 12, 10), M.white, face, sx * 0.045, 0.02, 0.105);
+      eye.scale.set(0.9, 1.15, 0.5);
+      this.#mesh(new THREE.SphereGeometry(0.014, 10, 8), M.pupil, face, sx * 0.045, 0.018, 0.118);
+      // Sourcils
+      const brow = this.#mesh(new THREE.BoxGeometry(0.04, 0.008, 0.01), M.hair, face, sx * 0.047, 0.058, 0.112, 0, 0, sx * -0.12);
+      (this.brows ||= []).push(brow);
+    }
+    this.#mesh(new THREE.SphereGeometry(0.012, 8, 6), M.skin, face, 0, -0.012, 0.122);
+    this.mouth = this.#mesh(new THREE.TorusGeometry(0.02, 0.005, 6, 12, Math.PI), M.mouth, face, 0, -0.045, 0.112, 0, 0, Math.PI);
+    // Cheveux
+    const hairCap = this.#mesh(new THREE.SphereGeometry(0.128, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), M.hair, face, 0, 0.012, -0.008);
+    hairCap.rotation.x = -0.25;
+    if (P.hairStyle === 'messy') {
+      for (const [x, y, z, r, rx, rz] of [[0.04, 0.11, 0.07, 0.05, 0.5, -0.4], [-0.05, 0.12, 0.05, 0.05, 0.4, 0.5], [0.0, 0.13, -0.02, 0.055, 0, 0], [0.08, 0.08, 0.0, 0.04, 0, -0.8], [-0.08, 0.08, -0.02, 0.04, 0, 0.8], [0.0, 0.07, 0.1, 0.04, 1.2, 0]]) {
+        this.#mesh(new THREE.ConeGeometry(r, 0.11, 6), M.hair, face, x, y, z, rx, 0, rz);
       }
-      const fist = this.#mesh(new THREE.SphereGeometry(0.075, 14, 10), M.gauntlet, el, 0, -0.33, 0.01);
-      fist.scale.set(1.25, 1.1, 1.3); // gros poings cartoon
-      this.#mesh(new THREE.BoxGeometry(0.12, 0.03, 0.03), M.glow, fist, 0, 0.0, 0.07);
-      this.joints['fist' + side] = fist;
+    } else {
+      // Queue de cheval
+      this.#mesh(new THREE.SphereGeometry(0.05, 10, 8), M.hair, face, 0, 0.06, -0.12);
+      const tail = this.#mesh(new THREE.CapsuleGeometry(0.035, 0.14, 4, 8), M.hair, face, 0, -0.04, -0.15, 0.35);
+      this.ponytail = tail;
     }
 
-    // Jambes
+    // Bras : manches de sweat + mains
     for (const [side, sx] of [['R', -1], ['L', 1]]) {
-      const hip = this.#pivot('hip' + side, hips, sx * 0.11, -0.02, 0);
-      this.#mesh(new THREE.CapsuleGeometry(0.085, 0.3, 4, 10), M.suit, hip, 0, -0.21, 0);
-      const thighPlate = this.#mesh(new THREE.BoxGeometry(0.1, 0.18, 0.04), M.armor, hip, sx * 0.01, -0.18, 0.08);
-      this.armorParts.push(thighPlate);
-      const kn = this.#pivot('kn' + side, hip, 0, -0.43, 0);
-      this.#mesh(new THREE.SphereGeometry(0.06, 10, 8), M.armor, kn, 0, 0, 0.06);
-      this.#mesh(new THREE.CapsuleGeometry(0.07, 0.3, 4, 10), M.suit, kn, 0, -0.2, 0);
-      this.#mesh(new THREE.CylinderGeometry(0.085, 0.1, 0.2, 12), M.boot, kn, 0, -0.37, 0.0);
-      const shoe = this.#mesh(new THREE.SphereGeometry(0.1, 14, 10), M.boot, kn, 0, -0.47, 0.07);
-      shoe.scale.set(1.05, 0.6, 1.6); // grosses bottes arrondies
-      this.#mesh(new THREE.BoxGeometry(0.16, 0.02, 0.05), M.trim, kn, 0, -0.42, 0.1);
-      this.#mesh(new THREE.BoxGeometry(0.1, 0.012, 0.012), M.glow, kn, 0, -0.43, 0.17);
+      const sh = this.#pivot('sh' + side, spine, sx * 0.24, 0.43, 0);
+      this.#mesh(new THREE.SphereGeometry(0.075, 12, 8), M.hoodie, sh);
+      this.#mesh(new THREE.CapsuleGeometry(0.06, 0.2, 4, 10), M.hoodie, sh, 0, -0.15, 0);
+      const el = this.#pivot('el' + side, sh, 0, -0.3, 0);
+      this.#mesh(new THREE.CapsuleGeometry(0.055, 0.17, 4, 10), M.hoodie, el, 0, -0.11, 0);
+      this.#mesh(new THREE.TorusGeometry(0.052, 0.018, 6, 14), M.hoodie2, el, 0, -0.22, 0, Math.PI / 2);
+      const hand = this.#mesh(new THREE.SphereGeometry(0.052, 12, 10), M.skin, el, 0, -0.28, 0.01);
+      hand.scale.set(1, 1.1, 1.1);
+      this.joints['fist' + side] = hand;
+      if (side === 'R') {
+        // Téléphone (visible pendant l'animation « phone »)
+        this.phone = this.#mesh(new THREE.BoxGeometry(0.07, 0.13, 0.012), M.phone, el, 0, -0.3, 0.06);
+        this.phone.visible = false;
+      }
     }
 
-    // Aura d'énergie (visible pendant les pouvoirs)
-    this.aura = new THREE.Mesh(
-      new THREE.SphereGeometry(0.9, 24, 16),
-      new THREE.MeshBasicMaterial({ color: '#a060ff', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }),
-    );
-    this.aura.position.y = 1;
-    this.aura.scale.set(0.7, 1.15, 0.7);
-    this.root.add(this.aura);
+    // Jambes : jean + baskets
+    for (const [side, sx] of [['R', -1], ['L', 1]]) {
+      const hip = this.#pivot('hip' + side, hips, sx * 0.09, -0.02, 0);
+      this.#mesh(new THREE.CapsuleGeometry(0.075, 0.28, 4, 10), M.pants, hip, 0, -0.2, 0);
+      const kn = this.#pivot('kn' + side, hip, 0, -0.41, 0);
+      this.#mesh(new THREE.CapsuleGeometry(0.065, 0.28, 4, 10), M.pants, kn, 0, -0.18, 0);
+      const shoe = this.#mesh(new THREE.SphereGeometry(0.075, 14, 10), M.shoe, kn, 0, -0.43, 0.05);
+      shoe.scale.set(1.1, 0.7, 1.7);
+      const sole = this.#mesh(new THREE.BoxGeometry(0.15, 0.03, 0.25), M.sole, kn, 0, -0.475, 0.05);
+      sole.scale.z = 1;
+    }
   }
 
-  // Apparence de l'équipement (visuels définis dans data/items.js).
-  setEquipment(weaponVisual, armorVisual) {
-    const w = weaponVisual || { glow: '#ffb347', plate: '#8a93b8' };
-    this.mats.glow.emissive.set(w.glow);
-    this.mats.gauntlet.color.set(w.plate);
-    const a = armorVisual || { plate: '#26307a', trim: '#ff9a3d' };
-    this.mats.armor.color.set(a.plate);
-    this.mats.trim.color.set(a.trim);
-    for (const p of this.armorParts) p.visible = !!armorVisual || p.geometry.type !== 'BoxGeometry';
+  setPhone(on) {
+    if (!this.phone) return;
+    this.phone.visible = on;
+    this.mats.phone.emissiveIntensity = on ? 1.2 : 0;
   }
 
-  // Intensité des veines selon l'énergie (0..1) et le flash d'attaque.
-  setEnergy(e, flash = 0) {
-    this.mats.vein.emissiveIntensity = 0.5 + e * 1.2 + flash * 2.5;
-    this.mats.glow.emissiveIntensity = 1.3 + flash * 2.5;
-    this.aura.material.opacity = flash * 0.18;
-    this.aura.scale.setScalar(0.7 + flash * 0.4);
-    this.aura.scale.y = 1.15 + flash * 0.4;
+  setBackpack(on) {
+    if (this.backpack) this.backpack.parent.children.forEach((c) => {
+      if (c === this.backpack || (c.material === this.mats.bag)) c.visible = on;
+    });
   }
 
-  // Calcule la pose cible et l'applique avec lissage.
-  // s : { mode, speed, phase, airborne, vy, anim, animP, lean, hurt, dead, deadP, dt }
+  // Expression : 'neutral' | 'worried' | 'angry' | 'determined'
+  setExpression(e) {
+    const tilt = { neutral: -0.12, worried: 0.35, angry: -0.45, determined: -0.3 }[e] ?? -0.12;
+    this.brows?.forEach((b, i) => (b.rotation.z = (i === 0 ? -1 : 1) * tilt));
+    if (this.mouth) this.mouth.rotation.z = e === 'worried' ? 0 : Math.PI;
+  }
+
+  // s : { dt, speed, phase, airborne, vy, anim, animP, dodge, hurt, lean, dead, deadP,
+  //       flight: { mode: 'hover'|'fly'|'boost', pitch, roll, speed } | null }
   animate(s) {
     const dt = s.dt;
     this.time += dt;
     const t = this.time;
     const pose = {};
     const set = (k, x, y = 0, z = 0) => (pose[k] = [x, y, z]);
-
-    // Locomotion de base
-    const sp = s.speed; // 0..1 (marche->course), 1..1.6 sprint
+    const sp = s.speed;
     const ph = s.phase;
-    if (s.airborne) {
+    let tiltX = 0;
+    let tiltZ = s.lean || 0;
+
+    if (s.flight) {
+      const f = s.flight;
+      const bob = Math.sin(t * 2.4) * 0.05;
+      if (f.mode === 'hover') {
+        // Vol stationnaire : un genou relevé, bras ouverts paumes vers le sol.
+        set('spine', 0.05 + bob);
+        set('head', -0.05);
+        set('shR', -0.25, 0, -0.55 - bob);
+        set('shL', -0.25, 0, 0.55 + bob);
+        set('elR', -0.35);
+        set('elL', -0.35);
+        set('hipR', -0.55 + bob);
+        set('knR', 1.1);
+        set('hipL', -0.1);
+        set('knL', 0.35 + bob);
+        set('drop', 0, bob * 0.6);
+        tiltX = 0.08;
+      } else {
+        // Vol : corps à l'horizontale, jambes tendues, bras le long du corps
+        // (boost : poing droit en avant, pose classique de super-héros).
+        const boost = f.mode === 'boost';
+        set('spine', -0.15);
+        set('head', -1.0 + (boost ? -0.1 : 0));
+        set('hipR', 0.12 + Math.sin(t * 9) * 0.05);
+        set('hipL', 0.02 + Math.sin(t * 9 + 1) * 0.05);
+        set('knR', 0.25);
+        set('knL', 0.12);
+        if (boost) {
+          set('shR', -3.0, 0, 0.05);
+          set('elR', 0);
+          set('shL', 0.3, 0, 0.35);
+          set('elL', -0.2);
+        } else {
+          set('shR', 0.35, 0, -0.35);
+          set('shL', 0.35, 0, 0.35);
+          set('elR', -0.3);
+          set('elL', -0.3);
+        }
+        tiltX = f.pitch;
+        tiltZ = f.roll;
+      }
+    } else if (s.airborne) {
       const up = s.vy > 0;
       set('spine', up ? -0.15 : 0.1);
-      set('shR', -0.4, 0, -0.5);
-      set('shL', -0.4, 0, 0.5);
-      set('elR', -1.2);
-      set('elL', -1.2);
+      set('shR', -0.4, 0, -0.6);
+      set('shL', -0.4, 0, 0.6);
+      set('elR', -1.0);
+      set('elL', -1.0);
       set('hipR', up ? -1.1 : -0.4);
       set('knR', up ? 1.6 : 0.5);
       set('hipL', up ? -0.2 : -0.7);
@@ -279,40 +343,47 @@ export class HeroModel {
       set('hipL', sw * 0.75 * a);
       set('knR', (Math.max(0, Math.cos(ph)) * 1.2 + 0.15) * a);
       set('knL', (Math.max(0, -Math.cos(ph)) * 1.2 + 0.15) * a);
-      set('shR', sw * 0.7 * a, 0, -0.12);
-      set('shL', -sw * 0.7 * a, 0, 0.12);
-      set('elR', -0.5 - a * 0.7);
-      set('elL', -0.5 - a * 0.7);
-      set('spine', 0.08 + a * 0.18, sw * 0.12 * a);
+      set('shR', sw * 0.7 * a, 0, -0.1);
+      set('shL', -sw * 0.7 * a, 0, 0.1);
+      set('elR', -0.4 - a * 0.7);
+      set('elL', -0.4 - a * 0.7);
+      set('spine', 0.06 + a * 0.16, sw * 0.12 * a);
       set('hips', 0, -sw * 0.15 * a);
-      set('drop', 0, Math.abs(Math.cos(ph)) * 0.06 * a - 0.04 * a);
+      set('drop', 0, Math.abs(Math.cos(ph)) * 0.05 * a - 0.03 * a);
     } else {
-      // Repos : garde légère + respiration
-      const br = Math.sin(t * 1.8) * 0.025;
-      set('spine', 0.05 + br, 0.1);
-      set('head', -0.05, -0.08);
-      set('shR', -0.25, 0, -0.18);
-      set('shL', -0.2, 0, 0.18);
-      set('elR', -1.1 - br * 2);
-      set('elL', -0.9 - br * 2);
-      set('hipR', -0.12, 0.1);
-      set('hipL', 0.1, -0.1);
-      set('knR', 0.15);
-      set('knL', 0.1);
-      set('drop', 0, -0.02 + br * 0.3);
+      // Repos : respiration, mains relâchées, regard qui se balade.
+      const br = Math.sin(t * 1.8) * 0.02;
+      set('spine', 0.03 + br);
+      set('head', -0.02, Math.sin(t * 0.4) * 0.25);
+      set('shR', 0.05, 0, -0.1);
+      set('shL', 0.05, 0, 0.1);
+      set('elR', -0.25 - br * 2);
+      set('elL', -0.25 - br * 2);
+      set('hipR', -0.05);
+      set('hipL', 0.05);
+      set('knR', 0.08);
+      set('knL', 0.05);
     }
 
-    // Surcouche d'animation (attaque, pouvoir, interaction…)
     if (s.anim && ATTACK_ANIMS[s.anim]) {
       const k = keyed(ATTACK_ANIMS[s.anim], s.animP);
-      for (const key of Object.keys(k)) {
-        // Les jambes gardent la locomotion si l'attaque ne les définit pas.
-        pose[key] = k[key];
-      }
+      for (const key of Object.keys(k)) pose[key] = k[key];
     }
-
+    // Garde (bouclier d'anneaux) : avant-bras croisés devant soi.
+    if (s.shield) {
+      set('spine', 0.15);
+      set('shR', -1.35, 0.5, 0);
+      set('elR', -1.1);
+      set('shL', -1.35, -0.5, 0);
+      set('elL', -1.1);
+      set('hipR', -0.4);
+      set('knR', 0.6);
+      set('hipL', 0.2);
+      set('knL', 0.5);
+      set('drop', 0, -0.12);
+    }
     if (s.dodge) {
-      set('spine', 0.5, 0, 0);
+      set('spine', 0.5);
       set('shR', -0.6, 0, -0.6);
       set('shL', -0.6, 0, 0.6);
       set('elR', -1.6);
@@ -340,29 +411,20 @@ export class HeroModel {
       set('drop', 0, -0.5 * d);
     }
 
-    // Application lissée
-    const rate = s.anim || s.dodge || s.hurt > 0 ? 28 : 12;
+    const rate = s.anim || s.dodge || s.hurt > 0 || s.shield ? 26 : s.flight ? 8 : 12;
     const k = 1 - Math.exp(-rate * dt);
     for (const name of ['spine', 'head', 'shR', 'elR', 'shL', 'elL', 'hipR', 'knR', 'hipL', 'knL', 'hips', 'drop']) {
       const target = pose[name] || [0, 0, 0];
       const cur = this.current[name] || (this.current[name] = [0, 0, 0]);
       for (let i = 0; i < 3; i++) cur[i] += (target[i] - cur[i]) * k;
-      if (name === 'drop') {
-        this.joints.hips.position.y = 0.98 + cur[1];
-      } else {
-        this.joints[name].rotation.set(cur[0], cur[1], cur[2]);
-      }
+      if (name === 'drop') this.joints.hips.position.y = cur[1];
+      else this.joints[name].rotation.set(cur[0], cur[1], cur[2]);
     }
-
-    // Inclinaison du corps dans les virages / à l'accélération
-    this.root.children[0].rotation.z = s.lean || 0;
-
-    // Écharpe : traîne en fonction de la vitesse, ondulation
-    const drag = Math.min(1.2, sp * 0.8 + (s.airborne ? 0.6 : 0));
-    this.scarf.forEach((seg, i) => {
-      seg.rotation.x = 0.25 + drag * (0.5 + i * 0.12) + Math.sin(t * 7 - i * 0.9) * (0.08 + drag * 0.1);
-      seg.rotation.z = Math.sin(t * 3.1 - i) * 0.08;
-    });
-    this.core.rotation.y += dt * 2;
+    // Inclinaison du corps entier (vol, virages) lissée.
+    const kt = 1 - Math.exp(-6 * dt);
+    this.tilt.rotation.x += (tiltX - this.tilt.rotation.x) * kt;
+    this.tilt.rotation.z += (tiltZ - this.tilt.rotation.z) * kt;
+    if (this.ponytail) this.ponytail.rotation.x = 0.35 + Math.min(1, sp) * 0.5 + Math.sin(t * 8) * 0.1 * Math.min(1, sp);
+    this.setPhone(s.anim === 'phone');
   }
 }

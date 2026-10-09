@@ -233,7 +233,7 @@ export function buildDowntown(scene, col, quality) {
   // Q2 — bloc commerçant + ruelle
   building(10, 11, 28, 26, 14, 'brick', { sign: ['NOVA MARKET', '#4dd2ff', 'n'] });
   building(32, 11, 59, 24, 42, 'glass');
-  building(12, 40, 40, 59, 18, 'concrete');
+  building(12, 40, 40, 59, 18, 'concrete', { seed: 4, sign: ['LYCÉE VESPER-NORD', '#ffffff', 'n'] });
   building(44, 32, 59, 59, 26, 'concrete', { sign: ['HOTEL LUMEN', '#ff4d6d', 'w'] });
 
   // Q3 — immeuble Corvin (toit accessible) et voisins
@@ -659,7 +659,7 @@ export function buildDowntown(scene, col, quality) {
     const along = rot === 0;
     const wall = new THREE.Mesh(
       new THREE.BoxGeometry(along ? 16 : 0.2, 3.2, along ? 0.2 : 16),
-      M({ map: signTexture('QUARANTAINE', '#ff5d5d', '#2b2050') }),
+      M({ map: signTexture('ROUTE BARRÉE', '#ff8a3d', '#2b2050') }),
     );
     const off = Math.sign(along ? z : x) * 2;
     wall.position.set(x + (along ? 0 : off), 1.6, z + (along ? off : 0));
@@ -674,10 +674,10 @@ export function buildDowntown(scene, col, quality) {
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
-      uniforms: { uTime: { value: 0 } },
+      uniforms: { uTime: { value: 0 }, uNight: { value: 1 } },
       vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
       fragmentShader: `
-        varying vec3 vDir; uniform float uTime;
+        varying vec3 vDir; uniform float uTime; uniform float uNight;
         float hash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
         void main(){
           float h = clamp(vDir.y, -0.1, 1.0);
@@ -687,13 +687,17 @@ export function buildDowntown(scene, col, quality) {
           vec3 mid = vec3(0.22, 0.1, 0.42);
           vec3 hor = vec3(0.85, 0.36, 0.6);
           vec3 col = k < 0.3 ? mix(hor, mid, k / 0.3) : mix(mid, top, (k - 0.3) / 0.7);
+          // Crépuscule (avant le Nightfall) : bleu, rose et orange chauds.
+          vec3 dTop = vec3(0.24, 0.32, 0.68), dMid = vec3(0.85, 0.48, 0.66), dHor = vec3(1.0, 0.68, 0.42);
+          vec3 dusk = k < 0.3 ? mix(dHor, dMid, k / 0.3) : mix(dMid, dTop, (k - 0.3) / 0.7);
+          col = mix(dusk, col, uNight);
           // Lueur de l'anomalie au nord (-Z)
           float a = max(dot(normalize(vec3(vDir.x, 0.0, vDir.z)), vec3(0.0, 0.0, -1.0)), 0.0);
-          col = mix(col, vec3(0.75, 0.35, 1.0), step(0.93, a) * (1.0 - smoothstep(0.0, 0.35, h)) * 0.5);
+          col = mix(col, vec3(0.75, 0.35, 1.0), step(0.93, a) * (1.0 - smoothstep(0.0, 0.35, h)) * 0.5 * uNight);
           // Étoiles scintillantes
           vec3 cell = floor(vDir * 160.0);
           float st = step(0.996, hash(cell)) * smoothstep(0.15, 0.4, h);
-          col += vec3(1.0, 0.95, 0.85) * st * (0.6 + 0.4 * sin(uTime * 2.0 + hash(cell + 3.0) * 30.0));
+          col += vec3(1.0, 0.95, 0.85) * st * (0.6 + 0.4 * sin(uTime * 2.0 + hash(cell + 3.0) * 30.0)) * uNight;
           gl_FragColor = vec4(col, 1.0);
         }`,
     }),
@@ -749,10 +753,10 @@ export function buildDowntown(scene, col, quality) {
       fog: false,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
-      uniforms: { uTime: { value: 0 } },
+      uniforms: { uTime: { value: 0 }, uNight: { value: 1 } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
       fragmentShader: `
-        varying vec2 vUv; uniform float uTime;
+        varying vec2 vUv; uniform float uTime; uniform float uNight;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
         float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
           return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
@@ -761,7 +765,7 @@ export function buildDowntown(scene, col, quality) {
           float n = noise(p) * 0.6 + noise(p * 2.3 + 4.0) * 0.4;
           float fade = smoothstep(0.0, 0.15, vUv.y) * (1.0 - smoothstep(0.55, 1.0, vUv.y));
           vec3 col = mix(vec3(0.35, 0.1, 0.8), vec3(0.9, 0.6, 1.0), n);
-          gl_FragColor = vec4(col * n * fade * 0.9, 1.0);
+          gl_FragColor = vec4(col * n * fade * 0.9 * uNight, 1.0);
         }`,
     }),
   );
@@ -829,35 +833,68 @@ export function buildDowntown(scene, col, quality) {
       const on = activeSet.has(l);
       l.light.userData.active = on;
       l.light.visible = on;
-      if (!l.blink && !l.pulse) l.light.intensity = on ? l.base : 0;
+      if (!l.blink && !l.pulse) l.light.intensity = on && !l.light.userData.off ? l.base : 0;
     }
   });
+
+  // ---------- Ambiance : 0 = crépuscule (prologue), 1 = nuit du Nightfall ----------
+  let night = 1;
+  const facadeEmissive = Object.values(facadeMats);
+  function setNight(k) {
+    night = k;
+    sky.material.uniforms.uNight.value = k;
+    anomaly.material.uniforms.uNight.value = k;
+    anomaly.scale.y = Math.max(0.001, k);
+    anomaly.position.y = 300 * k - 150 * (1 - k);
+    moonG.visible = k > 0.05;
+    moonG.traverse((o) => {
+      if (!o.material) return;
+      o.material.transparent = true;
+      if (o.material.userData.base == null) o.material.userData.base = o.material.opacity;
+      o.material.opacity = o.material.userData.base * k;
+    });
+    cloudMat.color.set('#ffb8d0').lerp(new THREE.Color('#4b2f7e'), k);
+    rain.visible = k > 0.5;
+    for (const r of rifts) r.visible = k > 0.5;
+    for (const m of facadeEmissive) m.emissiveIntensity = 0.5 + k * 0.6;
+  }
+  // Coupure de courant : fenêtres et lampadaires s'éteignent quelques instants.
+  function setPower(on) {
+    for (const m of facadeEmissive) m.emissiveIntensity = on ? 0.5 + night * 0.6 : 0.02;
+    lampHeadMat.emissiveIntensity = on ? 2.5 : 0;
+    lampColdMat.emissiveIntensity = on ? 2.5 : 0;
+    for (const l of lampLights) l.light.userData.off = !on;
+  }
 
   // ---------- Points d'intérêt ----------
   const targets = {
     safehouse: { x: safe.x, y: 0.15, z: safe.z },
     rally: { x: 0, y: 0, z: 0 },
     rooftop_beacon: beaconPos,
+    school: { x: 26, y: 0.15, z: 36 },
+    parking_entry: { x: 22, y: 0.15, z: -14 },
+    aegis_case: { x: 38.6, y: 0.15, z: -49.6 },
+    lumen_roof: { x: 51.5, y: 26, z: 45.5 },
     terminal: { x: -31, y: 0.15, z: 32.2 },
     workbench: { x: -40, y: 0.15, z: 31.2 },
   };
 
   const enemySpawns = [
     // Groupe du parking (mission principale)
-    { type: 'stalker', x: 22, z: -30, group: 'parking', patrol: [[22, -30], [36, -30], [36, -38]] },
-    { type: 'stalker', x: 36, z: -26, group: 'parking', patrol: [[36, -26], [18, -38]] },
-    { type: 'stalker', x: 26, z: -50, group: 'parking', patrol: [[26, -50], [16, -50], [16, -40]] },
-    { type: 'brute', x: 31, z: -39, group: 'parking', patrol: [[31, -39], [24, -34]] },
+    { after: 'p03_rings', type: 'stalker', x: 22, z: -30, group: 'parking', patrol: [[22, -30], [36, -30], [36, -38]] },
+    { after: 'p03_rings', type: 'stalker', x: 36, z: -26, group: 'parking', patrol: [[36, -26], [18, -38]] },
+    { after: 'p03_rings', type: 'stalker', x: 26, z: -50, group: 'parking', patrol: [[26, -50], [16, -50], [16, -40]] },
+    { after: 'p03_rings', type: 'brute', x: 31, z: -39, group: 'parking', patrol: [[31, -39], [24, -34]] },
     // Rôdeurs du quartier
-    { type: 'stalker', x: 24, z: 33, group: 'alley', patrol: [[24, 33], [40, 34], [40, 28]] },
-    { type: 'stalker', x: 38, z: 36, group: 'alley', patrol: [[38, 36], [20, 36]] },
-    { type: 'stalker', x: -3, z: -42, group: 'avenue', patrol: [[-3, -42], [3, -58], [-4, -30]] },
-    { type: 'stalker', x: -48, z: -32, group: 'corvin', patrol: [[-48, -32], [-48, -18], [-52, -40]] },
-    { type: 'brute', x: 4, z: -66, group: 'north', patrol: [[4, -66], [-30, -68], [30, -68]] },
+    { after: 'p02_nightfall', type: 'stalker', x: 24, z: 33, group: 'alley', patrol: [[24, 33], [40, 34], [40, 28]] },
+    { after: 'p02_nightfall', type: 'stalker', x: 38, z: 36, group: 'alley', patrol: [[38, 36], [20, 36]] },
+    { after: 'p02_nightfall', type: 'stalker', x: -3, z: -42, group: 'avenue', patrol: [[-3, -42], [3, -58], [-4, -30]] },
+    { after: 'p02_nightfall', type: 'stalker', x: -48, z: -32, group: 'corvin', patrol: [[-48, -32], [-48, -18], [-52, -40]] },
+    { after: 'p02_nightfall', type: 'brute', x: 4, z: -66, group: 'north', patrol: [[4, -66], [-30, -68], [30, -68]] },
   ];
 
   const crates = [
-    { id: 'crate_tactical_1', type: 'tactical', x: 37.5, y: 0.15, z: -54, rot: 0.4, lockedUntil: { mission: 'm01_first_contact', step: 2 } },
+    { id: 'crate_tactical_1', type: 'tactical', x: 37.5, y: 0.15, z: -54, rot: 0.4, lockedUntil: { mission: 'm01_first_contact', step: 1 } },
     { id: 'crate_elite_roof', type: 'elite', x: -22, y: 9, z: -22, rot: -0.7 },
     { id: 'crate_supply_alley', type: 'supply', x: 41, y: 0.15, z: 33, rot: 0.2 },
     { id: 'crate_supply_safehouse', type: 'supply', x: -26, y: 0.15, z: 30, rot: 1.2 },
@@ -866,10 +903,11 @@ export function buildDowntown(scene, col, quality) {
   ];
 
   const spawn = { x: -30, y: 0.15, z: 22, yaw: Math.PI * 0.8 };
+  const schoolSpawn = { x: 25, y: 0.15, z: 37.5, yaw: Math.PI };
   const drawCalls = mergeStatic(root);
 
   return {
-    root, targets, enemySpawns, crates, spawn, drawCalls, smokeSources,
+    root, targets, enemySpawns, crates, spawn, schoolSpawn, drawCalls, smokeSources, setNight, setPower,
     update(dt, t, cam, player) {
       for (const u of updaters) u(dt, t, cam, player);
     },
