@@ -301,3 +301,128 @@ export function roadMarkTexture() {
   cache.set('marks', out);
   return out;
 }
+
+// ---------- Murs des bâtiments détaillés (1 répétition = 4 m) ----------
+function shade(hex, k) {
+  const c = new THREE.Color(hex);
+  c.offsetHSL(0, 0, k);
+  return '#' + c.getHexString();
+}
+
+export function wallTexture(kind, color) {
+  const key = `wall:${kind}:${color}`;
+  if (cache.has(key)) return cache.get(key);
+  const rand = mulberry32(kind.length * 131 + color.charCodeAt(1) * 7 + color.charCodeAt(3));
+  const S = 256;
+  const [c, x] = canvas(S, S);
+  x.fillStyle = color;
+  x.fillRect(0, 0, S, S);
+  if (kind === 'brick') {
+    // Briques (≈ 0,5 x 0,2 m) avec joints et légères variations.
+    x.fillStyle = shade(color, 0.22);
+    x.fillRect(0, 0, S, S);
+    const bw = 32;
+    const bh = 12;
+    for (let row = 0; row < S / bh; row++) {
+      for (let k = -1; k < S / bw + 1; k++) {
+        const px = k * bw + (row % 2) * (bw / 2) + 1.5;
+        const py = row * bh + 1.5;
+        x.fillStyle = shade(color, (rand() - 0.5) * 0.09);
+        roundRect(x, px, py, bw - 3, bh - 3, 2.5);
+        x.fill();
+        x.fillStyle = 'rgba(255,255,255,0.10)';
+        x.fillRect(px + 2, py + 1, bw - 8, 2);
+      }
+    }
+  } else if (kind === 'stucco' || kind === 'artdeco') {
+    for (let i = 0; i < 70; i++) {
+      x.fillStyle = `rgba(${rand() < 0.5 ? '255,255,255' : '40,20,60'},${0.03 + rand() * 0.04})`;
+      x.beginPath();
+      x.ellipse(rand() * S, rand() * S, 10 + rand() * 40, 6 + rand() * 20, rand() * 3, 0, Math.PI * 2);
+      x.fill();
+    }
+    x.fillStyle = 'rgba(40,20,60,0.10)';
+    for (let y = 0; y < S; y += 64) x.fillRect(0, y, S, 2);
+  } else if (kind === 'office' || kind === 'stone') {
+    // Panneaux / pierres de taille
+    const pw = kind === 'stone' ? 64 : 128;
+    const ph = kind === 'stone' ? 32 : 64;
+    for (let row = 0; row < S / ph; row++) {
+      for (let k = -1; k < S / pw + 1; k++) {
+        const px = k * pw + (kind === 'stone' ? (row % 2) * (pw / 2) : 0);
+        x.fillStyle = shade(color, (rand() - 0.5) * 0.06);
+        x.fillRect(px + 2, row * ph + 2, pw - 4, ph - 4);
+        x.fillStyle = 'rgba(255,255,255,0.12)';
+        x.fillRect(px + 3, row * ph + 3, pw - 8, 3);
+      }
+    }
+  } else if (kind === 'glass' || kind === 'glassLit') {
+    // Mur-rideau : panneaux de verre (1 m) avec reflets ; version émissive = bureaux allumés.
+    const lit = kind === 'glassLit';
+    x.fillStyle = lit ? '#000' : shade(color, -0.12);
+    x.fillRect(0, 0, S, S);
+    const p = S / 4;
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        if (lit) {
+          if (rand() < 0.3) {
+            x.fillStyle = ['#ffe27a', '#d0f4ff', '#ffd9a0'][Math.floor(rand() * 3)];
+            x.globalAlpha = 0.5 + rand() * 0.4;
+            x.fillRect(i * p + 4, j * p + 4, p - 8, p - 8);
+            x.globalAlpha = 1;
+          }
+        } else {
+          const g = x.createLinearGradient(i * p, j * p, i * p + p, j * p + p);
+          g.addColorStop(0, shade(color, 0.12));
+          g.addColorStop(1, shade(color, -0.08));
+          x.fillStyle = g;
+          x.fillRect(i * p + 3, j * p + 3, p - 6, p - 6);
+          x.strokeStyle = 'rgba(255,255,255,0.35)';
+          x.lineWidth = 3;
+          x.beginPath();
+          x.moveTo(i * p + 10, j * p + p * 0.6);
+          x.lineTo(i * p + p * 0.5, j * p + 10);
+          x.stroke();
+        }
+      }
+    }
+  }
+  const out = tex(c);
+  cache.set(key, out);
+  return out;
+}
+
+export function roofTexture() {
+  if (cache.has('roof')) return cache.get('roof');
+  const rand = mulberry32(99);
+  const [c, x] = canvas(256, 256);
+  x.fillStyle = '#6a6488';
+  x.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 1800; i++) {
+    x.fillStyle = rand() < 0.5 ? '#7a74a0' : '#58527a';
+    x.beginPath();
+    x.arc(rand() * 256, rand() * 256, 1 + rand() * 2.5, 0, Math.PI * 2);
+    x.fill();
+  }
+  x.strokeStyle = 'rgba(30,20,50,0.5)';
+  x.lineWidth = 3;
+  x.strokeRect(0, 0, 256, 256);
+  const out = tex(c);
+  cache.set('roof', out);
+  return out;
+}
+
+export function awningTexture() {
+  if (cache.has('awning')) return cache.get('awning');
+  const [c, x] = canvas(128, 64);
+  for (let i = 0; i < 8; i++) {
+    x.fillStyle = i % 2 ? '#ffffff' : '#c8c8d8';
+    x.fillRect(i * 16, 0, 16, 64);
+  }
+  // Bord festonné
+  x.fillStyle = 'rgba(0,0,0,0.25)';
+  x.fillRect(0, 56, 128, 8);
+  const out = tex(c);
+  cache.set('awning', out);
+  return out;
+}

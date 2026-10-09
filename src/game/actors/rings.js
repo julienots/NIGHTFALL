@@ -4,6 +4,7 @@
 // transitions entre modes sont donc toujours fluides.
 import * as THREE from 'three';
 import { toon } from '../fx/toon.js';
+import { bakeRigid } from '../core/bake.js';
 
 const N = 10;
 const _v = new THREE.Vector3();
@@ -39,6 +40,7 @@ export class RingSystem {
       g.add(outer, band);
       g.visible = false;
       g.traverse((o) => o.isMesh && (o.castShadow = true));
+      bakeRigid(g);
       scene.add(g);
       this.rings.push({ g, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), scale: 1, spin: Math.random() * 6, side: i < 5 ? 'R' : 'L', k: i % 5 });
     }

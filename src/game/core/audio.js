@@ -372,6 +372,12 @@ export class AudioEngine {
     this.#tone({ type: 'sawtooth', f0: 55, f1: 110, dur: 3.5, peak: 0.25, attack: 1 });
   }
 
+  honk(pos) {
+    if (!this.ctx) return;
+    const dest = this.#spatial(pos, 45);
+    for (const f of [392, 494]) this.#tone({ type: 'square', f0: f, dur: 0.35, peak: 0.08, attack: 0.02, dest });
+  }
+
   phoneBuzz() {
     if (!this.ctx) return;
     for (let i = 0; i < 2; i++) this.#tone({ type: 'square', f0: 180, dur: 0.12, peak: 0.08, delay: i * 0.18 });

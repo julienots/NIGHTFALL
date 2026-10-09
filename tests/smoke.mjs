@@ -85,11 +85,50 @@ const p0 = await G(() => ({ ...window.__nightfall.hero.pos }));
 await hold(['up'], 1.5);
 const p1 = await G(() => ({ ...window.__nightfall.hero.pos }));
 check('déplacement', Math.hypot(p1.x - p0.x, p1.z - p0.z) > 6, `${Math.hypot(p1.x - p0.x, p1.z - p0.z).toFixed(1)} m`);
+// Directions : « droite » doit déplacer Noa vers la droite de l'écran (projection caméra).
+for (const [act, sign] of [['right', 1], ['left', -1]]) {
+  const r = await G(([act]) => {
+    const g = window.__nightfall;
+    g.simulate(0.5);
+    g.renderOnce();
+    g.camera.updateMatrixWorld();
+    // Axe « droite » réel de la caméra (1re colonne de sa matrice monde).
+    const camRight = g.hero.pos.clone().setFromMatrixColumn(g.camera.matrixWorld, 0).setY(0).normalize();
+    const before = g.hero.pos.clone();
+    g.input.down.add(act); g.simulate(0.4); g.input.down.delete(act);
+    return g.hero.pos.clone().sub(before).dot(camRight);
+  }, [act]);
+  check(`commande « ${act === 'right' ? 'droite' : 'gauche'} » dans le bon sens à l'écran`, r * sign > 0.5, `${r.toFixed(2)} m`);
+}
 await press('jump', 0.3);
 check('saut', (await G(() => window.__nightfall.hero.pos.y)) > 1.0);
 await sim(1);
 await press('light', 0.3);
 check('pas de combat avant les pouvoirs', (await G(() => window.__nightfall.hero.action)) === null);
+
+// Ville vivante : feux, circulation, arrêt devant un piéton
+const city0 = await G(() => {
+  const g = window.__nightfall; const st = g.world.street;
+  const lights = new Set(); let moving = 0;
+  for (let i = 0; i < 30; i++) { g.simulate(1); lights.add(st.lightState('NS') + '/' + st.lightState('EW')); }
+  moving = st.cars.filter((c) => c.v > 3 && !c.bus).length;
+  return { lights: [...lights], moving, cars: st.cars.length };
+});
+check('feux tricolores qui cyclent', city0.lights.length >= 3, city0.lights.join(' '));
+check('circulation en mouvement', city0.moving >= 3, `${city0.moving}/${city0.cars} voitures roulent`);
+const stopTest = await G(() => {
+  const g = window.__nightfall; const st = g.world.street;
+  const c = st.cars.filter((x) => x.lane.id === 'S' && x.s > -70 && x.s < -35 && !x.bus).sort((a, b) => b.s - a.s)[0] || st.cars.find((x) => x.lane.id === 'S');
+  c.s = -50; c.v = 10;
+  // Noa se plante au milieu de la voie, devant la voiture.
+  const hx = c.lane.base[0], hz = c.lane.base[1] + c.lane.dir[1] * (-50 + 10);
+  g.hero.placeAt({ x: hx, y: 0, z: hz }, 0);
+  g.simulate(3);
+  const gap = (hz - (c.lane.base[1] + c.lane.dir[1] * c.s)) * c.lane.dir[1];
+  return { v: c.v, gap };
+});
+check('une voiture s’arrête devant Noa', stopTest.v < 0.3 && stopTest.gap > 2, JSON.stringify(stopTest));
+await place(25, 0.15, 37.5, Math.PI);
 
 // Parler à Inès
 const ines = await G(() => ({ ...window.__nightfall.story.ines.pos }));
@@ -104,6 +143,9 @@ await sim(34);
 await shot('03_message_maman');
 const s1 = await G(() => window.__nightfall.missions.state.p01_after_school.step);
 check('dialogue Inès terminé', s1 === 1);
+await sim(30);
+const busT = await G(() => ({ ines: window.__nightfall.story.ines.mode, bus: !!window.__nightfall.world.street.traffic.bus }));
+check('Inès prend le bus 12', busT.ines === 'gone', JSON.stringify(busT));
 
 // Place Halden -> le Nightfall
 await place(0, 0.15, 5, Math.PI);
@@ -118,6 +160,8 @@ const nf = await G(() => {
   const g = window.__nightfall;
   return { st: g.story.stage(), night: g.night, chaser: !!g.enemies.find((e) => e.spawn.group === 'chaser'), cine: g.story.inCinematic, fled: g.story.npcs.filter((n) => n.mode === 'flee' || n.mode === 'gone').length };
 });
+const after = await G(() => { const st = window.__nightfall.world.street; return { on: st.traffic.on, parked: st.cars.filter((c) => c.parked).length, cars: st.cars.length }; });
+check('après le Nightfall : circulation arrêtée, voitures abandonnées', !after.on && after.parked === after.cars, JSON.stringify(after));
 check('après le Nightfall : nuit, poursuivant, passants en fuite', nf.st === 'chase' && nf.night === 1 && nf.chaser && !nf.cine && nf.fled >= 5, JSON.stringify(nf));
 
 // Fuite vers le parking (la créature poursuit vraiment)
@@ -204,7 +248,8 @@ await hold(['jump'], 1.5);
 await shot('11_vol_stationnaire');
 const yUp = await G(() => window.__nightfall.hero.pos.y);
 check('monter en vol', yUp > 10, `y=${yUp.toFixed(1)}`);
-await G(() => { window.__nightfall.camPitch = 0.1; });
+// Trajectoire dégagée au-dessus de l'avenue (évite les immeubles).
+await G(() => { const g = window.__nightfall; g.hero.pos.set(0, 45, 40); g.hero.vel.set(0, 0, 0); g.hero.vy = 0; g.camYaw = Math.PI; g.camPitch = 0.1; });
 await hold(['up'], 1.5);
 const cruise = await G(() => ({ mode: window.__nightfall.hero.flightMode, pitch: window.__nightfall.hero.flyPitch }));
 check('vol en avant (corps incliné)', cruise.mode === 'fly' && cruise.pitch > 0.6, JSON.stringify(cruise));

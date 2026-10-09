@@ -64,6 +64,16 @@ export class Npc {
     this.play('scared', 0.6);
   }
 
+  // Suit une liste de points puis passe dans l'état `then`.
+  walkPath(points, speed = 1.6, then = 'idle') {
+    this.route = points.map(([x, z]) => new THREE.Vector3(x, 0, z));
+    this.ri = 0;
+    this.mode = 'walk';
+    this.path = true;
+    this.once = then;
+    this.speed = speed;
+  }
+
   walkTo(x, z, speed = 1.6, then = 'idle') {
     this.route = [new THREE.Vector3(x, 0, z)];
     this.ri = 0;
@@ -73,7 +83,10 @@ export class Npc {
   }
 
   update(dt) {
-    if (this.mode === 'gone') return;
+    if (this.mode === 'gone') {
+      this.model.root.visible = false;
+      return;
+    }
     // Les passants éloignés ne sont ni animés ni dessinés (économie d'appels de dessin).
     const far = this.pos.distanceTo(this.game.hero.pos) > 70;
     this.model.root.visible = !far;
@@ -92,9 +105,13 @@ export class Npc {
       const d = Math.hypot(dx, dz);
       if (d < 0.5) {
         if (this.mode === 'walk') {
-          if (this.once) {
+          if (this.path && this.ri < this.route.length - 1) {
+            this.ri++;
+          } else if (this.once) {
+            this.path = false;
             this.mode = this.once;
             this.once = null;
+            this.onArrive?.();
           } else {
             this.ri = (this.ri + 1) % this.route.length;
             this.wait = 1 + Math.random() * 3;
@@ -117,7 +134,7 @@ export class Npc {
       this.yaw += d * (1 - Math.exp(-6 * dt));
     }
     this.pos.y = col.groundHeight(this.pos.x, this.pos.z, this.radius, this.pos.y);
-    this.phase += dt * 8 * Math.min(1.6, moving / 3);
+    this.phase += (moving / (1.3 + 1.4 * Math.min(1.6, moving / 5.8))) * Math.PI * 2 * dt;
     if (this.anim) {
       this.animT += dt;
       if (this.animT >= this.animDur) this.anim = null;
@@ -131,7 +148,7 @@ export class Npc {
       }
     }
     this.model.animate({
-      dt, speed: moving / 3.4, phase: this.phase, airborne: false, vy: 0,
+      dt, speed: moving / 5.8 * 1.6, phase: this.phase, airborne: false, vy: 0,
       anim: this.anim, animP: this.anim ? Math.min(1, this.animT / this.animDur) : 0,
     });
     this.model.root.position.copy(this.pos);

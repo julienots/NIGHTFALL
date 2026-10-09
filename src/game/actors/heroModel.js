@@ -5,6 +5,7 @@
 // (vol à plat, virages, atterrissage).
 import * as THREE from 'three';
 import { toon } from '../fx/toon.js';
+import { bakeJoints } from '../core/bake.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => t * t * (3 - 2 * t);
@@ -140,6 +141,8 @@ export class HeroModel {
     this.root.traverse((o) => {
       if (o.isMesh) o.castShadow = true;
     });
+    // Fusion des pièces fixes de chaque articulation (≈ 3x moins d'appels de dessin).
+    bakeJoints(this.root, new Set([this.phone, this.mouth, this.ponytail, this.bagFlap, ...(this.brows || [])].filter(Boolean)));
   }
 
   #pivot(name, parent, x, y, z) {
@@ -179,7 +182,7 @@ export class HeroModel {
     if (withBag) {
       const bag = this.#mesh(new THREE.CapsuleGeometry(0.14, 0.16, 4, 12), M.bag, spine, 0, 0.3, -0.22);
       bag.scale.set(1.2, 1, 0.7);
-      this.#mesh(new THREE.BoxGeometry(0.2, 0.1, 0.05), M.hoodie2, spine, 0, 0.22, -0.31);
+      this.bagFlap = this.#mesh(new THREE.BoxGeometry(0.2, 0.1, 0.05), M.hoodie2, spine, 0, 0.22, -0.31);
       for (const sx of [-1, 1]) this.#mesh(new THREE.TorusGeometry(0.11, 0.015, 6, 12, Math.PI), M.bag, spine, sx * 0.12, 0.38, -0.05, 0, Math.PI / 2, 0);
       this.backpack = bag;
     }
@@ -245,10 +248,11 @@ export class HeroModel {
       this.#mesh(new THREE.CapsuleGeometry(0.075, 0.28, 4, 10), M.pants, hip, 0, -0.2, 0);
       const kn = this.#pivot('kn' + side, hip, 0, -0.41, 0);
       this.#mesh(new THREE.CapsuleGeometry(0.065, 0.28, 4, 10), M.pants, kn, 0, -0.18, 0);
-      const shoe = this.#mesh(new THREE.SphereGeometry(0.075, 14, 10), M.shoe, kn, 0, -0.43, 0.05);
+      // Cheville : le pied déroule du talon à la pointe.
+      const an = this.#pivot('an' + side, kn, 0, -0.4, 0);
+      const shoe = this.#mesh(new THREE.SphereGeometry(0.075, 14, 10), M.shoe, an, 0, -0.03, 0.05);
       shoe.scale.set(1.1, 0.7, 1.7);
-      const sole = this.#mesh(new THREE.BoxGeometry(0.15, 0.03, 0.25), M.sole, kn, 0, -0.475, 0.05);
-      sole.scale.z = 1;
+      this.#mesh(new THREE.BoxGeometry(0.15, 0.03, 0.25), M.sole, an, 0, -0.075, 0.05);
     }
   }
 
@@ -259,9 +263,11 @@ export class HeroModel {
   }
 
   setBackpack(on) {
-    if (this.backpack) this.backpack.parent.children.forEach((c) => {
-      if (c === this.backpack || (c.material === this.mats.bag)) c.visible = on;
+    if (!this.backpack) return;
+    this.joints.spine.children.forEach((c) => {
+      if (c.material === this.mats.bag) c.visible = on;
     });
+    if (this.bagFlap) this.bagFlap.visible = on;
   }
 
   // Expression : 'neutral' | 'worried' | 'angry' | 'determined'
@@ -269,6 +275,85 @@ export class HeroModel {
     const tilt = { neutral: -0.12, worried: 0.35, angry: -0.45, determined: -0.3 }[e] ?? -0.12;
     this.brows?.forEach((b, i) => (b.rotation.z = (i === 0 ? -1 : 1) * tilt));
     if (this.mouth) this.mouth.rotation.z = e === 'worried' ? 0 : Math.PI;
+  }
+
+  // Marche / course / repos, fondés sur les phases réelles de la foulée :
+  // attaque du talon, mise en charge, poussée, oscillation. Le bassin monte et
+  // descend deux fois par cycle, pivote avec la jambe avant et bascule ; le buste
+  // contre-tourne, la tête se stabilise, les bras balancent en opposition.
+  #locomotion(set, s, t, sp, ph) {
+    const g = Math.min(1, Math.max(0, (sp - 0.04) / 0.3)); // poids de la marche vs repos
+    const a = Math.min(1.6, sp); // amplitude (1 = course, > 1 = sprint)
+    const run = Math.min(1, Math.max(0, (sp - 0.55) / 0.5)); // 0 marche -> 1 course
+    const leg = (p) => {
+      // p = 0 : talon devant au contact ; p = π : orteils derrière.
+      const hip = -(0.32 + 0.38 * a) * Math.cos(p);
+      const swing = Math.max(0, Math.sin(p - Math.PI)); // phase d'oscillation
+      const load = Math.max(0, Math.sin(p)) * Math.max(0, Math.cos(p * 0.5)); // amorti après contact
+      const knee = 0.08 + (0.9 + 0.7 * run) * a * swing ** 0.9 + (0.12 + 0.2 * run) * load;
+      // Cheville : pointe relevée au contact, poussée en fin d'appui, pied à plat en l'air.
+      const ankle = -0.22 * Math.max(0, Math.cos(p)) ** 3 + (0.35 + 0.35 * run) * Math.max(0, Math.sin(p - Math.PI * 0.55)) ** 4 * (p < Math.PI * 1.25 ? 1 : 0) - 0.08 * swing;
+      return [hip, knee, ankle];
+    };
+    const [hR, kR, aR] = leg(ph % (Math.PI * 2));
+    const [hL, kL, aL] = leg((ph + Math.PI) % (Math.PI * 2));
+    const pelvisYaw = 0.1 * a * Math.cos(ph);
+    const pelvisRoll = 0.05 * a * Math.sin(ph);
+    const bob = -(0.025 + 0.035 * run) * a * Math.cos(2 * ph - 0.5);
+    const lean = 0.04 + 0.1 * a + 0.16 * run + (s.accel || 0);
+    const armA = (0.22 + 0.42 * a) * (1 + 0.3 * run);
+    const elbow = -(0.25 + 0.55 * a + 0.5 * run);
+
+    // Repos : transfert du poids, respiration, regard qui erre.
+    const shift = Math.sin(t * 0.45);
+    const br = Math.sin(t * 1.7) * 0.018;
+    const look = Math.sin(t * 0.31) * 0.35 + Math.sin(t * 0.83) * 0.12;
+    const idle = {
+      spine: [0.03 + br, -shift * 0.03, 0],
+      head: [-0.02 + Math.sin(t * 0.5) * 0.04, look, 0],
+      shR: [0.04, 0, -0.09 - br], elR: [-0.22 - br * 2, 0, 0],
+      shL: [0.04, 0, 0.09 + br], elL: [-0.22 - br * 2, 0, 0],
+      hipR: [-0.04 + shift * 0.05, 0.08, -0.02 + shift * 0.03], knR: [0.06 + Math.max(0, shift) * 0.18, 0, 0], anR: [-0.02 - Math.max(0, shift) * 0.1, 0, 0],
+      hipL: [0.03 - shift * 0.05, -0.08, 0.02 + shift * 0.03], knL: [0.06 + Math.max(0, -shift) * 0.18, 0, 0], anL: [-0.02 - Math.max(0, -shift) * 0.1, 0, 0],
+      hips: [0, 0, shift * 0.035],
+      drop: [0, -0.01 - Math.abs(shift) * 0.012 + br * 0.3, 0],
+    };
+    // Petits pas sur place quand on pivote à l'arrêt.
+    const turnStep = Math.min(1, Math.abs(s.turn || 0) * 0.6) * (1 - g);
+    const ts = Math.sin(t * 9);
+    const gait = {
+      spine: [lean, -pelvisYaw * 0.7, 0],
+      head: [-lean * 0.6, pelvisYaw * 0.6, -pelvisRoll * 0.5],
+      shR: [armA * Math.cos(ph), 0, -0.1 - 0.05 * run], elR: [elbow - 0.2 * Math.max(0, -Math.cos(ph)), 0, 0],
+      shL: [-armA * Math.cos(ph), 0, 0.1 + 0.05 * run], elL: [elbow - 0.2 * Math.max(0, Math.cos(ph)), 0, 0],
+      hipR: [hR, 0, 0], knR: [kR, 0, 0], anR: [aR, 0, 0],
+      hipL: [hL, 0, 0], knL: [kL, 0, 0], anL: [aL, 0, 0],
+      hips: [0, pelvisYaw, pelvisRoll],
+      drop: [0, bob - 0.02 * a - 0.03 * run, 0],
+    };
+    for (const k of Object.keys(gait)) {
+      const i = idle[k] || [0, 0, 0];
+      const w = gait[k];
+      set(k, i[0] + (w[0] - i[0]) * g, i[1] + (w[1] - i[1]) * g, i[2] + (w[2] - i[2]) * g);
+    }
+    if (turnStep > 0.05) {
+      set('hipR', -0.25 * turnStep * Math.max(0, ts));
+      set('knR', 0.5 * turnStep * Math.max(0, ts));
+      set('hipL', -0.25 * turnStep * Math.max(0, -ts));
+      set('knL', 0.5 * turnStep * Math.max(0, -ts));
+    }
+    // Amorti de réception après un saut (genoux qui plient puis se redressent).
+    if (s.land > 0) {
+      const k = s.land;
+      set('knR', 0.9 * k);
+      set('knL', 0.9 * k);
+      set('hipR', -0.55 * k);
+      set('hipL', -0.55 * k);
+      set('anR', -0.35 * k);
+      set('anL', -0.35 * k);
+      set('spine', 0.35 * k);
+      set('drop', 0, -0.2 * k, 0);
+    }
   }
 
   // s : { dt, speed, phase, airborne, vy, anim, animP, dodge, hurt, lean, dead, deadP,
@@ -336,33 +421,8 @@ export class HeroModel {
       set('knR', up ? 1.6 : 0.5);
       set('hipL', up ? -0.2 : -0.7);
       set('knL', up ? 0.6 : 0.9);
-    } else if (sp > 0.05) {
-      const a = Math.min(sp, 1.5);
-      const sw = Math.sin(ph);
-      set('hipR', -sw * 0.75 * a);
-      set('hipL', sw * 0.75 * a);
-      set('knR', (Math.max(0, Math.cos(ph)) * 1.2 + 0.15) * a);
-      set('knL', (Math.max(0, -Math.cos(ph)) * 1.2 + 0.15) * a);
-      set('shR', sw * 0.7 * a, 0, -0.1);
-      set('shL', -sw * 0.7 * a, 0, 0.1);
-      set('elR', -0.4 - a * 0.7);
-      set('elL', -0.4 - a * 0.7);
-      set('spine', 0.06 + a * 0.16, sw * 0.12 * a);
-      set('hips', 0, -sw * 0.15 * a);
-      set('drop', 0, Math.abs(Math.cos(ph)) * 0.05 * a - 0.03 * a);
     } else {
-      // Repos : respiration, mains relâchées, regard qui se balade.
-      const br = Math.sin(t * 1.8) * 0.02;
-      set('spine', 0.03 + br);
-      set('head', -0.02, Math.sin(t * 0.4) * 0.25);
-      set('shR', 0.05, 0, -0.1);
-      set('shL', 0.05, 0, 0.1);
-      set('elR', -0.25 - br * 2);
-      set('elL', -0.25 - br * 2);
-      set('hipR', -0.05);
-      set('hipL', 0.05);
-      set('knR', 0.08);
-      set('knL', 0.05);
+      this.#locomotion(set, s, t, sp, ph);
     }
 
     if (s.anim && ATTACK_ANIMS[s.anim]) {
@@ -411,9 +471,9 @@ export class HeroModel {
       set('drop', 0, -0.5 * d);
     }
 
-    const rate = s.anim || s.dodge || s.hurt > 0 || s.shield ? 26 : s.flight ? 8 : 12;
+    const rate = s.anim || s.dodge || s.hurt > 0 || s.shield ? 26 : s.flight ? 8 : s.land > 0 ? 30 : 18;
     const k = 1 - Math.exp(-rate * dt);
-    for (const name of ['spine', 'head', 'shR', 'elR', 'shL', 'elL', 'hipR', 'knR', 'hipL', 'knL', 'hips', 'drop']) {
+    for (const name of ['spine', 'head', 'shR', 'elR', 'shL', 'elL', 'hipR', 'knR', 'anR', 'hipL', 'knL', 'anL', 'hips', 'drop']) {
       const target = pose[name] || [0, 0, 0];
       const cur = this.current[name] || (this.current[name] = [0, 0, 0]);
       for (let i = 0; i < 3; i++) cur[i] += (target[i] - cur[i]) * k;

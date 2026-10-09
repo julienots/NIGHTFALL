@@ -58,10 +58,19 @@ export class Story {
   }
 
   // ---------- Initialisation selon la sauvegarde ----------
+  // Ville « vivante » (prologue) ou « abandonnée » (après le Nightfall).
+  #cityState(night, instant) {
+    const w = this.game.world;
+    w.street.setTraffic(!night);
+    w.setBarricades(night);
+    if (night) w.toppleMonument(instant);
+  }
+
   init(isNew) {
     const g = this.game;
     const st = this.stage();
     g.setNight(st === 'prologue' ? 0 : 1);
+    this.#cityState(st !== 'prologue', true);
     g.hero.setPowers(this.powers());
     this.#updateHint(true);
     g.hud.setName('NOA');
@@ -117,10 +126,11 @@ export class Story {
     this.ines = new Npc(g, { id: 'ines', name: 'Inès', palette: 'ines', x: 21.8, z: 35.2, yaw: Math.PI / 2 });
     this.npcs.push(this.ines);
     const routes = [
-      [[12, 30], [12, 12.5], [30, 10.5]], [[-10.5, 30], [-10.5, 50]], [[30, 10.5], [55, 10.5]], [[-30, 10.5], [-55, 10.5]],
-      [[10.5, -20], [10.5, -50]], [[-10.5, -14], [-10.5, -50]], [[18, 27], [38, 27]], [[-5, 10], [5, 10], [5, -10], [-5, -10]],
+      [[9.6, 30], [9.6, 12], [30, 9.4]], [[-9.6, 28], [-9.6, 50]], [[34, 9.4], [55, 9.4]], [[-33, 9.4], [-55, 9.4]],
+      [[9.6, -28], [9.6, -50]], [[-9.6, -17], [-9.6, -50]], [[18, 28.5], [28.5, 28.5]], [[-12, 9.4], [-28, 9.4]],
     ];
-    routes.forEach((r, i) => this.npcs.push(new Npc(g, { id: 'civ' + i, seed: 100 + i * 17, x: r[0][0], z: r[0][1], route: r })));
+    const n = g.settings.quality === 'low' ? 5 : routes.length;
+    routes.slice(0, n).forEach((r, i) => this.npcs.push(new Npc(g, { id: 'civ' + i, seed: 100 + i * 17, x: r[0][0], z: r[0][1], route: r })));
   }
 
   // Valise Aegis lumineuse dans la camionnette accidentée.
@@ -232,7 +242,17 @@ export class Story {
       },
     }));
     steps.push({ wait: 3.6, do: () => {
-      ines.walkTo(60, 11, 1.8, 'gone');
+      // Inès rejoint l'abribus ; le bus 12 arrive, elle monte, il repart.
+      const stop = g.world.street.busStop;
+      ines.walkPath([[29.2, 31], [29.2, 9.8], [stop.x + 0.6, stop.z]], 2.0, 'idle');
+      ines.onArrive = () => ines.faceTo(new THREE.Vector3(stop.x, 0, 0));
+      g.world.street.callBus({
+        wait: 3,
+        waitFor: () => ines.mode === 'idle' || ines.mode === 'gone',
+        onDepart: () => {
+          ines.mode = 'gone';
+        },
+      });
       g.missionEvents(g.missions.handle({ type: 'interact', target: 'ines' }));
     } });
     steps.push({ wait: 2.5, do: () => {
@@ -268,6 +288,10 @@ export class Story {
       { wait: 1.6, do: () => {
         g.world.setPower(false);
         g.audio.blackout();
+        // Le séisme fait tomber le haut de l'obélisque ; la circulation s'arrête.
+        g.world.toppleMonument();
+        g.world.street.setTraffic(false);
+        g.shake(0.8);
       } },
       { wait: 0.3, do: () => g.world.setPower(true) },
       { wait: 0.2, do: () => g.world.setPower(false) },
@@ -293,6 +317,7 @@ export class Story {
       cinematic: true,
       onEnd: () => {
         g.setNight(1);
+        this.#cityState(true, false);
         this.nightTween = null;
         for (const npc of this.npcs) npc.flee(hp);
         this.#ensureCase();

@@ -4,10 +4,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { toon, PALETTE } from '../fx/toon.js';
+import { toon } from '../fx/toon.js';
+import { createBuildingKit } from './buildings.js';
+import { buildStreet } from './street.js';
 import { mulberry32 } from '../core/rng.js';
 import {
-  facadeTextures, asphaltTextures, sidewalkTexture, ribbedTexture, riftTexture, signTexture, roadMarkTexture,
+  asphaltTextures, sidewalkTexture, ribbedTexture, riftTexture, signTexture, roadMarkTexture,
 } from './textures.js';
 
 // Matériau cartoon à partir de paramètres « standard » (rugosité/métal ignorés).
@@ -111,143 +113,84 @@ export function buildDowntown(scene, col, quality) {
     root.add(curb);
   }
 
-  // ---------- Bâtiments ----------
-  const facadeMats = {};
-  const facadeMat = (style, seed) => {
-    const k = style + seed;
-    if (!facadeMats[k]) {
-      const f = facadeTextures(style, seed);
-      facadeMats[k] = M({
-        map: f.map,
-        emissiveMap: f.emissive,
-        emissive: new THREE.Color('#ffffff'),
-        emissiveIntensity: 1.1
-      });
-    }
-    return facadeMats[k];
-  };
-
+  // ---------- Bâtiments détaillés (voir buildings.js) ----------
+  const kit = createBuildingKit(root, col, rand, quality);
   function building(x0, z0, x1, z1, h, style, opts = {}) {
-    const w = x1 - x0;
-    const d = z1 - z0;
-    const geo = new THREE.BoxGeometry(w, h, d);
-    // UV en unités monde : 1 répétition = 8 travées x 8 étages.
-    const uv = geo.attributes.uv;
-    const sizes = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
-    const ou = Math.floor(rand() * 8) / 8;
-    for (let f = 0; f < 6; f++) {
-      const [su, sv] = sizes[f];
-      for (let v = 0; v < 4; v++) {
-        const i = f * 4 + v;
-        uv.setXY(i, uv.getX(i) * (su / (BAY * 8)) + ou, uv.getY(i) * (sv / (FLOOR * 8)));
-      }
-    }
-    const fm = facadeMat(style, opts.seed ?? Math.floor(rand() * 8));
-    const mesh = new THREE.Mesh(geo, [fm, fm, roofMat, roofMat, fm, fm]);
-    mesh.position.set((x0 + x1) / 2, h / 2, (z0 + z1) / 2);
-    mesh.castShadow = h < 30;
-    mesh.receiveShadow = true;
-    root.add(mesh);
-    if (!opts.noCollide) col.addBox({ x: x0, y: 0, z: z0 }, { x: x1, y: h, z: z1 }, 'building');
-
-    // Acrotère (praticable sur les toits accessibles)
-    const p = 0.45;
-    const parapet = [
-      [x0, z0, x1, z0 + 0.3], [x0, z1 - 0.3, x1, z1], [x0, z0, x0 + 0.3, z1], [x1 - 0.3, z0, x1, z1],
-    ];
-    for (const [a, b, c, e] of parapet) {
-      const pm = new THREE.Mesh(new THREE.BoxGeometry(c - a, p, e - b), concreteMat);
-      pm.position.set((a + c) / 2, h + p / 2, (b + e) / 2);
-      root.add(pm);
-      if (opts.walkableRoof) col.addBox({ x: a, y: h, z: b }, { x: c, y: h + p, z: e });
-    }
-    // Équipements de toit
-    if (!opts.bareRoof) {
-      const n = 1 + Math.floor(rand() * 3);
-      for (let i = 0; i < n; i++) {
-        const sx = 1.5 + rand() * 2.5;
-        const sz = 1.5 + rand() * 2;
-        const sy = 1 + rand() * 1.5;
-        const ax = x0 + 2 + rand() * Math.max(0.1, w - 4 - sx);
-        const az = z0 + 2 + rand() * Math.max(0.1, d - 4 - sz);
-        const ac = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), darkMetal);
-        ac.position.set(ax + sx / 2, h + sy / 2, az + sz / 2);
-        ac.castShadow = true;
-        root.add(ac);
-        if (opts.walkableRoof) col.addCentered(ax + sx / 2, h, az + sz / 2, sx, sy, sz);
-      }
-    }
-    // Rez-de-chaussée : bandeau sombre + enseigne éventuelle
-    const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 3.2, d + 0.2), M({ color: '#2b2050' }));
-    band.position.set((x0 + x1) / 2, 1.6, (z0 + z1) / 2);
-    root.add(band);
+    const res = kit.building(x0, z0, x1, z1, h, style, { ...opts, noShops: opts.noShops || !!opts.sign });
     if (opts.sign) {
+      // Grande enseigne du bâtiment au-dessus de l'entrée principale.
       const [text, color, face] = opts.sign;
-      const sm = new THREE.Mesh(
-        new THREE.PlaneGeometry(Math.min(w * 0.7, 10), 2.2),
-        M({ map: signTexture(text, color), emissiveMap: signTexture(text, color), emissive: '#ffffff', emissiveIntensity: 1.6 }),
-      );
-      const faces = {
-        n: [(x0 + x1) / 2, z0 - 0.15, Math.PI], s: [(x0 + x1) / 2, z1 + 0.15, 0],
-        w: [x0 - 0.15, (z0 + z1) / 2, -Math.PI / 2], e: [x1 + 0.15, (z0 + z1) / 2, Math.PI / 2],
+      const w = face === 'n' || face === 's' ? x1 - x0 : z1 - z0;
+      const tex = signTexture(text, color);
+      const sm = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(w * 0.7, 10), 1.9), new THREE.MeshBasicMaterial({ map: tex }));
+      const pos = {
+        n: [(x0 + x1) / 2, z0 - 0.2, Math.PI], s: [(x0 + x1) / 2, z1 + 0.2, 0],
+        w: [x0 - 0.2, (z0 + z1) / 2, -Math.PI / 2], e: [x1 + 0.2, (z0 + z1) / 2, Math.PI / 2],
       };
-      const [sx, sz, ry] = faces[face];
-      sm.position.set(sx, 4.4, sz);
+      const [sx, sz, ry] = pos[face];
+      sm.position.set(sx, 3.15, sz);
       sm.rotation.y = ry;
       root.add(sm);
+      // Porte vitrée sous l'enseigne
+      const door = new THREE.Mesh(new THREE.PlaneGeometry(3, 2.2), new THREE.MeshBasicMaterial({ color: '#ffe8b0' }));
+      door.position.set(sx + Math.sin(ry) * 0.02, 1.25, sz + Math.cos(ry) * 0.02);
+      door.rotation.y = ry;
+      root.add(door);
       const glow = new THREE.PointLight(color, 0, 14, 2);
-      glow.position.set(sx + Math.sin(ry) * 1.5, 4, sz + Math.cos(ry) * 1.5);
+      glow.position.set(sx + Math.sin(ry) * 1.5, 3.2, sz + Math.cos(ry) * 1.5);
       lampLights.push({ light: glow, priority: 1, base: 6 });
       root.add(glow);
     }
-    return mesh;
+    return res;
   }
 
-  // Périmètre : tours continues qui ferment la zone de façon naturelle.
+  // Périmètre : tours continues qui ferment la zone ; seule la façade côté ville est détaillée.
   const ring = (a0, a1, side) => {
     let a = a0;
+    const face = { n: 's', s: 'n', w: 'e', e: 'w' }[side];
     while (a < a1) {
       const len = Math.min(a1 - a, 14 + rand() * 16);
       const h = 30 + rand() * 50;
       const depth = 18 + rand() * 10;
       const style = ['concrete', 'glass', 'brick'][Math.floor(rand() * 3)];
-      if (side === 'n') building(a, -76 - depth, a + len, -76, h, style, { bareRoof: true });
-      if (side === 's') building(a, 76, a + len, 76 + depth, h, style, { bareRoof: true });
-      if (side === 'w') building(-76 - depth, a, -76, a + len, h, style, { bareRoof: true });
-      if (side === 'e') building(76, a, 76 + depth, a + len, h, style, { bareRoof: true });
+      const o = { bareRoof: true, faces: [face] };
+      if (side === 'n') building(a, -76 - depth, a + len, -76, h, style, o);
+      if (side === 's') building(a, 76, a + len, 76 + depth, h, style, o);
+      if (side === 'w') building(-76 - depth, a, -76, a + len, h, style, o);
+      if (side === 'e') building(76, a, 76 + depth, a + len, h, style, o);
       a += len;
     }
   };
-  // Les avenues traversent le périmètre : barrages de quarantaine aux sorties.
   ring(-104, -8, 'n'); ring(8, 104, 'n');
   ring(-104, -8, 's'); ring(8, 104, 's');
   ring(-76, -8, 'w'); ring(8, 76, 'w');
   ring(-76, -8, 'e'); ring(8, 76, 'e');
 
   // Q1 — bloc du refuge
-  building(-60, 10, -46, 30, 22, 'concrete');
+  building(-60, 10, -46, 30, 22, 'concrete', { style: 'stucco' });
   building(-27, 38, -10, 60, 34, 'glass');
   building(-62, 36, -32, 60, 8, 'brick', { seed: 2, sign: ['REFUGE', '#ffb347', 'e'] });
-  building(-62, 30, -47, 36, 12, 'brick');
+  building(-62, 30, -47, 36, 12, 'brick', { billboard: ['AEGIS — BÂTIR DEMAIN', '#ffffff', '#3d8fd1'], billboardFace: 'e' });
 
   // Q2 — bloc commerçant + ruelle
   building(10, 11, 28, 26, 14, 'brick', { sign: ['NOVA MARKET', '#4dd2ff', 'n'] });
   building(32, 11, 59, 24, 42, 'glass');
-  building(12, 40, 40, 59, 18, 'concrete', { seed: 4, sign: ['LYCÉE VESPER-NORD', '#ffffff', 'n'] });
-  building(44, 32, 59, 59, 26, 'concrete', { sign: ['HOTEL LUMEN', '#ff4d6d', 'w'] });
+  building(12, 40, 40, 59, 18, 'concrete', { style: 'office', seed: 4, sign: ['LYCÉE VESPER-NORD', '#ffffff', 'n'] });
+  building(44, 32, 59, 59, 26, 'concrete', { style: 'stucco', seed: 5, sign: ['HOTEL LUMEN', '#ff4d6d', 'w'] });
 
   // Q3 — immeuble Corvin (toit accessible) et voisins
-  building(-40, -40, -16, -16, 9, 'concrete', { walkableRoof: true, seed: 1, sign: ['CORVIN', '#9be35a', 'e'] });
+  building(-40, -40, -16, -16, 9, 'brick', { walkableRoof: true, seed: 1, sign: ['CORVIN', '#9be35a', 'e'] });
   building(-60, -60, -46, -44, 36, 'glass');
   building(-36, -60, -10, -46, 24, 'brick');
   building(-60, -14, -48, -10, 6, 'brick');
 
   // Q4 — parking Halden : bâtiment du fond
-  building(48, -60, 60, -12, 20, 'concrete', { sign: ['PARKING', '#ffcd20', 'w'] });
+  building(48, -60, 60, -12, 20, 'concrete', { style: 'office', sign: ['PARKING', '#ffcd20', 'w'], billboard: ['VESPER FM 98.4', '#ffcd20', '#7b4ad6'], billboardFace: 'w' });
+  kit.finalize();
 
   // ---------- Place Halden (centre) ----------
   const plaza = new THREE.Mesh(
-    new THREE.CircleGeometry(7, 48),
+    new THREE.CircleGeometry(2.7, 40),
     M({ color: '#5b4f9a', polygonOffset: true, polygonOffsetFactor: -1 }),
   );
   plaza.rotation.x = -Math.PI / 2;
@@ -265,12 +208,28 @@ export function buildDowntown(scene, col, quality) {
   ob.rotation.y = Math.PI / 4;
   ob.castShadow = true;
   root.add(ob);
+  // Sommet de l'obélisque : intact au prologue, il tombe pendant le Nightfall.
   const obTop = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.5, 2.6, 4), obMat);
-  obTop.position.set(2.8, 0.55, 1.6);
-  obTop.rotation.set(0.2, 0.6, Math.PI / 2.1);
+  obTop.position.set(0, 7.5, 0);
+  obTop.rotation.set(0, Math.PI / 4, 0);
   obTop.castShadow = true;
+  obTop.userData.dynamic = true;
   root.add(obTop);
-  col.addCentered(2.8, 0, 1.6, 2.4, 1.0, 1.2);
+  const obTopBox = col.addCentered(-2.2, 0, -1.4, 2.4, 1.0, 1.2);
+  obTopBox.disabled = true;
+  let topple = null;
+  function toppleMonument(instant = false) {
+    obTopBox.disabled = false;
+    topple = { t: instant ? 1 : 0 };
+  }
+  updaters.push((dt) => {
+    if (!topple || topple.t >= 1.2) return;
+    topple.t = Math.min(1.2, topple.t + dt);
+    const k = Math.min(1, topple.t / 1.0);
+    const e = k * k; // chute accélérée
+    obTop.position.set(-2.2 * e, 7.5 - 6.95 * e + Math.sin(k * Math.PI) * 0.8, -1.4 * e);
+    obTop.rotation.set(-0.2 * e, Math.PI / 4 + 0.6 * e, (Math.PI / 2.1) * e);
+  });
 
   // ---------- Décor : voitures, barrières, conteneurs ----------
   const carColors = ['#ff5d5d', '#4fc3f7', '#ffd54f', '#9575cd', '#66bb6a', '#ff8a65', '#f06292'];
@@ -341,11 +300,16 @@ export function buildDowntown(scene, col, quality) {
       dm.rotation.y = Math.PI / 2;
       g.add(dm);
     }
-    g.traverse((o) => o.isMesh && (o.castShadow = true));
+    g.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true;
+      if (opts.dynamic) o.userData.dynamic = true;
+    });
     g.position.set(x, 0, z);
     g.rotation.y = rot;
     if (opts.tilt) g.rotation.z = opts.tilt;
-    root.add(g);
+    (opts.parent || root).add(g);
+    if (opts.dynamic) return g;
     const c = Math.abs(Math.cos(rot));
     const s = Math.abs(Math.sin(rot));
     col.addCentered(x, 0, z, (2.0 * c + len * s) * 0.95, opts.van ? 2.15 : 1.6, (2.0 * s + len * c) * 0.95);
@@ -353,7 +317,7 @@ export function buildDowntown(scene, col, quality) {
   }
 
   // Barrière de chantier arrondie, rayée blanc/orange.
-  function barrier(x, z, rot) {
+  function barrier(x, z, rot, parent = root) {
     const g = new THREE.Group();
     const base = new THREE.Mesh(rbox(2, 0.55, 0.75, 0.15), barrierMat);
     base.position.y = 0.27;
@@ -368,9 +332,10 @@ export function buildDowntown(scene, col, quality) {
     g.traverse((o) => (o.castShadow = true));
     g.position.set(x, 0, z);
     g.rotation.y = rot;
-    root.add(g);
+    parent.add(g);
+    if (parent !== root) g.traverse((o) => o.isMesh && (o.userData.dynamic = true));
     const along = Math.abs(Math.cos(rot)) > 0.5;
-    col.addCentered(x, 0, z, along ? 2 : 0.75, 1.07, along ? 0.75 : 2);
+    return col.addCentered(x, 0, z, along ? 2 : 0.75, 1.07, along ? 0.75 : 2);
   }
 
   const containerMats = {};
@@ -437,6 +402,8 @@ export function buildDowntown(scene, col, quality) {
   // Lampadaire courbé à tête ronde (lumière réelle si prioritaire).
   const lampHeadMat = M({ color: '#fff', emissive: '#ffd27a', emissiveIntensity: 2.5 });
   const lampColdMat = M({ color: '#fff', emissive: '#a8e6ff', emissiveIntensity: 2.5 });
+  const poolWarm = new THREE.MeshBasicMaterial({ color: '#ffc46b', transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending });
+  const poolCold = new THREE.MeshBasicMaterial({ color: '#7fd8ff', transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending });
   const lampArc = new THREE.TorusGeometry(0.7, 0.07, 8, 16, Math.PI / 2);
   function lamp(x, z, rot, { cold = false, priority = 2, broken = false } = {}) {
     const g = new THREE.Group();
@@ -465,10 +432,7 @@ export function buildDowntown(scene, col, quality) {
       root.add(light);
       lampLights.push({ light, priority, base: 26 });
       // Halo au sol : disque net (lumière « dessinée »)
-      const pool = new THREE.Mesh(
-        new THREE.CircleGeometry(3.6, 32),
-        new THREE.MeshBasicMaterial({ color: cold ? '#7fd8ff' : '#ffc46b', transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending }),
-      );
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(3.6, 32), cold ? poolCold : poolWarm);
       pool.rotation.x = -Math.PI / 2;
       pool.position.set(wp.x, 0.17, wp.z);
       root.add(pool);
@@ -493,15 +457,9 @@ export function buildDowntown(scene, col, quality) {
   for (const [hx, hz] of [[-9.2, 20], [9.2, -20], [20, 9.2], [-20, -9.2]]) hydrant(hx, hz);
 
   // Voitures abandonnées sur les avenues
-  car(-3.5, 30, 0.1);
-  car(3.2, 46, Math.PI + 0.05);
-  car(-4, -26, -0.35, { tilt: 0.04 });
-  car(3.5, -50, Math.PI, { burnt: true });
-  car(28, -3.5, Math.PI / 2 + 0.2);
-  car(-30, 3.6, -Math.PI / 2);
-  car(-48, -3, -Math.PI / 2 + 0.6, { burnt: true });
-  car(46, 4, Math.PI / 2, { van: true, color: '#d0d0c8' });
-  car(0, -68, Math.PI / 2 + 0.3, { burnt: true });
+  car(-40, -70, -Math.PI / 2 + 0.6, { burnt: true });
+  car(66, 20, 0.1, { van: true, color: '#d0d0c8' });
+  car(-20, -68, Math.PI / 2 + 0.3, { burnt: true });
   car(-68, 20, 0.2);
   car(68, -30, Math.PI);
 
@@ -650,22 +608,26 @@ export function buildDowntown(scene, col, quality) {
     if (riftLight.userData.active) riftLight.intensity = 14 * p;
   });
 
-  // Barrages de quarantaine aux sorties des avenues
-  for (const [x, z, rot] of [[0, -74, 0], [0, 74, 0], [-74, 0, Math.PI / 2], [74, 0, Math.PI / 2]]) {
-    for (let k = -3; k <= 3; k++) {
-      const along = rot === 0;
-      barrier(x + (along ? k * 2.1 : 0), z + (along ? 0 : k * 2.1), rot);
-    }
+  // Barrages aux sorties des avenues : posés après le Nightfall seulement.
+  const barricades = new THREE.Group();
+  root.add(barricades);
+  const barricadeBoxes = [];
+  for (const [x, z, rot] of [[0, -72, 0], [0, 72, 0], [-72, 0, Math.PI / 2], [72, 0, Math.PI / 2]]) {
     const along = rot === 0;
-    const wall = new THREE.Mesh(
-      new THREE.BoxGeometry(along ? 16 : 0.2, 3.2, along ? 0.2 : 16),
-      M({ map: signTexture('ROUTE BARRÉE', '#ff8a3d', '#2b2050') }),
-    );
-    const off = Math.sign(along ? z : x) * 2;
-    wall.position.set(x + (along ? 0 : off), 1.6, z + (along ? off : 0));
-    root.add(wall);
-    col.addCentered(wall.position.x, 0, wall.position.z, along ? 16 : 0.6, 3.2, along ? 0.6 : 16);
+    for (let k = -3; k <= 3; k++) barricadeBoxes.push(barrier(x + (along ? k * 2.1 : 0), z + (along ? 0 : k * 2.1), rot, barricades));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(5, 1.4), new THREE.MeshBasicMaterial({ map: signTexture('ROUTE BARRÉE', '#ff8a3d', '#2b2050'), side: THREE.DoubleSide }));
+    sign.position.set(x, 1.9, z);
+    sign.rotation.y = along ? 0 : Math.PI / 2;
+    sign.userData.dynamic = true;
+    barricades.add(sign);
   }
+  function setBarricades(on) {
+    barricades.visible = on;
+    for (const b of barricadeBoxes) b.disabled = !on;
+  }
+
+  // Rue vivante : feux, circulation, mobilier, tunnels (voir street.js).
+  const street = buildStreet({ root, col, rand, quality, car, box, M, lampLights, barrierMat, darkMetal, concreteMat });
 
   // ---------- Ciel, anomalie lointaine, pluie ----------
   const sky = new THREE.Mesh(
@@ -839,7 +801,6 @@ export function buildDowntown(scene, col, quality) {
 
   // ---------- Ambiance : 0 = crépuscule (prologue), 1 = nuit du Nightfall ----------
   let night = 1;
-  const facadeEmissive = Object.values(facadeMats);
   function setNight(k) {
     night = k;
     sky.material.uniforms.uNight.value = k;
@@ -856,11 +817,11 @@ export function buildDowntown(scene, col, quality) {
     cloudMat.color.set('#ffb8d0').lerp(new THREE.Color('#4b2f7e'), k);
     rain.visible = k > 0.5;
     for (const r of rifts) r.visible = k > 0.5;
-    for (const m of facadeEmissive) m.emissiveIntensity = 0.5 + k * 0.6;
+    kit.setLights(0.75 + k * 0.25);
   }
   // Coupure de courant : fenêtres et lampadaires s'éteignent quelques instants.
   function setPower(on) {
-    for (const m of facadeEmissive) m.emissiveIntensity = on ? 0.5 + night * 0.6 : 0.02;
+    kit.setLights(on ? 0.75 + night * 0.25 : 0);
     lampHeadMat.emissiveIntensity = on ? 2.5 : 0;
     lampColdMat.emissiveIntensity = on ? 2.5 : 0;
     for (const l of lampLights) l.light.userData.off = !on;
@@ -899,7 +860,7 @@ export function buildDowntown(scene, col, quality) {
     { id: 'crate_supply_alley', type: 'supply', x: 41, y: 0.15, z: 33, rot: 0.2 },
     { id: 'crate_supply_safehouse', type: 'supply', x: -26, y: 0.15, z: 30, rot: 1.2 },
     { id: 'crate_supply_corvin', type: 'supply', x: -55, y: 0.15, z: -20, rot: 0.6 },
-    { id: 'crate_supply_van', type: 'supply', x: 46, y: 1.9, z: 4, rot: Math.PI / 2 },
+    { id: 'crate_supply_van', type: 'supply', x: 66, y: 2.15, z: 20, rot: 0.1 },
   ];
 
   const spawn = { x: -30, y: 0.15, z: 22, yaw: Math.PI * 0.8 };
@@ -907,9 +868,10 @@ export function buildDowntown(scene, col, quality) {
   const drawCalls = mergeStatic(root);
 
   return {
-    root, targets, enemySpawns, crates, spawn, schoolSpawn, drawCalls, smokeSources, setNight, setPower,
+    root, targets, enemySpawns, crates, spawn, schoolSpawn, street, setBarricades, toppleMonument, drawCalls, smokeSources, setNight, setPower,
     update(dt, t, cam, player) {
       for (const u of updaters) u(dt, t, cam, player);
+      street.update(dt, t);
     },
   };
 }

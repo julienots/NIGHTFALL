@@ -37,7 +37,7 @@ export class CollisionWorld {
         const cell = this.grid.get(gx + ',' + gz);
         if (!cell) continue;
         for (const b of cell) {
-          if (!seen.has(b.id)) {
+          if (!seen.has(b.id) && !b.disabled) {
             seen.add(b.id);
             out.push(b);
           }

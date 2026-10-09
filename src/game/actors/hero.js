@@ -60,6 +60,9 @@ export class Hero {
     this.flightMode = 'hover';
     this.flyRoll = 0;
     this.flyPitch = 0;
+    this.accelLean = 0;
+    this.turnRate = 0;
+    this.landT = 0;
     this.shieldT = -1;
     this.cinematic = false;
     this.stats = { maxHp: 100, maxEnergy: 100, damage: 10, defense: 0, energyGain: 0, powerDamage: 0 };
@@ -313,7 +316,7 @@ export class Hero {
     const look = new THREE.Vector3(Math.sin(camYaw) * Math.cos(camPitch), -Math.sin(camPitch) * 0.9, Math.cos(camYaw) * Math.cos(camPitch));
     const mv = input.move();
     const right = new THREE.Vector3(-Math.cos(camYaw), 0, Math.sin(camYaw));
-    const dir = new THREE.Vector3().addScaledVector(look, mv.y).addScaledVector(right, -mv.x);
+    const dir = new THREE.Vector3().addScaledVector(look, mv.y).addScaledVector(right, mv.x);
     if (dir.lengthSq() > 1) dir.normalize();
     const speed = boosting ? FLY.boost : wishLen > 0.1 ? FLY.cruise : 0;
     const target = dir.multiplyScalar(speed);
@@ -403,7 +406,7 @@ export class Hero {
     const mv = input.move();
     const fwd = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
-    const wish = new THREE.Vector3().addScaledVector(fwd, mv.y).addScaledVector(right, -mv.x);
+    const wish = new THREE.Vector3().addScaledVector(fwd, mv.y).addScaledVector(right, mv.x);
     const wishLen = Math.min(1, wish.length());
     const wishDir = wishLen > 0.01 ? wish.clone().normalize() : null;
     const R = this.powers.rings;
@@ -575,8 +578,15 @@ export class Hero {
 
     const hs = Math.hypot(this.vel.x, this.vel.z);
     this.speed01 = hs / 5.8;
-    if (this.grounded && hs > 0.5) {
-      this.phase += dt * (hs < 7 ? 9.5 : 12) * Math.min(1, hs / 4);
+    // Élan : inclinaison à l'accélération / au freinage ; rotation sur place.
+    const dv = (hs - (this.prevHs ?? hs)) / Math.max(dt, 1e-4);
+    this.prevHs = hs;
+    this.accelLean += (Math.max(-0.18, Math.min(0.22, dv * 0.025)) - this.accelLean) * (1 - Math.exp(-6 * dt));
+    this.turnRate = dyaw / Math.max(dt, 1e-4) * 0.05;
+    if (this.grounded && hs > 0.3) {
+      // Cadence liée à la vitesse et à la longueur de foulée : pas de pieds qui glissent.
+      const stride = 1.3 + 1.4 * Math.min(1.6, hs / 5.8);
+      this.phase += (hs / stride) * Math.PI * 2 * dt;
       this.stepDist += hs * dt;
       if (this.stepDist > (sprint ? 2.5 : 1.8)) {
         this.stepDist = 0;
@@ -600,6 +610,7 @@ export class Hero {
       if (this.pos.y <= gh && this.vy <= 0) {
         if (this.vy < -14 && this.action?.kind !== 'dive') this.game.shake(0.12);
         if (this.vy < -6) this.game.fx.dustRing(this.pos, 0.9, 8);
+        this.landT = Math.min(1, -this.vy / 20);
         this.pos.y = gh;
         this.vy = 0;
         this.grounded = true;
@@ -625,8 +636,12 @@ export class Hero {
       anim = 'superLanding';
       animP = 0.3;
     }
+    this.landT = Math.max(0, (this.landT || 0) - dt * 3.5);
     this.model.animate({
       dt,
+      accel: this.accelLean,
+      turn: this.turnRate,
+      land: a ? 0 : this.landT,
       speed: this.grounded ? Math.min(1.6, this.speed01) : 0,
       phase: this.phase,
       airborne: !this.grounded && !this.flying && a?.kind !== 'dive',

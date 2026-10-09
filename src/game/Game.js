@@ -180,6 +180,8 @@ export class Game {
     this.#resize();
 
     window.__nightfall = this; // accès de test/débogage
+    this.world.street.traffic.hero = this.hero;
+    this.world.street.traffic.onHonk = (pos) => this.audio.honk(pos);
     this.story = new Story(this);
     this.story.init(!d);
     this.audio.resume();
@@ -244,6 +246,7 @@ export class Game {
         this.#update(step, step);
       }
       this.#updateCamera(step);
+      this.world.update(step, this.time, this.camera, this.hero.pos);
       this.input.endFrame();
     }
   }
@@ -380,6 +383,9 @@ export class Game {
     this.smokeT = (this.smokeT || 0) - dt;
     if (this.smokeT <= 0) {
       this.smokeT = 0.25;
+      for (const p of this.world.street.steam) {
+        if (p.distanceTo(hero.pos) < 45 && Math.random() < 0.5) this.fx.puff(p, { color: '#e8e4ff', size: 0.8, life: 1.6, rise: 1.4, spread: 0.6 });
+      }
       for (const p of this.world.smokeSources) {
         if (p.distanceTo(hero.pos) < 40) this.fx.puff(p, { color: '#8a6ab8', size: 0.9, life: 2.2, rise: 1.2 });
       }
