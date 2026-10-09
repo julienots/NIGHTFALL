@@ -19,3 +19,10 @@ canvas.screen { display: block; }
 #title .studio { position: absolute; bottom: 16px; font-size: 11px; color: #ffffff44; }
 @keyframes breathe { 50% { opacity: .45; } }
 @keyframes fadein { from { opacity: 0; } }
+.title-menu { margin-top: 2.6em; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.tbtn { width: 260px; background: rgba(255,255,255,.04); border: 1px solid #ffffff33; color: #e9e6f5; padding: 12px;
+  font: 700 13px/1 system-ui, sans-serif; letter-spacing: .3em; text-transform: uppercase; cursor: pointer; }
+.tbtn:hover { border-color: #ffcd20; color: #ffcd20; }
+.save-info { color: #ffffff66; font-size: 12px; margin: 4px 0 0; }
+.loading { letter-spacing: .4em; text-transform: uppercase; color: #ffcd20; animation: breathe 1.4s ease-in-out infinite; }
+#game.hidden { display: none; }
