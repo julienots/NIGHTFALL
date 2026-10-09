@@ -182,3 +182,42 @@
 .chapter .c3 { font-size: 1.15em; max-width: 640px; color: #e8e4ff; }
 @keyframes chap { 0% { opacity: 0; transform: scale(1.15); } 10%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 .subtitle b.noa { color: #ffcd20; } .subtitle b.ines { color: #ff9cf0; }
+
+/* --- Commandes tactiles --- */
+body.touch .hint { display: none; }
+.touch-ui { position: fixed; inset: 0; z-index: 5; touch-action: none; user-select: none; -webkit-user-select: none; font-family: var(--display); }
+.touch-ui .t-look { position: absolute; inset: 0; }
+.t-base { position: absolute; width: 130px; height: 130px; margin: -65px 0 0 -65px; border-radius: 50%; border: 4px solid rgba(255,255,255,.35);
+  background: rgba(42,18,96,.35); opacity: 0; transition: opacity .15s; pointer-events: none; }
+.t-base.on { opacity: 1; }
+.t-knob { position: absolute; left: 35px; top: 35px; width: 52px; height: 52px; border-radius: 50%; background: #fff; border: 4px solid var(--ink-dark); box-shadow: 0 4px 0 var(--ink-dark); }
+.t-btn { position: absolute; width: 64px; height: 64px; border-radius: 50%; border: 4px solid var(--ink-dark); background: rgba(255,255,255,.88); color: var(--ink-dark);
+  font: 26px/1 var(--display); box-shadow: 0 5px 0 var(--ink-dark); padding: 0; touch-action: none; }
+.t-btn.down { transform: translateY(4px) scale(.94); box-shadow: 0 1px 0 var(--ink-dark); background: var(--amber); }
+.b-light { right: 104px; bottom: 34px; width: 84px; height: 84px; font-size: 34px; background: #fff27a; }
+.b-heavy { right: 200px; bottom: 26px; }
+.b-power { right: 196px; bottom: 104px; background: #c9a6ff; }
+.b-shield { right: 116px; bottom: 134px; background: #9ff3ff; }
+.b-jump { right: 22px; bottom: 112px; }
+.b-dodge { right: 22px; bottom: 34px; }
+.b-fly { right: 34px; bottom: 192px; background: #7fe3ff; }
+.b-fly.active { background: #ffcd20; }
+.b-interact { right: 270px; bottom: 150px; width: 54px; height: 54px; font-size: 22px; background: var(--amber); opacity: .55; }
+.b-interact.pulse { opacity: 1; animation: ready 1s ease-in-out infinite; }
+.t-top { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; margin-top: 30px; }
+.t-small { width: 44px; height: 44px; border-radius: 14px; border: 3px solid var(--ink-dark); background: rgba(255,255,255,.85); font-size: 20px; box-shadow: 0 3px 0 var(--ink-dark); padding: 0; }
+.touch-ui.hidden-ui > *:not(.t-rotate) { display: none !important; }
+.touch-ui.hidden-ui.cine { display: block; }
+.touch-ui.cine .b-interact { display: block !important; opacity: .8; }
+.touch-ui.cine .b-interact::after { content: ' ⏭'; font-size: 12px; }
+.t-rotate { display: none; position: fixed; inset: 0; background: #2a1260; color: #fff; font: 24px var(--display); align-items: center; justify-content: center; text-align: center; padding: 30px; }
+@media (orientation: portrait) { body.touch .t-rotate { display: flex; } }
+body.touch .hud .abilities, body.touch .hud .compass { display: none; }
+body.touch .hud .objective { top: 8px; right: 8px; transform: scale(.72); transform-origin: top right; }
+body.touch .t-top { top: 6px; margin-top: 0; }
+body.touch .hud .wallet { top: 10px; left: 12px; transform: scale(.85); transform-origin: top left; }
+body.touch .hud .vitals { left: 14px; bottom: 12px; }
+body.touch .hud .subtitle { bottom: 18px; max-width: 46vw; font-size: .9em; }
+body.touch .hud .toasts { top: 58px; }
+body.touch .phone { top: 90px; transform-origin: top right; }
+body.touch .hud .vitals { width: min(280px, 34vw); }

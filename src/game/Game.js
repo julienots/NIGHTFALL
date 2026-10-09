@@ -24,6 +24,7 @@ import { ITEMS, RARITY_INFO } from './data/items.js';
 import { MISSIONS, MISSION_KIND_LABEL } from './data/missions.js';
 import { Hud } from './ui/hud.js';
 import { Story } from './story/story.js';
+import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { Menus } from './ui/menus.js';
 import './ui/game.css';
 
@@ -120,6 +121,7 @@ export class Game {
     this.fx = new Effects(scene);
     this.audio = new AudioEngine(this.settings);
     this.input = new Input(r.domElement);
+    if (isTouchDevice()) this.touch = new TouchControls(this.input);
     this.input.onLockChange = (locked) => {
       if (!locked && !this.menus.isOpen && !this.hero.dead) {
         this.lockLostAt = performance.now();
@@ -328,6 +330,10 @@ export class Game {
     this.#updateCamera(menuOpen ? 0 : realDt);
     this.world.update(realDt, this.time, this.camera, this.hero.pos);
     this.#updateHud(realDt);
+    this.touch?.update({
+      menu: menuOpen, cinematic: this.story.inCinematic, rings: this.hero.powers.rings, flight: this.hero.powers.flight,
+      flying: this.hero.flying, canInteract: this.nearInteract,
+    });
     this.composer.render();
     this.input.endFrame();
   }
@@ -620,6 +626,7 @@ export class Game {
         near = it;
       }
     }
+    this.nearInteract = !!near;
     if (!near) {
       this.inspected = null;
       return this.hud.prompt('');

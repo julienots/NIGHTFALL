@@ -1,0 +1,8 @@
+{
+  "appId": "com.superessence.nightfall",
+  "appName": "NIGHTFALL",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#1a0d36"
+  }
+}

@@ -114,6 +114,11 @@ export class Input {
     let y = (this.down.has('up') ? 1 : 0) - (this.down.has('down') ? 1 : 0);
     x += this.gamepad.lx;
     y -= this.gamepad.ly;
+    if (this.touch) {
+      const t = this.touch.move();
+      x += t.x;
+      y += t.y;
+    }
     const len = Math.hypot(x, y);
     return len > 1 ? { x: x / len, y: y / len } : { x, y };
   }

@@ -13,6 +13,15 @@ npm test           # tests unitaires (inventaire, butin, missions, sauvegarde…
 npm run test:browser   # test de bout en bout dans Chromium (combat, caisses, rechargement…)
 ```
 
+## Android (APK de test)
+Commandes tactiles automatiques sur téléphone (joystick à gauche, glisser à droite pour la
+caméra, boutons d'action), paysage plein écran, qualité basse par défaut.
+```bash
+# Prérequis : JDK 21 et SDK Android (platform 35) ; ANDROID_HOME ou android/local.properties
+npm run android:apk   # -> android/app/build/outputs/apk/debug/app-debug.apk
+```
+L'APK de test est signé avec la clé de débogage (installation manuelle uniquement).
+
 ## Histoire (jouable dès la première seconde)
 1. **Prologue — Après les cours** : Noa Vant, 16 ans, sort du lycée Vesper-Nord au
    crépuscule. Aucun pouvoir : on marche, on court, on parle à Inès, on reçoit un SMS de

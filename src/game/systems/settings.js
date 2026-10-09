@@ -7,7 +7,8 @@ export const DEFAULT_SETTINGS = {
   sfx: 0.8,
   sensitivity: 1.0,
   invertY: false,
-  quality: 'medium', // low | medium | high
+  // Téléphones : qualité basse par défaut (fluidité avant tout).
+  quality: typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches ? 'low' : 'medium', // low | medium | high
   markers: true,
   shake: true,
   subtitles: true,

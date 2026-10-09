@@ -3,3 +3,4 @@ dist/
 .DS_Store
 exports/*.png
 exports/screens/
+exports/*.apk
