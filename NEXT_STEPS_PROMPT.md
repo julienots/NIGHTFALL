@@ -38,16 +38,17 @@ magnétisme, Forme Abysse, histoire jusqu'au chapitre 2). Ajouté en v1.4 :
   magnétique visible, poses de coups avec élan et prolongement.
 
 ## APK
-La session v1.4 n'a **pas pu** construire l'APK : dl.google.com (SDK Android) était bloqué
-par la politique réseau de l'environnement. `versionCode 5` / `versionName "1.4"` sont déjà
-réglés dans `android/app/build.gradle`. Installer le SDK (platform 35, build-tools 35) dans
-`/home/user/android-sdk` puis lancer la commande de build ci-dessus.
+Le SDK Android n'est pas téléchargeable depuis l'environnement cloud (dl.google.com bloqué).
+L'APK est donc construit par **GitHub Actions** (`.github/workflows/apk.yml`) à chaque push
+sur la branche : il est publié en « release » (pré-version) `vX.Y-buildN` téléchargeable
+depuis le téléphone. Incrémenter `versionCode` / `versionName` dans
+`android/app/build.gradle` avant de pousser.
 
 ## À FAIRE (par priorité)
 1. Construire et envoyer l'APK v1.4 (voir ci-dessus), tester sur téléphone les dialogues
    tactiles et la fluidité (résolution dynamique).
-2. Navigation des menus à la manette (croix + A) : aujourd'hui seuls B (fermer) et A
-   (récompenses) fonctionnent dans les menus.
+2. Menus à la manette : la croix déplace la sélection et A valide (fait en v1.4.1) ; les
+   curseurs (volume…) ne se règlent pas encore à la manette.
 3. Chapitre 2 « Blackwood » (labos d'Aegis, Hollis, Lucas le frère de Théo), nouvelles
    créatures et boss. La vidéo des pouvoirs (flag `bully_powers2`) peut attirer Aegis.
 4. Cadrage caméra des conversations dans les petites pièces (CDI) parfois trop serré.
