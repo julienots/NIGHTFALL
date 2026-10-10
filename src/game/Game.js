@@ -571,6 +571,12 @@ export class Game {
   #menuKeys() {
     const p = this.input.pressed;
     const m = this.menus;
+    // Manette dans un menu : croix = déplacer la sélection, A = valider.
+    if (this.input.usingPad && m.isOpen && m.open !== 'reward') {
+      const dir = p.has('interact') ? 'up' : p.has('heal') ? 'down' : p.has('relations') ? 'left' : p.has('transform') ? 'right' : null;
+      if (dir) return m.padMove(dir);
+      if (p.has('jump')) return m.padActivate();
+    }
     if (p.has('pause')) {
       if (performance.now() - (this.lockLostAt || 0) < 250) return;
       if (m.open === 'death') return;

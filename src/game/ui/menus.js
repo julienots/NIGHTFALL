@@ -48,6 +48,68 @@ export class Menus {
     }
   }
 
+  // ---------- Navigation à la manette ----------
+  #padItems() {
+    const el = this.el[this.open];
+    if (!el) return [];
+    return [...el.querySelectorAll('button, select, input, summary, [data-act]')].filter((b) => {
+      if (b.disabled) return false;
+      const r = b.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight;
+    });
+  }
+
+  padMove(dir) {
+    const items = this.#padItems();
+    if (!items.length) return;
+    let cur = items.includes(this.padSel) ? this.padSel : null;
+    if (!cur) return this.#padFocus(items[0]);
+    const c = cur.getBoundingClientRect();
+    const cx = c.x + c.width / 2;
+    const cy = c.y + c.height / 2;
+    const v = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir];
+    let best = null;
+    let bestScore = Infinity;
+    for (const b of items) {
+      if (b === cur) continue;
+      const r = b.getBoundingClientRect();
+      const dx = r.x + r.width / 2 - cx;
+      const dy = r.y + r.height / 2 - cy;
+      const along = dx * v[0] + dy * v[1];
+      if (along <= 4) continue;
+      const across = Math.abs(dx * v[1] - dy * v[0]);
+      const score = along + across * 2.5;
+      if (score < bestScore) {
+        bestScore = score;
+        best = b;
+      }
+    }
+    if (best) this.#padFocus(best);
+  }
+
+  #padFocus(b) {
+    this.padSel?.classList.remove('pad-focus');
+    this.padSel = b;
+    b.classList.add('pad-focus');
+    b.focus?.({ preventScroll: true });
+    b.scrollIntoView?.({ block: 'nearest' });
+    this.game.audio?.ui?.();
+  }
+
+  padActivate() {
+    const b = this.padSel;
+    if (!b || !b.isConnected) return this.padMove('down');
+    if (b.tagName === 'SELECT') {
+      b.selectedIndex = (b.selectedIndex + 1) % b.options.length;
+      b.dispatchEvent(new Event('change', { bubbles: true }));
+      b.dispatchEvent(new Event('input', { bubbles: true }));
+    } else if (b.tagName === 'INPUT' && b.type === 'checkbox') {
+      b.checked = !b.checked;
+      b.dispatchEvent(new Event('input', { bubbles: true }));
+      b.dispatchEvent(new Event('change', { bubbles: true }));
+    } else b.click();
+  }
+
   get isOpen() {
     return !!this.open;
   }

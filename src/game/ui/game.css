@@ -330,3 +330,5 @@ body.touch .hud .clock { top: 62px; font-size: 11px; }
 .pad-table { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 6px 12px; align-items: center; margin-top: 8px; color: var(--ink); text-align: left; }
 .pad-controls .g { display: inline-block; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 13px; text-align: center; font: 13px/26px var(--display); background: #2b2050; color: #fff; border: 2px solid var(--ink-dark); }
 .pad-controls .g.a { background: #3aa53a; } .pad-controls .g.b { background: #d8343f; } .pad-controls .g.x { background: #2f7de1; } .pad-controls .g.y { background: #e8b100; color: var(--ink-dark); }
+/* Sélection à la manette dans les menus */
+.pad-focus { outline: 4px solid #ffcd20 !important; outline-offset: 2px; box-shadow: 0 0 16px #ffcd20aa !important; }
