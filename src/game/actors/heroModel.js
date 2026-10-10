@@ -202,6 +202,8 @@ export const PALETTES = {
   camille: { skin: '#f2c6a0', hair: '#c9563f', hoodie: '#8f7ad8', hoodie2: '#6f5ab8', pants: '#1d1d24', shoe: '#f2efe6', sole: '#ff9cf0', bag: null, hairStyle: 'bob' },
   theo: { skin: '#e8b48a', hair: '#e8d6a0', hoodie: '#3a3a4a', hoodie2: '#2a2a36', pants: '#3a5ba8', shoe: '#c9563f', sole: '#f2efe6', bag: '#c9563f', hairStyle: 'short' },
   delcourt: { skin: '#e8b48a', hair: '#8a8a9a', hoodie: '#6a5a4a', hoodie2: '#4a3e34', pants: '#3a3448', shoe: '#2b1d16', sole: '#2b1d16', bag: null, hairStyle: 'short' },
+  jordan: { skin: '#d9a07a', hair: '#3a2416', hoodie: '#c8323c', hoodie2: '#f2efe6', pants: '#1d1d24', shoe: '#f2efe6', sole: '#c8323c', bag: null, hairStyle: 'short' },
+  ferrand: { skin: '#8a5a3c', hair: '#1a1210', hoodie: '#2f6f6a', hoodie2: '#24524e', pants: '#3a3448', shoe: '#2b1d16', sole: '#2b1d16', bag: null, hairStyle: 'bob' },
   mara: { skin: '#c98b5e', hair: '#2b1d16', hoodie: '#2b2050', hoodie2: '#5fe3ff', pants: '#1d1d24', shoe: '#1d1d24', sole: '#5fe3ff', bag: null, hairStyle: 'bob' },
   // Forme Abysse : la substance noire recouvre Noa (veines cyan magnétiques).
   umbra: { skin: '#17111f', hair: '#17111f', hoodie: '#1d1530', hoodie2: '#0d0915', pants: '#140f1f', shoe: '#120c1a', sole: '#5fe3ff', bag: null, hairStyle: 'none', variant: 'umbra' },

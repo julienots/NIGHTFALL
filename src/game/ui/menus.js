@@ -8,6 +8,14 @@ import { SHOP, SHOP_SECTIONS } from '../data/shop.js';
 import { buy, canBuy } from '../systems/shop.js';
 import { CHARACTERS, GIFTS } from '../data/characters.js';
 
+// Aide « Commandes manette » (même correspondance que PADMAP dans core/input.js).
+const PAD_HELP = [
+  ['A', 'a', 'Sauter / valider'], ['B', 'b', 'Roulade / annuler'], ['X', 'x', 'Coup léger'], ['Y', 'y', 'Coup lourd'],
+  ['RB', '', 'Pouvoir'], ['LB', '', 'Verrouiller la cible'], ['LT', '', 'Bouclier'], ['RT', '', 'Magnétisme'],
+  ['L3', '', 'Courir'], ['R3', '', 'Voler'], ['✚▲', '', 'Interagir'], ['✚▼', '', 'Soin'],
+  ['✚▶', '', 'Forme Abysse'], ['✚◀', '', 'Relations'], ['☰', '', 'Pause'], ['⧉', '', 'Inventaire'],
+];
+
 const STAT_LABEL = {
   damage: 'Dégâts', defense: 'Défense', maxHp: 'Santé max', maxEnergy: 'Énergie max', energyGain: 'Énergie / coup', powerDamage: 'Bonus pouvoirs',
 };
@@ -195,7 +203,7 @@ export class Menus {
   #relations() {
     const g = this.game;
     const so = g.social;
-    const cards = Object.entries(CHARACTERS).map(([id, c]) => {
+    const cards = Object.entries(CHARACTERS).filter(([, c]) => !c.hiddenUntil || so.flags.has(c.hiddenUntil)).map(([id, c]) => {
       const met = so.friends[id] || so.seen.size && [...so.seen].some((k) => k.startsWith(id)) || (so.aff[id] || 0) > 0;
       const aff = so.aff[id] || 0;
       const lvl = so.level(id);
@@ -266,9 +274,15 @@ export class Menus {
           <option value="low">Basse</option><option value="medium">Moyenne</option><option value="high">Élevée</option></select><span></span></label>
         <p class="cost">La qualité modifie immédiatement la résolution, les ombres et le bloom ; le nombre de lumières et la densité de pluie s'appliquent au prochain chargement.</p>
       </div>
-      <div class="controls">ZQSD/WASD déplacer · Maj sprint · Espace sauter · Clic gauche combo (en l'air : attaque plongeante) · Clic droit coup lourd<br>
-        Ctrl/C esquive (au bon moment : esquive parfaite) · F Void Strike · R verrouiller · E interagir · H soin · I inventaire · J journal · N marqueurs<br>
-        Manette : stick G/D, A saut, X combo, Y lourd, B esquive, RB pouvoir, LB verrouillage, ↑ interagir</div>
+      <div class="controls">Clavier : ZQSD/WASD déplacer · Maj sprint · Espace sauter · Clic gauche combo (en l'air : attaque plongeante) · Clic droit coup lourd<br>
+        Ctrl/C esquive (au bon moment : esquive parfaite) · F pouvoir · G bouclier · X magnétisme · V voler · T Forme Abysse · R verrouiller · E interagir · H soin<br>
+        I inventaire · J journal · K compétences · L relations · N marqueurs · 1-2-3 réponses de dialogue</div>
+      <details class="controls pad-controls"><summary><b>Commandes manette (Xbox)</b></summary>
+        <div class="pad-table">
+          ${PAD_HELP.map(([g, cls, label]) => `<span class="g ${cls}">${g}</span><span>${label}</span>`).join('')}
+        </div>
+        <p>Dans les dialogues : <span class="g a">A</span> continuer · <span class="g x">X</span> <span class="g y">Y</span> <span class="g b">B</span> réponses 1 / 2 / 3. Dans les menus : <span class="g b">B</span> fermer.</p>
+      </details>
     </div>`;
     this.el.pause.querySelector('[data-set=quality]').value = s.quality;
   }

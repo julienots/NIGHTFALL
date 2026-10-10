@@ -4,3 +4,4 @@ dist/
 exports/*.png
 exports/screens/
 exports/*.apk
+tests/tmp/

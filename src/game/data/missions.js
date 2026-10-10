@@ -111,6 +111,20 @@ export const MISSIONS = {
     ],
     reward: { xp: 300, credits: 150 },
   },
+  b01_bully: {
+    kind: 'side',
+    title: 'Casier 117',
+    intro: 'Depuis la rentrée, Jordan et sa bande ont choisi leur cible : Noa. Et depuis l’incident du labo, ils ont trouvé un surnom.',
+    requires: 'd01_double_life',
+    steps: [
+      { type: 'talk', target: 'jordan', text: 'Quelqu’un traîne près de ton casier (couloir du lycée, le matin)' },
+      { type: 'talk', target: 'ines', text: 'En parler à Inès (cafétéria le matin, café du parc l’après-midi)' },
+      { type: 'talk', target: 'jordan', text: 'Un autre jour : Jordan rôde à la cafétéria (le matin)' },
+      { type: 'interact', target: 'cpe', text: 'En parler à un adulte : Mme Ferrand, la CPE (hall du lycée, le matin)' },
+      { type: 'talk', target: 'jordan', text: 'Le lendemain matin : médiation au CDI avec Jordan' },
+    ],
+    reward: { xp: 350, credits: 120 },
+  },
   n01_night_watch: {
     kind: 'contract',
     title: 'Ronde de nuit',

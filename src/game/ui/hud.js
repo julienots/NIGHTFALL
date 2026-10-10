@@ -194,10 +194,25 @@ export class Hud {
     this.el.querySelector('.name').firstChild.textContent = name + ' ';
   }
 
+  // Manette détectée : glyphes Ⓐ Ⓑ Ⓧ Ⓨ et croix directionnelle au lieu des touches.
+  setPad(on) {
+    if (this.pad === on) return;
+    this.pad = on;
+    this.el.classList.toggle('pad', on);
+    const html = this.last.prompt;
+    this.last.prompt = null;
+    this.prompt(html);
+  }
+
+  #glyphs(html) {
+    if (!this.pad || !html) return html;
+    return html.replace(/<kbd>E<\/kbd>/g, '<kbd class="pad dpad" title="Croix haut">✚<b>▲</b></kbd>');
+  }
+
   prompt(html) {
     if (this.last.prompt === html) return;
     this.last.prompt = html;
-    this.$.prompt.innerHTML = html || '';
+    this.$.prompt.innerHTML = this.#glyphs(html) || '';
     this.$.prompt.classList.toggle('on', !!html);
   }
 
@@ -350,7 +365,7 @@ export class Hud {
     (d.choices || []).forEach((label, i) => {
       const b = document.createElement('button');
       b.className = 'dl-choice';
-      b.innerHTML = `<span class="n">${i + 1}</span>${label}`;
+      b.innerHTML = `<span class="n" data-pad="${['X', 'Y', 'B'][i] || ''}">${i + 1}</span>${label}`;
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();

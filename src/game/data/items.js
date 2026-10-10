@@ -77,6 +77,10 @@ export const ITEMS = {
     name: 'Sweat Abyssal', category: 'cosmetic', slot: 'skin', rarity: 'legendary',
     visual: { hoodie: '#3a1a6a', hoodie2: '#7b4ad6' }, desc: 'Tissé de fibres qui absorbent la lumière de la faille.',
   },
+  hoodie_vesper: {
+    name: 'Sweat Vesper-Nord', category: 'cosmetic', slot: 'skin', rarity: 'rare',
+    visual: { hoodie: '#c8323c', hoodie2: '#f2efe6' }, desc: 'Le sweat de l’équipe du lycée. Jordan te l’a donné « pour repartir de zéro ».',
+  },
   // --- Cadeaux (à offrir aux amis : chacun a ses préférences) ---
   gift_flowers: { name: 'Bouquet de fleurs', category: 'gift', rarity: 'uncommon', stackable: true, desc: 'Des tulipes du marché Nova. Un classique qui marche (presque) toujours.' },
   gift_choco: { name: 'Boîte de chocolats', category: 'gift', rarity: 'common', stackable: true, desc: 'Praliné, caramel, noisette. Personne ne résiste.' },

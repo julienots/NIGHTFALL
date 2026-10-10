@@ -230,7 +230,9 @@ export class Social {
       if (npc.mode === 'gone' || !npc.model.root.visible) continue;
       if (this.game.story.blocksTalk?.(id)) continue;
       const lvl = this.level(id);
-      out.push({ kind: 'friend', id, pos: npc.pos, label: `<kbd>E</kbd>Parler — <span style="color:${this.color(id)}">${this.name(id)}</span> <small>(${lvl})</small>` });
+      // Jordan, avant la réconciliation : on ne « discute » pas, on l'affronte.
+      const verb = id === 'jordan' && !this.flags.has('jordan_ally') ? 'Faire face à' : 'Parler —';
+      out.push({ kind: 'friend', id, pos: npc.pos, label: `<kbd>E</kbd>${verb} <span style="color:${this.color(id)}">${this.name(id)}</span> <small>(${lvl})</small>` });
     }
     return out;
   }
@@ -412,6 +414,9 @@ export class Social {
     if (key === 'malik_drawing') {
       g.inventory.add('hoodie_lime');
       g.hud.toast('Malik t’offre le Sweat Citron vert (« de la part de Yasmine »)', '#9be35a');
+    } else if (key === 'jordan_hoodie') {
+      g.inventory.add('hoodie_vesper');
+      g.hud.toast('Jordan t’offre le Sweat Vesper-Nord (« pour repartir de zéro »)', '#ff7a45');
     }
   }
 

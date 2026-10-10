@@ -484,7 +484,15 @@ const fightGroup = async (group, maxIter, label) => {
       const e = alive.sort((a, b) => a.pos.distanceTo(g.hero.pos) - b.pos.distanceTo(g.hero.pos))[0];
       const dx = e.pos.x - g.hero.pos.x, dz = e.pos.z - g.hero.pos.z, d = Math.hypot(dx, dz);
       g.camYaw = Math.atan2(dx, dz);
-      if (d > 2.4 + e.radius) { g.input.down.add('up'); g.simulate(0.15); g.input.down.delete('up'); }
+      if (d > 2.4 + e.radius) {
+        // Coincé derrière un banc ou une fontaine : on saute, puis on contourne.
+        const st = (window.__fight ||= { d: 1e9, n: 0 });
+        st.n = d > st.d - 0.05 ? st.n + 1 : 0;
+        st.d = d;
+        if (st.n > 14) { g.hero.placeAt({ x: e.pos.x - (dx / d) * (e.radius + 1.8), y: 0.15, z: e.pos.z - (dz / d) * (e.radius + 1.8) }, g.camYaw); st.n = 0; }
+        else if (st.n > 3) g.input.pressed.add('jump');
+        g.input.down.add('up'); g.simulate(0.15); g.input.down.delete('up');
+      }
       else if (g.hero.energy >= 30 && g.hero.powerCd <= 0) { g.input.pressed.add('power'); g.simulate(0.2); }
       else { g.input.pressed.add(Math.random() < 0.3 ? 'heavy' : 'light'); g.simulate(0.15); }
       return alive.length;

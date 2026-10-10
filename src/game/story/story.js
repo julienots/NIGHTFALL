@@ -7,6 +7,7 @@
 // Les cinématiques avancent en temps de jeu (testables, synchronisées).
 import * as THREE from 'three';
 import { Npc } from '../actors/npc.js';
+import { BULLY_SCENES, BULLY_GANG, powersUsed } from '../data/bully.js';
 import { SCENES } from '../data/characters.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -163,12 +164,16 @@ export class Story {
       spots.malik = { ...at(S.standSpots.corridor, 0), y: 0 };
       spots.camille = { ...at(S.standSpots.corridor, 2, { x: S.rooms.labo.x, z: S.rooms.labo.z, yaw: 0 }), y: 0 };
       spots.theo = { ...at(S.standSpots.hall, 0), y: 0 };
+      const j = this.#jordanSpot();
+      if (j) spots.jordan = j;
     } else if (ph === 'afternoon' || ph === 'evening') {
       spots.ines = at(H.cafe, 0, T.park_cafe);
       spots.camille = at(H.park, 0, T.park_pond);
       if (ph === 'afternoon') {
         spots.malik = at(H.schoolyard, 0, T.school_gate);
         spots.theo = T.stadium ? { x: T.stadium.x + 3, z: T.stadium.z, yaw: 0 } : null;
+        // Jordan, réconcilié, traîne dans la cour avec Malik.
+        if (this.social.flags.has('jordan_ally')) spots.jordan = at(H.schoolyard, 1, T.school_gate);
       }
     }
     if (this.social.partner && spots[this.social.partner] == null && ph === 'evening') spots[this.social.partner] = at(H.park, 1, T.park_pond);
@@ -177,6 +182,132 @@ export class Story {
 
   #placeFriends() {
     this.social.placeFriends(this.#friendSpots());
+  }
+
+  // ---------- Mission « Casier 117 » (harcèlement) ----------
+  // Étape en cours si elle peut se jouer aujourd'hui (certaines attendent le lendemain).
+  #bullyStep() {
+    const st = this.missions.state.b01_bully;
+    if (st?.status !== 'active') return -1;
+    return this.game.clock.day >= (st.after || 0) ? st.step : -1;
+  }
+
+  // Où se trouve Jordan le matin, selon l'étape (null : absent).
+  #jordanSpot() {
+    const S = this.game.interiors.zones.school;
+    const face = (x, z, t) => ({ x, y: 0, z, yaw: Math.atan2(t.x - x, t.z - z) });
+    const step = this.#bullyStep();
+    if (step === 0) return face(S.locker.x + 1.5, S.locker.z + 0.3, S.locker);
+    if (step === 2) {
+      const c = S.standSpots.cafeteria[3];
+      return { ...c, y: 0 };
+    }
+    if (step === 4) return face(S.rooms.cdi.x - 1.1, S.rooms.cdi.z, { x: S.rooms.cdi.x + 1, z: S.rooms.cdi.z });
+    return null;
+  }
+
+  // La bande (deux élèves) autour de Jordan, et Mme Ferrand (CPE) le matin.
+  #populateBully() {
+    const g = this.game;
+    const S = g.interiors.zones.school;
+    const step = this.#bullyStep();
+    const j = this.#jordanSpot();
+    this.gang = [];
+    if (j && (step === 0 || step === 2)) {
+      [[0.9, 0.7], [-0.4, 1.0]].forEach(([dx, dz], i) => {
+        const x = j.x + dx;
+        const z = j.z + dz;
+        const npc = new Npc(g, { id: 'gang' + i, seed: 777 + i * 31, x, y: 0, z, yaw: Math.atan2(j.x - x, j.z - z) });
+        this.gang.push(npc);
+        this.students.push(npc);
+      });
+    }
+    if (this.lifeMode() && g.clock.phase === 'morning') {
+      const at = step === 4 ? { x: S.rooms.cdi.x + 1, z: S.rooms.cdi.z, yaw: -Math.PI / 2 } : { x: S.rooms.hall.x + 3.2, z: S.rooms.hall.z - 1.2, yaw: Math.PI };
+      this.cpe = new Npc(g, { id: 'cpe', name: 'Mme Ferrand', palette: 'ferrand', x: at.x, y: 0, z: at.z, yaw: at.yaw });
+      this.students.push(this.cpe);
+    }
+  }
+
+  #bullyCtx() {
+    const g = this.game;
+    return {
+      usePowers: (n) => {
+        const so = this.social;
+        so.flags.add(n === 1 ? 'bully_powers' : 'bully_powers2');
+        g.audio.magnetThrow();
+        if (g.settings.shake) g.shakeAmp = Math.max(g.shakeAmp, 0.25);
+        g.hud.toast('Des élèves ont filmé la scène…', '#ff6a6a');
+        if (n === 2) {
+          so.addAff('ines', -4);
+          if (powersUsed(so) >= 2) g.hud.say('MARA (radio)', 'Noa… une vidéo de plateaux qui volent tourne en ligne. Si Aegis la voit, ils sauront où te chercher. Fais attention.', 6);
+        }
+      },
+    };
+  }
+
+  #bullyTalk(id, done) {
+    const g = this.game;
+    const so = this.social;
+    const st = this.missions.state.b01_bully;
+    const step = st.step;
+    const npc = so.friends[id];
+    so.talkedDay[id] = g.clock.day;
+    const leave = () => {
+      for (const n of this.gang || []) n.walkTo(n.pos.x + 8, n.pos.z, 1.8, 'gone');
+      if (id === 'jordan' && npc) npc.walkTo(npc.pos.x + 8, npc.pos.z, 1.8, 'gone');
+    };
+    if (step === 0) {
+      so.run(BULLY_SCENES.locker(so, this.#bullyCtx()), { with: npc, char: 'jordan', onEnd: () => { leave(); done(); } });
+    } else if (step === 1) {
+      so.run(BULLY_SCENES.ines(so), { with: npc, char: 'ines', onEnd: () => {
+        st.after = g.clock.day + 1; // Jordan revient… un autre jour.
+        done();
+      } });
+    } else if (step === 2) {
+      g.hero.playAnim('interact', 0.6);
+      so.run(BULLY_SCENES.cafeteria(so, this.#bullyCtx()), { with: npc, char: 'jordan', onEnd: () => { leave(); done(); } });
+    } else if (step === 4) {
+      so.run(BULLY_SCENES.mediation(so), { with: npc, char: 'jordan', onEnd: () => {
+        done();
+        this.#bullyEpilogue();
+      } });
+    } else return false;
+    return true;
+  }
+
+  // Récompenses de fin : vraies conséquences des choix.
+  #bullyEpilogue() {
+    const g = this.game;
+    const so = this.social;
+    so.addAff('ines', 5);
+    so.addAff('malik', 3);
+    if (so.flags.has('jordan_ally')) {
+      so.reward('jordan_hoodie');
+      g.hud.toast('Jordan devient un allié : on le croise dans la cour l’après-midi', '#ff7a45');
+    }
+    if (!powersUsed(so)) {
+      g.hud.banner('COURAGE', 'Tu as tenu bon sans tes pouvoirs', '+150 XP');
+      g.grantXp(150);
+    } else {
+      g.hud.toast('La rumeur du « casier qui bouge » court encore dans les couloirs…', '#ff6a6a');
+    }
+  }
+
+  #cpeTalk() {
+    const g = this.game;
+    const so = this.social;
+    if (this.missions.currentStep('b01_bully')?.target === 'cpe') {
+      so.run(BULLY_SCENES.cpe(so), { with: this.cpe, onEnd: () => {
+        const st = this.missions.state.b01_bully;
+        st.after = g.clock.day + 1; // médiation le lendemain matin
+        g.missionEvents(g.missions.handle({ type: 'interact', target: 'cpe' }));
+        this.#placeFriends();
+      } });
+      return;
+    }
+    const lines = ['Bonjour Noa. Tout va bien ? Ma porte est toujours ouverte.', 'On ne court pas dans les couloirs ! … Bonne journée, Noa.', 'Si quelque chose ne va pas, toi ou un ami, tu viens me voir. D’accord ?'];
+    so.run([['Mme Ferrand (CPE)', lines[g.clock.day % lines.length]]], { with: this.cpe });
   }
 
   // Élèves et professeur dans le lycée (selon le moment de la journée).
@@ -203,6 +334,8 @@ export class Story {
       const npc = new Npc(g, { id: 'sc' + i, seed: 500 + i * 7, x: s.x, y: 0, z: s.z, yaw: s.yaw });
       this.students.push(npc);
     });
+    this.cpe = null;
+    this.#populateBully();
   }
 
   #isNoaSeat(room, s) {
@@ -295,6 +428,10 @@ export class Story {
       if (st === 'prologue' && g.missions.currentStep('p01_after_school')?.target === 'locker') {
         out.push({ kind: 'story', id: 'locker', pos: { ...S.locker, y: 0 }, label: '<kbd>E</kbd>Ouvrir le casier <b>117</b>' });
       }
+      if (this.cpe && this.cpe.mode !== 'gone') {
+        const job = this.missions.currentStep('b01_bully')?.target === 'cpe';
+        out.push({ kind: 'story', id: 'cpe', pos: this.cpe.pos, label: `<kbd>E</kbd>${job ? 'Parler à' : 'Saluer'} <span style="color:#7fe0d0">Mme Ferrand</span> <small>(CPE)</small>` });
+      }
       if (life && this.social.canAttendLesson() && this.teacher) {
         const seat = this.#lessonSeat();
         out.push({ kind: 'story', id: 'lesson', pos: { x: seat.x, y: 0, z: seat.z }, label: `<kbd>E</kbd>S’asseoir — cours de <b>${this.social.lesson().subject}</b>` });
@@ -343,6 +480,7 @@ export class Story {
         this.#say('Noa', 'Salut, papa. Pas aujourd’hui, les souvenirs.', 3);
         return g.missionEvents(g.missions.handle({ type: 'interact', target: 'locker' }));
       case 'lesson': return this.#lesson();
+      case 'cpe': return this.#cpeTalk();
       case 'bed': return this.#sleep();
       case 'fridge':
         g.hero.hp = g.hero.stats.maxHp;
@@ -363,6 +501,7 @@ export class Story {
     });
     if (!mission) return false;
     const done = () => g.missionEvents(g.missions.handle({ type: 'interact', target: id }));
+    if (mission === 'b01_bully') return this.#bullyTalk(id, done);
     if (mission === 'p01_after_school') {
       if (id === 'malik') this.social.playScene('malik_corridor', done);
       else if (id === 'ines') this.social.playScene('ines_gate', () => this.#inesBus(done));

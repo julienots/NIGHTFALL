@@ -6,6 +6,8 @@
 // `min` : affinité requise ; `when(social)` : condition supplémentaire.
 // Une scène n'est jouée qu'une fois. Une conversation « utile » par jour et par personnage.
 
+import { JORDAN_TALK } from './bully.js';
+
 export const CHARACTERS = {
   ines: {
     name: 'Inès', palette: 'ines', color: '#ff9cf0', romance: true,
@@ -26,6 +28,11 @@ export const CHARACTERS = {
     name: 'Théo', palette: 'theo', color: '#9fd8ff', romance: false,
     desc: 'Capitaine de l’équipe de foot. Arrogant au premier abord. Son grand frère a disparu la nuit du Nightfall.',
     likes: { gift_choco: 8, gift_game: 10, gift_comic: 6, gift_flowers: 3, gift_starmap: 4 },
+  },
+  jordan: {
+    name: 'Jordan', palette: 'jordan', color: '#ff7a45', romance: false, hiddenUntil: 'met_jordan',
+    desc: 'Terminale, blouson rouge, toujours entouré de sa bande. Il a fait de Noa sa cible… Mais qu’est-ce qui se passe chez lui ?',
+    likes: { gift_game: 12, gift_choco: 8, gift_comic: 6, gift_flowers: 2, gift_starmap: 3 },
   },
 };
 
@@ -264,6 +271,7 @@ export const SMALL_TALK = {
   ines: ['Tu as fini l’exposé d’histoire ? Moi non plus.', 'Il paraît que la cafète sert des frites vendredi. ENFIN.', 'Tu as une tête de quelqu’un qui a mal dormi. Encore.'],
   camille: ['Ce soir, ciel dégagé. Enfin, si la faille nous laisse tranquilles.', 'J’ai relu mes notes sur Orion. C’est mieux que les infos.', 'Tu sens ça ? L’air est électrique. Comme avant un orage.'],
   malik: ['J’ai faim. C’est tout. C’est mon message.', 'Si tu vois Delcourt, dis-lui que mon devoir est « en chemin ».', 'Neon Racers 3 sort bientôt. Je vais pleurer.'],
+  jordan: JORDAN_TALK,
   theo: ['Entraînement annulé. Encore une faille sur le terrain.', 'Si t’entends parler de Lucas… tu me dis.', 'Pas mal ton sprint dans le couloir, ce matin.'],
 };
 

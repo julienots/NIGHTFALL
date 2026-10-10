@@ -572,7 +572,9 @@ export class Game {
     else if (p.has('journal') && (!m.isOpen || m.open === 'journal' || m.open === 'inventory')) m.toggle('journal');
     else if (p.has('skills') && this.hero.powers.rings && (!m.isOpen || ['journal', 'inventory', 'skills'].includes(m.open))) m.toggle('skills', { atRefuge: this.nearRefuge() });
     else if (p.has('relations') && (!m.isOpen || ['journal', 'inventory', 'skills', 'relations'].includes(m.open))) m.toggle('relations');
-    else if (p.has('interact') && m.open === 'reward') m.hide();
+    else if ((p.has('interact') || (this.input.usingPad && p.has('jump'))) && m.open === 'reward') m.hide();
+    // Manette : B ferme le menu ouvert (sauf l'écran de mort).
+    else if (this.input.usingPad && p.has('dodge') && m.isOpen && m.open !== 'death') m.hide();
   }
 
   onMenu(open) {
@@ -589,7 +591,7 @@ export class Game {
     this.story.update(dt);
     this.social.update(dt);
     this.#updateTransition(dt);
-    if (this.story.inCinematic && !this.social.active && input.was('interact')) this.story.skip();
+    if (this.story.inCinematic && !this.social.active && (input.was('interact') || (input.usingPad && input.was('jump')))) this.story.skip();
     hero.update(dt, input, this.camYaw, this.camPitch);
     this.magnet.update(dt);
     this.audio.wind(hero.flying ? Math.min(1, Math.hypot(hero.vel.x, hero.vel.z, hero.vy) / 34) : 0);
@@ -1253,6 +1255,7 @@ export class Game {
   }
 
   #updateHud(dt) {
+    this.hud.setPad(this.input.usingPad);
     const h = this.hero;
     const inv = this.inventory;
     const w = inv.equippedItem('weapon');
