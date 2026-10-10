@@ -137,6 +137,10 @@ export class Effects {
     this.ringGeo = new THREE.RingGeometry(0.85, 1, 64);
     this.discGeo = new THREE.CircleGeometry(1, 48);
 
+    // --- Traînées de coups (arcs « smear » cartoon) ---
+    this.swooshes = [];
+    this.swooshGeo = new Map();
+
     // --- Lumière d'impact ---
     this.flashes = [0, 1].map(() => {
       const l = new THREE.PointLight('#ffffff', 0, 12, 2);
@@ -227,10 +231,10 @@ export class Effects {
   }
 
   // Anneau qui s'étend au sol (onde de choc) ou disque de télégraphe.
-  ring(pos, { color = '#ffcd20', from = 0.5, to = 6, life = 0.5, y = 0.08, disc = false, opacity = 0.9, follow = null } = {}) {
+  ring(pos, { color = '#ffcd20', from = 0.5, to = 6, life = 0.5, y = 0.08, disc = false, opacity = 0.9, follow = null, dark = false } = {}) {
     const m = new THREE.Mesh(
       disc ? this.discGeo : this.ringGeo,
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: dark ? THREE.NormalBlending : THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
     );
     m.rotation.x = -Math.PI / 2;
     m.position.set(pos.x, pos.y + y, pos.z);
@@ -289,7 +293,118 @@ export class Effects {
     this.ring(pos, { color, from: 0.3, to: 3.5, life: 0.6 });
   }
 
+  // Traînée de mouvement : arc coloré qui balaie devant le personnage.
+  // yaw : orientation du personnage ; tilt : inclinaison du plan du coup
+  // (0 = horizontal, π/2 = vertical) ; flip : sens du balayage.
+  swoosh(pos, yaw, { color = '#ffffff', radius = 1.5, arc = 2.2, width = 0.3, tilt = 0.25, life = 0.2, flip = false, dark = false, y = 1.15, roll = 0 } = {}) {
+    const key = `${arc.toFixed(2)}:${width.toFixed(2)}`;
+    let geo = this.swooshGeo.get(key);
+    if (!geo) {
+      // Anneau partiel dont l'épaisseur s'affine vers la queue (couleur par sommet).
+      geo = new THREE.RingGeometry(1 - width, 1, 40, 1, -arc / 2, arc);
+      const n = geo.attributes.position.count;
+      const fade = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const x = geo.attributes.position.getX(i);
+        const y = geo.attributes.position.getY(i);
+        const a = (Math.atan2(y, x) + arc / 2) / arc; // 0 = queue, 1 = tête
+        const v = Math.min(1, 0.25 + Math.max(0, Math.min(1, a)) ** 0.7 * 1.1);
+        fade[i * 3] = fade[i * 3 + 1] = fade[i * 3 + 2] = v;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(fade, 3));
+      this.swooshGeo.set(key, geo);
+    }
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      color, vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide,
+      blending: dark ? THREE.NormalBlending : THREE.AdditiveBlending,
+    }));
+    if (dark) m.material.vertexColors = false;
+    const o = new THREE.Object3D();
+    o.position.set(pos.x, pos.y + y, pos.z);
+    o.rotation.set(0, yaw, 0);
+    m.rotation.set(-Math.PI / 2 + tilt, 0, -Math.PI / 2 + roll); // arc centré vers l’avant (+Z local)
+    if (flip) m.scale.x = -1;
+    o.add(m);
+    o.scale.setScalar(radius * 0.7);
+    this.scene.add(o);
+    this.swooshes.push({ o, m, t: 0, life, radius, spin: (flip ? -1 : 1) * 1.4 });
+  }
+
+  // Arc électrique : particules serrées le long d'un tracé en zigzag.
+  bolt(from, to, color = '#7fd0ff', segs = 7) {
+    let px = from.x;
+    let py = from.y;
+    let pz = from.z;
+    for (let i = 1; i <= segs; i++) {
+      const k = i / segs;
+      const j = i === segs ? 0 : 0.45;
+      const nx = from.x + (to.x - from.x) * k + (Math.random() - 0.5) * j;
+      const ny = from.y + (to.y - from.y) * k + (Math.random() - 0.5) * j;
+      const nz = from.z + (to.z - from.z) * k + (Math.random() - 0.5) * j;
+      for (let t = 0; t < 5; t++) {
+        const u = t / 5;
+        this.emit({ x: px + (nx - px) * u, y: py + (ny - py) * u, z: pz + (nz - pz) * u }, { count: 1, color, speed: 0.2, up: 0, size: 0.22, life: 0.18, gravity: 0, drag: 8 });
+      }
+      px = nx;
+      py = ny;
+      pz = nz;
+    }
+  }
+
+  // Impact propre à chaque noyau équipé (couleur = glow du noyau).
+  coreImpact(pos, core, color, heavy) {
+    if (core === 'amber_knuckles') {
+      // Ambre : étincelles chaudes qui retombent.
+      this.emit(pos, { count: heavy ? 26 : 14, color: '#ffb347', speed: heavy ? 8 : 6, up: 4, size: 0.16, life: 0.75, gravity: 14, drag: 1 });
+      this.emit(pos, { count: 6, color: '#fff1a8', speed: 3, size: 0.28, life: 0.25, gravity: 0 });
+    } else if (core === 'eclipse_gauntlets') {
+      // Éclipse : arcs bleus qui jaillissent du point d'impact.
+      for (let i = 0; i < (heavy ? 4 : 2); i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 1 + Math.random() * (heavy ? 1.6 : 0.9);
+        this.bolt(pos, { x: pos.x + Math.cos(a) * r, y: pos.y + (Math.random() - 0.3) * 1.4, z: pos.z + Math.sin(a) * r }, color);
+      }
+    } else if (core === 'void_phalanx') {
+      // Vide : distorsion violette qui implose.
+      this.ring({ x: pos.x, y: pos.y - 1, z: pos.z }, { color: '#2a0f4a', from: heavy ? 3 : 2, to: 0.2, life: 0.32, y: 1, opacity: 0.7, dark: true });
+      this.ring({ x: pos.x, y: pos.y - 1, z: pos.z }, { color, from: 0.2, to: heavy ? 3.2 : 2.2, life: 0.4, y: 1, opacity: 0.8 });
+      for (let i = 0; i < (heavy ? 14 : 8); i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 1.6;
+        this.emit({ x: pos.x + Math.cos(a) * r, y: pos.y + (Math.random() - 0.5), z: pos.z + Math.sin(a) * r }, { count: 1, color, speed: 0.1, size: 0.22, life: 0.3, gravity: 0, dir: { x: -Math.cos(a), y: 0, z: -Math.sin(a) } });
+      }
+    } else {
+      this.emit(pos, { count: heavy ? 10 : 6, color, speed: 5, size: 0.18, life: 0.35, gravity: 3 });
+    }
+    if (heavy) this.ring({ x: pos.x, y: pos.y - 1, z: pos.z }, { color, from: 0.3, to: 3, life: 0.35, y: 1, opacity: 0.85 });
+  }
+
+  // Forme Abysse : trois griffures parallèles et éclaboussures d'encre noire.
+  claws(pos, yaw, { flip = false, color = '#b48cff' } = {}) {
+    for (let i = -1; i <= 1; i++) {
+      this.swoosh(pos, yaw, { color, radius: 1.8 + i * 0.16, arc: 1.4, width: 0.1, tilt: 0.75, roll: i * 0.1 + (flip ? -0.9 : 0.9), life: 0.24, flip, y: 1.2 + i * 0.16 });
+    }
+  }
+
+  ink(pos, amount = 1) {
+    this.puff(pos, { color: '#1d1530', size: 0.45, life: 0.5, rise: -0.5, spread: 0.9, count: Math.round(6 * amount) });
+    this.emit(pos, { count: Math.round(10 * amount), color: '#3a1d6e', speed: 5, up: 2, size: 0.25, life: 0.45, gravity: 10 });
+  }
+
   update(dt) {
+    for (let i = this.swooshes.length - 1; i >= 0; i--) {
+      const w = this.swooshes[i];
+      w.t += dt;
+      const k = w.t / w.life;
+      w.m.rotation.z += w.spin * dt * (1 - k) * 3;
+      w.o.scale.setScalar(w.radius * (0.7 + 0.35 * Math.min(1, k * 3)));
+      w.m.material.opacity = 0.95 * (1 - k) ** 1.5;
+      if (k >= 1) {
+        this.scene.remove(w.o);
+        w.m.material.dispose();
+        this.swooshes.splice(i, 1);
+      }
+    }
     let any = false;
     for (let i = 0; i < MAX_PARTICLES; i++) {
       const p = this.particles[i];

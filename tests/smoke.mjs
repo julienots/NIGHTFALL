@@ -706,7 +706,8 @@ check('rechargement : pouvoirs restaurés', re.powers.rings && re.powers.flight 
 check('rechargement : groupe vaincu absent', re.parking === 0);
 
 await G(() => { const g = window.__nightfall; g.hero.takeDamage(9999, g.hero.pos.clone().add({ x: 1, y: 0, z: 0 })); });
-await page.waitForTimeout(2600);
+// (le menu apparaît après 2,2 s ; le rendu logiciel peut retarder le minuteur)
+await page.waitForSelector('.menu.death.on', { timeout: 10000 }).catch(() => {});
 check('écran de mort', await page.isVisible('.menu.death.on'));
 await page.click('[data-act=respawn]');
 await sim(0.2);

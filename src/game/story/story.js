@@ -334,6 +334,25 @@ export class Story {
       const npc = new Npc(g, { id: 'sc' + i, seed: 500 + i * 7, x: s.x, y: 0, z: s.z, yaw: s.yaw });
       this.students.push(npc);
     });
+    // Élèves qui circulent : couloir, hall ↔ couloir, cafétéria.
+    if (this.lifeMode() || this.stage() === 'prologue') {
+      const R = S.rooms;
+      const D = S.doors;
+      const paths = [
+        [[R.corridor.x - 22, R.corridor.z - 0.5], [R.corridor.x + 20, R.corridor.z - 0.5]],
+        [[R.corridor.x + 18, R.corridor.z + 0.6], [R.corridor.x - 20, R.corridor.z + 0.6]],
+        [[R.hall.x - 1, R.hall.z - 2], [D.hall.x, D.hall.z], [R.corridor.x - 8, R.corridor.z]],
+        [[D.cafeteria.x, D.cafeteria.z], [R.cafeteria.x + 4, R.cafeteria.z], [R.cafeteria.x - 2, R.cafeteria.z - 3]],
+        [[R.corridor.x - 12, R.corridor.z], [D.cdi.x, D.cdi.z], [R.cdi.x, R.cdi.z - 2]],
+        [[R.hall.x + 2, R.hall.z + 1], [R.hall.x + 2, R.hall.z - 3]],
+      ];
+      const walkers = g.settings.quality === 'low' ? 4 : g.settings.quality === 'medium' ? 7 : 10;
+      for (let i = 0; i < walkers; i++) {
+        const path = paths[i % paths.length];
+        const route = i >= paths.length ? [...path].reverse() : path;
+        this.students.push(new Npc(g, { id: 'sw' + i, seed: 640 + i * 11, x: route[0][0], y: 0, z: route[0][1], route, wait: i * 0.8 }));
+      }
+    }
     this.cpe = null;
     this.#populateBully();
   }
@@ -351,22 +370,58 @@ export class Story {
   }
 
   // Passants de jour (centre-ville + quartiers) ; fuient / disparaissent la nuit.
+  // Selon la qualité : 1 à 3 marcheurs par itinéraire, joggeurs autour de
+  // l'étang, groupes qui discutent dans la cour, au parc et au café.
   #ambient(day) {
     const g = this.game;
     if (!this.npcs.length) {
+      const q = g.settings.quality;
+      const per = q === 'low' ? 1 : q === 'medium' ? 2 : 3;
       const routes = [
         [[9.6, 30], [9.6, 12], [30, 9.4]], [[-9.6, 28], [-9.6, 50]], [[34, 9.4], [55, 9.4]], [[-33, 9.4], [-55, 9.4]],
         [[9.6, -28], [9.6, -50]], [[-9.6, -17], [-9.6, -50]], [[18, 28.5], [28.5, 28.5]], [[-12, 9.4], [-28, 9.4]],
         ...(g.districts.npcRoutes || []),
       ];
-      const n = g.settings.quality === 'low' ? 8 : g.settings.quality === 'medium' ? 14 : routes.length;
-      routes.slice(0, n).forEach((r, i) => this.npcs.push(new Npc(g, { id: 'civ' + i, seed: 100 + i * 17, x: r[0][0], z: r[0][1], route: r })));
+      let id = 0;
+      routes.forEach((r, ri) => {
+        for (let k = 0; k < per; k++) {
+          const start = Math.floor((k * r.length) / per) % r.length;
+          const route = [...r.slice(start), ...r.slice(0, start)];
+          this.npcs.push(new Npc(g, { id: 'civ' + id, seed: 100 + id * 17, x: route[0][0], z: route[0][1], route, wait: k * 2.5 + ri * 0.3 }));
+          id++;
+        }
+      });
+      // Joggeurs : tour de l'étang du parc, allure de course.
+      const center = (r) => r.reduce((a, [x, z]) => [a[0] + x / r.length, a[1] + z / r.length], [0, 0]);
+      const pond = (g.districts.npcRoutes || []).find((r) => r.length >= 8 && Math.hypot(center(r)[0] + 134, center(r)[1] - 35) < 3);
+      if (pond) {
+        for (let k = 0; k < per; k++) {
+          const start = Math.floor((k * pond.length) / per + pond.length / 3) % pond.length;
+          const route = [...pond.slice(start), ...pond.slice(0, start)];
+          const npc = new Npc(g, { id: 'jog' + k, seed: 900 + k * 41, x: route[0][0], z: route[0][1], route, speed: 3.6 + k * 0.3, wait: 0 });
+          npc.jogger = true;
+          this.npcs.push(npc);
+        }
+      }
+      // Groupes qui discutent (points de rendez-vous non utilisés par les amis).
+      const H = g.districts.hangouts || {};
+      const spots = [...(H.schoolyard || []).slice(2), ...(H.park || []).slice(2), ...(H.cafe || []).slice(2)];
+      const groups = q === 'low' ? 3 : q === 'medium' ? 6 : spots.length;
+      spots.slice(0, groups).forEach(([cx, cz], gi) => {
+        const size = 2 + ((gi + per) % 2);
+        for (let k = 0; k < size; k++) {
+          const a = (k / size) * Math.PI * 2 + gi;
+          const x = cx + Math.sin(a) * 0.95;
+          const z = cz + Math.cos(a) * 0.95;
+          this.npcs.push(new Npc(g, { id: `grp${gi}_${k}`, seed: 1300 + gi * 29 + k * 7, x, z, yaw: Math.atan2(cx - x, cz - z), chat: true }));
+        }
+      });
     }
     for (const npc of this.npcs) {
       if (day) {
-        npc.mode = 'walk';
+        npc.mode = npc.route.length ? 'walk' : 'idle';
         npc.goneT = 0;
-        npc.speed = 1.3 + Math.random() * 0.4;
+        if (!npc.jogger && npc.route.length) npc.speed = 1.3 + Math.random() * 0.4;
         npc.model.root.visible = true;
       } else if (npc.mode !== 'flee') npc.mode = 'gone';
     }

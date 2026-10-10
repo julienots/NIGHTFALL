@@ -155,6 +155,8 @@ export class Magnetism {
     p.spin.set((Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.6);
     this.game.fx.dustRing(p.pos, 1.6, 12);
     this.game.fx.ring(p.pos, { color: '#7fe3ff', from: 0.5, to: 3.2, life: 0.4 });
+    // Débris arrachés au sol.
+    this.game.fx.emit({ x: p.pos.x, y: p.pos.y + 0.2, z: p.pos.z }, { count: 14, color: '#9a94b0', speed: 4, up: 5, size: 0.22, life: 0.7, gravity: 12 });
     this.game.shake(0.15, p.pos);
   }
 
@@ -235,6 +237,7 @@ export class Magnetism {
     g.hero.playAnim('magnetThrow', 0.45, false);
     g.audio.magnetThrow();
     g.shake(0.25);
+    g.fx.ring({ x: p.pos.x, y: p.pos.y - 0.5, z: p.pos.z }, { color: '#7fe3ff', from: 0.4, to: 3.5, life: 0.3, y: 0 });
     g.onMagnet?.('throw', p);
     return true;
   }
@@ -337,6 +340,13 @@ export class Magnetism {
         p.rot.y += dt * 0.6;
         p.rot.z += (Math.cos(g.time * 1.1) * 0.2 - p.rot.z) * dt * 2;
         if (Math.random() < 0.3) g.fx.emit({ x: p.pos.x, y: p.pos.y - 0.3, z: p.pos.z }, { count: 1, color: '#7fe3ff', speed: 0.6, size: 0.18, life: 0.4, gravity: -1 });
+        // Champ magnétique visible : anneaux qui se resserrent et arcs main → objet.
+        p.fieldT = (p.fieldT || 0) - dt;
+        if (p.fieldT <= 0) {
+          p.fieldT = 0.4;
+          g.fx.ring({ x: p.pos.x, y: p.pos.y - 0.6, z: p.pos.z }, { color: '#7fe3ff', from: 2.4, to: 0.7, life: 0.4, y: 0, opacity: 0.55 });
+        }
+        if (Math.random() < dt * 5) g.fx.bolt(hero.pos.clone().add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(f, 0.4), p.pos, '#9fe8ff', 5);
       } else if (p.state === 'storm') {
         const s = this.storm;
         p.orbit += dt * 2.2;
@@ -372,7 +382,7 @@ export class Magnetism {
           if (Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) < e.radius + 1.4 && Math.abs(dy) < e.def.height * 0.5 + 1.2) {
             p.hit.add(e);
             this.#damage(p, e, 1);
-            g.fx.hitSpark?.(p.pos, true);
+            g.fx.hitSpark(p.pos, '#7fe3ff', true);
             p.vel.multiplyScalar(0.35);
             p.vel.y = Math.max(p.vel.y, 3);
           }

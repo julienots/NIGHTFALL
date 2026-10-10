@@ -432,6 +432,8 @@ export class Game {
     this.audio.applySettings(s);
     const q = s.quality;
     this.dynRes.scale = 1;
+    // Distance au-delà de laquelle les PNJ ne sont ni animés ni dessinés.
+    this.npcFar = q === 'low' ? 48 : q === 'medium' ? 62 : 80;
     const samples = q === 'low' ? 0 : 4;
     for (const t of [this.composer.renderTarget1, this.composer.renderTarget2]) {
       if (t.samples !== samples) {

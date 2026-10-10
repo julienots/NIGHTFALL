@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { HeroModel, PALETTES } from './heroModel.js';
 import { RingSystem } from './rings.js';
+import { ITEMS } from '../data/items.js';
 
 export const MOVES = {
   light: [
@@ -234,6 +235,27 @@ export class Hero {
     if (def.whip) this.rings.set('whip');
   }
 
+  // Noyau équipé : identifiant et couleur (traînées, étincelles d'impact).
+  #core() {
+    const w = this.game.inventory?.equippedItem('weapon');
+    return { id: w?.id || null, glow: (w && ITEMS[w.id]?.visual?.glow) || '#7fe3ff' };
+  }
+
+  // Traînée du coup au moment de l'impact (style cartoon).
+  #swingFx(def) {
+    const fx = this.game.fx;
+    const p = this.pos;
+    if (this.form === 'umbra') {
+      if (def.anim === 'clawR' || def.anim === 'clawL') fx.claws(p, this.yaw, { flip: def.anim === 'clawL' });
+      else if (def.pull) fx.swoosh(p, this.yaw, { color: '#2a1050', radius: 4.5, arc: 0.7, width: 0.18, tilt: 0.05, life: 0.3, dark: true });
+      return;
+    }
+    const { glow } = this.#core();
+    if (def.whip) fx.swoosh(p, this.yaw, { color: glow, radius: 3.2, arc: 3.3, width: 0.35, tilt: 0.55, life: 0.28, flip: true });
+    else if (def.ringShot) fx.swoosh(p, this.yaw, { color: glow, radius: 2, arc: 1.6, width: 0.45, tilt: 0.8, roll: 1.1, life: 0.22 });
+    else if (def.ring) fx.swoosh(p, this.yaw, { color: glow, radius: 1.6, arc: 1.5, width: 0.5, tilt: 0.7, life: 0.17, flip: def.ring === 'L', roll: def.ring === 'L' ? -0.25 : 0.25 });
+  }
+
   // Multiplicateur de compétences : force, enchaînement, riposte.
   #dmgMult() {
     let m = this.mods.damageMult;
@@ -257,6 +279,13 @@ export class Hero {
       const pullDist = def.pull ? Math.max(0, Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z) - 2.2) : 0;
       if (e.takeHit({ damage: dmg, dir: d, knock: def.knock, poise: def.poise, heavy: !!def.heavy, power: def === MOVES.power || umbra, pullDist })) hits++;
       if (umbra) this.hp = Math.min(this.stats.maxHp, this.hp + Math.max(1, Math.round(dmg * 0.06))); // la substance se nourrit
+      // Effets d'impact : encre noire en Forme Abysse, sinon propres au noyau.
+      const at = { x: e.pos.x - dir.x * (e.radius || 0.5), y: e.pos.y + (e.def?.height || 1.6) * 0.55, z: e.pos.z - dir.z * (e.radius || 0.5) };
+      if (umbra) this.game.fx.ink(at, def.heavy ? 1.4 : 0.8);
+      else {
+        const c = this.#core();
+        this.game.fx.coreImpact(at, c.id, c.glow, !!def.heavy);
+      }
       if (def.roar) e.stagger?.(1.4);
       if (def.pull) this.game.fx.emit({ x: e.pos.x, y: e.pos.y + 1, z: e.pos.z }, { count: 10, color: '#1d1530', speed: 3, size: 0.3, life: 0.4 });
     };
@@ -628,6 +657,7 @@ export class Hero {
           }
           if (act.def.pull) this.game.fx.emit(this.pos.clone().add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(this.facing(), 2), { count: 20, color: '#1d1530', speed: 9, size: 0.3, life: 0.35, gravity: 0, dir: this.facing() });
           if (act.kind === 'power' && !U) this.game.audio.voidStrike();
+          if (act.kind === 'attack') this.#swingFx(act.def);
           this.#resolveHit(act.def);
         }
         if (p >= 1) {

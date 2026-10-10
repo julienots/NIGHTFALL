@@ -42,6 +42,8 @@ export class Npc {
     this.animT = 0;
     this.goneT = 0;
     this.radius = 0.35;
+    this.chat = !!def.chat; // membre d'un groupe qui discute : gestes de temps en temps
+    this.wait = def.wait ?? this.wait;
     game.scene.add(this.model.root);
   }
 
@@ -89,7 +91,7 @@ export class Npc {
       return;
     }
     // Les passants éloignés ne sont ni animés ni dessinés (économie d'appels de dessin).
-    const far = this.pos.distanceTo(this.game.hero.pos) > 70;
+    const far = this.pos.distanceTo(this.game.hero.pos) > (this.game.npcFar || 70);
     this.model.root.visible = !far;
     if (far && this.mode !== 'flee') return;
     const col = this.game.col;
@@ -139,6 +141,8 @@ export class Npc {
     if (this.anim) {
       this.animT += dt;
       if (this.animT >= this.animDur) this.anim = null;
+    } else if (this.chat && this.mode === 'idle' && Math.random() < dt * 0.35) {
+      this.play(Math.random() < 0.8 ? 'talk' : 'wave', 1.6 + Math.random() * 1.4);
     }
     // Fuite : disparaît une fois hors de vue.
     if (this.mode === 'flee') {
