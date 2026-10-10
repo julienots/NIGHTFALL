@@ -31,6 +31,9 @@ const bub = await p.evaluate(() => { const r = document.querySelector('.dialog')
 await p.touchscreen.tap(bub.x, bub.y);
 const line1 = await p.evaluate(() => document.querySelector('.dl-text').textContent);
 check('toucher la bulle fait avancer le dialogue', line0 && line1 !== line0, `${line0.slice(0, 30)}… → ${line1.slice(0, 30)}…`);
+await p.touchscreen.tap(420, 80); // haut de l'écran, loin de la bulle
+const line2 = await p.evaluate(() => document.querySelector('.dl-text').textContent);
+check('toucher n’importe où fait avancer le dialogue', line2 && line2 !== line1, `${line2.slice(0, 30)}…`);
 // Dialogue à choix : un vrai toucher sur la réponse 2 doit la choisir, même
 // avec la couche tactile en mode cinématique (bug v1.3-beta : rien ne réagissait).
 const chosen = await p.evaluate(() => {

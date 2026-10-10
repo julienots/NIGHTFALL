@@ -1,0 +1,56 @@
+# Construit l'APK Android de test (debug) et le publie dans une « release » GitHub
+# téléchargeable directement depuis le téléphone.
+name: APK Android
+
+on:
+  push:
+    branches: [ccr-156b91b0-x98l9l]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - name: Build web + synchro Capacitor
+        run: |
+          npm ci
+          npx vite build
+          npx cap sync android
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - name: Nom de l'APK
+        id: name
+        run: |
+          V=$(grep versionName android/app/build.gradle | sed -E 's/.*"(.*)".*/\1/')
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "NIGHTFALL-v$V.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NIGHTFALL-v${{ steps.name.outputs.version }}
+          path: NIGHTFALL-v${{ steps.name.outputs.version }}.apk
+      - name: Publier la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.name.outputs.version }}-build${{ github.run_number }}
+          name: NIGHTFALL v${{ steps.name.outputs.version }} (build ${{ github.run_number }})
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          body: APK de test (debug). Sur le téléphone, ouvre ce lien, télécharge l'APK et autorise l'installation depuis cette source.
+          files: NIGHTFALL-v${{ steps.name.outputs.version }}.apk

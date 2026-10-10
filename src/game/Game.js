@@ -213,7 +213,13 @@ export class Game {
     // --- Interface ---
     this.hud = new Hud(document.body);
     // Toucher / cliquer la bulle de dialogue la fait avancer.
-    this.hud.$.dialog.addEventListener('pointerdown', () => this.social.next());
+    // Pendant une conversation sans choix, toucher n'importe où fait avancer
+    // (sauf sur un bouton, une réponse ou un menu).
+    addEventListener('pointerdown', (e) => {
+      if (!this.social?.active || this.hud.dl?.choices || this.menus?.isOpen) return;
+      if (e.target.closest?.('.dl-choice, .menu, .t-btn, .t-small, button')) return;
+      this.social.next();
+    }, true);
     this.menus = new Menus(this);
     this.applySettings();
     addEventListener('resize', () => this.#resize());
