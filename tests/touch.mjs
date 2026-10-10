@@ -2,7 +2,7 @@
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 const out = process.argv[2] || 'exports/screens';
-const server = await createServer({ server: { port: 5193 }, logLevel: 'error' });
+const server = await createServer({ server: { port: 5193, hmr: false, watch: null }, logLevel: 'error' });
 await server.listen();
 const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const ctx = await b.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });

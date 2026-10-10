@@ -283,7 +283,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     ball: () => geo('ball', () => new THREE.IcosahedronGeometry(1, 1)),
     ball0: () => geo('ball0', () => new THREE.IcosahedronGeometry(1, 0)),
     cyl: () => geo('cyl', () => new THREE.CylinderGeometry(1, 1, 1, 10).translate(0, 0.5, 0)),
-    crown: () => geo('crown', () => mergeGeometries([[0, 0, 0, 1], [0.62, -0.28, 0.22, 0.68], [-0.55, -0.2, -0.3, 0.72], [0.12, 0.5, -0.12, 0.62]]
+    crown: () => geo('crown', () => mergeGeometries([[0, 0.08, 0, 1.02], [0.62, -0.25, 0.22, 0.7], [-0.58, -0.18, -0.28, 0.74]]
       .map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, low ? 0 : 1).translate(x, y, z)))),
     pine: () => geo('pine', () => mergeGeometries([[1, 1.3, 0.65], [0.78, 1.1, 1.4], [0.52, 0.95, 2.05]]
       .map(([r, h, y]) => nonIdx(new THREE.ConeGeometry(r, h, 7).translate(0, y, 0))))),
@@ -333,6 +333,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
   function cyl(g, x, y, z, rb, rt, h, material, o = {}) {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, o.seg ?? 8), material);
     m.position.set(x, y + h / 2, z);
+    if (o.rotY) m.rotation.y = o.rotY;
     m.castShadow = !!o.cast && !low;
     m.receiveShadow = true;
     g.add(m);
@@ -405,7 +406,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
   // Enseigne (texte français, police cartoon) ; matériau partagé par texte.
   const signMats = new Map();
   function sign(g, text, color, bg, x, y, z, yaw, w, h, o = {}) {
-    const key = text + '|' + color + '|' + bg;
+    const key = text + '|' + color + '|' + bg + (o.both ? '|2' : '');
     if (!signMats.has(key)) signMats.set(key, new THREE.MeshBasicMaterial({ map: signTexture(text, color, bg), side: o.both ? THREE.DoubleSide : THREE.FrontSide }));
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), signMats.get(key));
     m.position.set(x, y, z);
@@ -471,6 +472,14 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
           ctx.kit.finalize();
           kits.push(ctx.kit);
         }
+        // Enseignes de boutiques du kit : un matériau par texture (fusionnables).
+        const canon = new Map();
+        group.traverse((o) => {
+          if (!o.isMesh || o.isInstancedMesh || !o.material?.isMeshBasicMaterial || !o.material.map) return;
+          const k = o.material.map.uuid + ':' + o.material.side;
+          if (!canon.has(k)) canon.set(k, o.material);
+          else o.material = canon.get(k);
+        });
         ctx.merged = mergeStatic(group);
         districts.push({ name, group, bounds });
       },
@@ -547,7 +556,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
       for (let i = 0; i <= n; i++) {
         const [px, pz] = P(s0 + (len * i) / n);
         if (kind === 'chain' || kind === 'iron') ctx.I('fpostM', G.ubase, MAT.metal).add(px, y, pz, yaw, 0.1, h + 0.1, 0.1);
-        else ctx.I('fpostW', G.ubase, kind === 'picket' ? MAT.inst : MAT.woodDark, { colored: kind === 'picket' }).add(px, y, pz, yaw, 0.12, h + 0.08, 0.12, color);
+        else ctx.I(kind === 'picket' ? 'fpostP' : 'fpostW', G.ubase, kind === 'picket' ? MAT.inst : MAT.woodDark, { colored: kind === 'picket' }).add(px, y, pz, yaw, 0.12, h + 0.08, 0.12, color);
       }
       if (kind === 'chain') {
         const pg = new THREE.PlaneGeometry(len, h);
@@ -559,7 +568,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
         ctx.group.add(m);
         ctx.I('frail', G.ubox, MAT.metal).add(cx, y + h, cz, yaw, len, 0.06, 0.06);
       } else if (kind === 'picket') {
-        const sp = low ? 0.42 : 0.26;
+        const sp = low ? 0.45 : 0.32;
         const k = Math.max(1, Math.floor(len / sp));
         for (let i = 0; i < k; i++) {
           const [px, pz] = P(s0 + (i + 0.5) * (len / k));
@@ -636,11 +645,9 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     ctx.group.add(g);
     // Panneaux (enseigne sur l'avant du toit + plaque d'arrêt)
     sign(ctx.group, label, '#ffffff', '#3d6fd1', x, S + 2.95, z - 0.81, Math.PI, 2.4, 0.6);
-    sign(ctx.group, 'BUS 12', '#ffffff', '#3d6fd1', x - 2.1, S + 2.9, z - 0.3, Math.PI / 2, 0.8, 0.8, { both: true });
+    sign(ctx.group, 'BUS 12', '#ffffff', '#3d6fd1', x - 1.4, S + 3.15, z, Math.PI / 2, 1.2, 0.4, { both: true });
     sign(ctx.group, 'LIGNE 12', '#ffcd20', '#7b4ad6', x + 1.15, S + 1.45, z + 0.68, Math.PI, 1.1, 0.5);
-    ctx.I('lpole', G.pole, MAT.dark).add(x - 2.1, 0, z - 0.3, 0, 0.6, 3.3, 0.6);
     col.addBox({ x: x - 1.8, y: 0, z: z + 0.6 }, { x: x + 1.8, y: 2.6, z: z + 0.8 });
-    col.addCentered(x - 2.1, 0, z - 0.3, 0.2, 3.3, 0.2);
   }
   // Drapeau ondulant (maillage dynamique animé dans update).
   const flags = [];
@@ -653,6 +660,128 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     ctx.group.add(m);
     flags.push({ m, base: Float32Array.from(geom.attributes.position.array), w, ph: rand() * 6 });
   }
+
+  // ---------- Points d'intérêt ----------
+  const targets = {
+    school_door: { x: 136, y: S, z: 32.6 },
+    school_gate: { x: 136, y: S, z: 9.5 },
+    bus_school: { x: 124, y: S, z: 9.0 },
+    home_door: { x: 30, y: S, z: 78.6 },
+    home_mailbox: { x: 32.1, y: S, z: 78.1 },
+    park_entrance: { x: -76.5, y: S, z: 30 },
+    park_cafe: { x: -104.6, y: S + 0.08, z: 22 },
+    park_pond: { x: -114.8, y: S, z: 35 },
+    park_fountain: { x: -134, y: S, z: -25 },
+    aegis_tower: { x: 35, y: S, z: -78.6 },
+    harbor: { x: 20, y: S, z: -210.2 },
+    stadium: { x: 134, y: S, z: -32 },
+    stadium_gate: { x: 134, y: S, z: -9.4 },
+    industrial_gate: { x: -131, y: S, z: -77 },
+    forest_trail: { x: -214, y: 0, z: 0 },
+  };
+
+  const P = (x, z) => [x, z];
+  // Points d'un ovale « stade » (piste) de demi-largeur r autour de (134, -32).
+  const stadiumPts = (r, step = 3) => {
+    const pts = [];
+    for (let x = 104; x < 164; x += step) pts.push([x, -32 - r]);
+    for (let a = -Math.PI / 2; a < Math.PI / 2; a += step / r) pts.push([164 + Math.cos(a) * r, -32 + Math.sin(a) * r]);
+    for (let x = 164; x > 104; x -= step) pts.push([x, -32 + r]);
+    for (let a = Math.PI / 2; a < Math.PI * 1.5; a += step / r) pts.push([104 + Math.cos(a) * r, -32 + Math.sin(a) * r]);
+    return pts;
+  };
+  const ringPts = (cx, cz, r, n, a0 = 0) => Array.from({ length: n }, (_, i) => P(cx + Math.cos(a0 + (i / n) * 6.283) * r, cz + Math.sin(a0 + (i / n) * 6.283) * r));
+  const enemySpawns = [
+    // Parc : rôdeurs autour de l'étang, crawler près de l'aire de jeux
+    { after: 'p03_rings', type: 'stalker', x: -134, z: 53.5, group: 'park', patrol: ringPts(-134, 35, 18.5, 12, Math.PI / 2) },
+    { after: 'p03_rings', type: 'stalker', x: -127.4, z: -35, group: 'park', patrol: ringPts(-134, -35, 6.6, 10) },
+    { after: 'p03_rings', type: 'crawler', x: -152, z: -40, group: 'park', patrol: [[-152, -40], [-160, -24], [-150, -18]] },
+    // Zone industrielle
+    { after: 'p03_rings', type: 'stalker', x: -145, z: -90, group: 'industrial', patrol: [[-145, -90], [-100, -90], [-100, -95]] },
+    { after: 'p03_rings', type: 'crawler', x: -112, z: -116, group: 'industrial', patrol: [[-112, -116], [-135, -116], [-135, -108]] },
+    { after: 'p03_rings', type: 'brute', x: -125, z: -152, group: 'industrial', patrol: [[-125, -152], [-145, -152], [-145, -138]] },
+    // Port
+    { after: 'p03_rings', type: 'stalker', x: -80, z: -210.2, group: 'port', patrol: [[-80, -210.2], [-150, -210.2]] },
+    { after: 'p03_rings', type: 'stalker', x: 110, z: -210.2, group: 'port', patrol: [[110, -210.2], [160, -210.2]] },
+    { after: 'p03_rings', type: 'brute', x: 20, z: -210.2, group: 'port', patrol: [[20, -210.2], [-20, -210.2], [60, -210.2]] },
+    // Les Tilleuls
+    { after: 'p03_rings', type: 'stalker', x: 30, z: 103.4, group: 'suburb', patrol: [[30, 103.4], [58, 103.4], [12, 103.4]] },
+    { after: 'p03_rings', type: 'crawler', x: 130, z: 135.4, group: 'suburb', patrol: [[130, 135.4], [180, 135.4], [90, 135.4]] },
+    // Stade
+    { after: 'p03_rings', type: 'stalker', x: 120, z: -30, group: 'stadium', patrol: [[120, -30], [150, -24], [150, -40]] },
+    { after: 'p03_rings', type: 'stalker', x: 150, z: -40, group: 'stadium', patrol: ringPts(134, -32, 15.8, 8).map(([x, z]) => [134 + (x - 134) * 1.6, z]) },
+    { after: 'p03_rings', type: 'brute', x: 134, z: -32, group: 'stadium', patrol: [[134, -32], [118, -32], [150, -32]] },
+  ];
+  // La patrouille du stade suit la piste (forme ovale élargie en x).
+  enemySpawns[12].patrol = stadiumPts(15.8, 2);
+
+  const crates = [
+    { id: 'crate_supply_park', type: 'supply', x: -150, y: S, z: -18, rot: 0.4 },
+    { id: 'crate_supply_campus', type: 'supply', x: 172, y: S, z: 31, rot: 0.9 },
+    { id: 'crate_supply_stadium', type: 'supply', x: 178, y: S, z: -48, rot: 0.2 },
+    { id: 'crate_supply_suburb', type: 'supply', x: 58, y: S, z: 135.4, rot: 1.3 },
+    { id: 'crate_supply_port', type: 'supply', x: 158, y: S, z: -211, rot: 0.1 },
+    { id: 'crate_supply_industrial', type: 'supply', x: -176, y: S, z: -91, rot: 0.7 },
+    // Élite : au sommet de la pile de conteneurs (à escalader : caisse > conteneur > caisse…)
+    { id: 'crate_elite_containers', type: 'elite', x: -127, y: S + 7.8, z: -110.8, rot: 0.3 },
+  ];
+
+  const magnetSpots = [
+    // Parking du lycée
+    { kind: 'car', x: 81, z: 18, yaw: Math.PI / 2 }, { kind: 'car', x: 81, z: 33, yaw: Math.PI / 2 },
+    { kind: 'car', x: 91.5, z: 24, yaw: -Math.PI / 2 }, { kind: 'car', x: 91.5, z: 45, yaw: -Math.PI / 2 },
+    // Stationnement le long des avenues
+    { kind: 'car', x: 100, z: 6.2, yaw: Math.PI / 2 }, { kind: 'car', x: 170, z: -6.2, yaw: -Math.PI / 2 },
+    { kind: 'car', x: -150, z: -6.2, yaw: -Math.PI / 2 }, { kind: 'car', x: 6.2, z: 150, yaw: 0 },
+    { kind: 'car', x: -6.2, z: -130, yaw: Math.PI },
+    // Ruelles des Tilleuls
+    { kind: 'car', x: -30, z: 100.8, yaw: Math.PI / 2 }, { kind: 'car', x: 44, z: 100.8, yaw: Math.PI / 2 },
+    { kind: 'car', x: 135, z: 132.8, yaw: -Math.PI / 2 }, { kind: 'dumpster', x: 160, z: 101.2, yaw: 0 },
+    { kind: 'dumpster', x: -48, z: 132.4, yaw: 0 },
+    // Zone industrielle
+    { kind: 'dumpster', x: -118, z: -88.8, yaw: 0 }, { kind: 'dumpster', x: -145, z: -110, yaw: Math.PI / 2 },
+    { kind: 'barrel', x: -100, z: -140, yaw: 0 }, { kind: 'barrel', x: -99, z: -141.2, yaw: 0 }, { kind: 'car', x: -160, z: -152, yaw: 0.3 },
+    // Port
+    { kind: 'barrel', x: -108, z: -208.9, yaw: 0 }, { kind: 'barrel', x: 76, z: -208.9, yaw: 0 }, { kind: 'barrel', x: 77.2, z: -209.0, yaw: 0 },
+    { kind: 'car', x: -30, z: -195.5, yaw: Math.PI / 2 }, { kind: 'car', x: 140, z: -204.5, yaw: -Math.PI / 2 },
+    // Rangée nord / affaires
+    { kind: 'car', x: -20, z: -164, yaw: Math.PI / 2 }, { kind: 'car', x: 120, z: -194.5, yaw: Math.PI / 2 },
+  ];
+
+  // Boucles de promenade (jour) sur trottoirs et allées.
+  const npcRoutes = [
+    [[113, 16], [159, 16], [159, 30], [113, 30]], // parvis du lycée
+    [[80, 9.7], [190, 9.7]], // trottoir de l'avenue (campus)
+    stadiumPts(15.8, 3), // piste du stade
+    [[80, -9.7], [126, -9.7]], // trottoir du stade
+    [[-60, 103.4], [-10, 103.4]], // ruelle Tilleuls ouest
+    [[10, 103.4], [60, 103.4]], // ruelle de Noa
+    [[78, 135.4], [190, 135.4]], // ruelle Tilleuls est
+    [[10, 76.5], [60, 76.5]], // trottoir devant chez Noa
+    ringPts(-134, 35, 18.5, 12), // tour de l'étang
+    [[-78, 30], [-92, 30.5], [-104, 32.5], [-115, 35]], // entrée du parc → étang
+    ringPts(-134, -35, 6.6, 10), // autour de la fontaine
+    ringPts(-134, 134, 9.5, 10), // kiosque à musique
+    [[-145, -91], [-100, -91], [-100, -95], [-145, -95]], // cour industrielle
+    [[-60, -161], [-12, -161]], // cour des immeubles nord
+    [[10, -77.2], [60, -77.2]], // devant la grille AEGIS
+    [[80, -118.5], [188, -118.5]], // esplanade d'affaires
+    [[-150, -210.4], [150, -210.4]], // quai du port
+  ];
+
+  // Zones à garder libres (arbres et décors aléatoires) : trajets des PNJ,
+  // patrouilles, caisses, objets magnétiques.
+  const KEEP = [];
+  for (const r of npcRoutes) r.forEach((p, i) => KEEP.push([p, r[(i + 1) % r.length]]));
+  for (const e of enemySpawns) [[e.x, e.z], ...e.patrol].forEach((p, i, arr) => KEEP.push([p, arr[(i + 1) % arr.length]]));
+  for (const c of [...crates, ...magnetSpots]) KEEP.push([[c.x, c.z], [c.x, c.z]]);
+  const nearKeep = (x, z, d = 2.4) => KEEP.some(([[ax, az], [bx, bz]]) => {
+    const vx = bx - ax;
+    const vz = bz - az;
+    const l2 = vx * vx + vz * vz;
+    const t = l2 ? Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / l2)) : 0;
+    return (ax + vx * t - x) ** 2 + (az + vz * t - z) ** 2 < d * d;
+  });
 
   // =====================================================================
   // 1. CAMPUS — LYCÉE VESPER-NORD (x 76..192, z 8..62)
@@ -674,6 +803,8 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     // Façade nord : grande enseigne au-dessus de la double porte (x = 136)
     sign(g, 'LYCÉE VESPER-NORD', '#ffffff', '#2f4fa8', 136, 3.45, 33.4, Math.PI, 13, 2.1);
     box(g, 133.9, S, 33.55, 138.1, 2.65, 34, MAT.dark, { collide: false }); // encadrement
+    sign(g, 'LYCÉE VESPER-NORD', '#ffe27a', '#2f4fa8', 136, 16.3, 35.2, Math.PI, 18, 4);
+    for (const k of [-7, 0, 7]) d.I('flagpole', G.pole, MAT.metal).add(136 + k, 13, 35.4, 0, 1.5, 2, 1.5);
     for (const k of [-0.76, 0.76]) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(1.42, 2.25), MAT.warmGlass);
       p.position.set(136 + k, S + 1.2, 33.53);
@@ -681,7 +812,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
       g.add(p);
     }
     box(g, 135.95, S, 33.45, 136.05, 2.45, 33.55, MAT.dark, { collide: false }); // montant central
-    box(g, 132.4, 0, 31.9, 139.6, S + 0.15, 33.6, MAT.stone); // marche d'entrée
+    box(g, 132.4, 0, 32.95, 139.6, S + 0.15, 33.6, MAT.stone); // marche d'entrée
     for (const k of [-2.6, 2.6]) d.I('lhead', G.ball, MAT.lampHead).add(136 + k, 2.3, 33.7, 0, 0.22, 0.22, 0.12);
     addLight(g, 136, 3.0, 31.0, '#ffd9a0');
     // Fenêtres du rez-de-chaussée (le kit laisse le socle aveugle sans commerces)
@@ -703,13 +834,12 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
       cbox(g, px, S + 3.0, 11.2, 1.2, 0.25, 1.2, MAT.white, { collide: false });
     }
     // Battants du portail, grands ouverts vers l'intérieur
-    for (const [px, sgn] of [[128.4, 1], [143.6, -1]]) {
-      cbox(g, px, S, 13.1, 0.08, 1.8, 3.6, MAT.dark, { colH: 2 });
-      for (let i = 0; i < 9; i++) d.I('bar', G.ubase, MAT.dark).add(px, S, 11.5 + i * 0.4, 0, 0.04, 1.8, 0.04);
-      void sgn;
+    for (const px of [128.4, 143.6]) {
+      for (const y of [0.25, 1.85]) d.I('irail', G.ubox, MAT.dark).add(px, S + y, 13.1, 0, 0.07, 0.08, 3.6);
+      for (let i = 0; i < 18; i++) d.I('bar', G.ubase, MAT.dark).add(px, S, 11.4 + i * 0.2, 0, 0.04, 1.9, 0.04);
+      col.addCentered(px, 0, 13.1, 0.2, S + 2, 3.6);
     }
-    box(g, 127.6, 3.6, 11.05, 144.4, 3.85, 11.35, MAT.dark, { collide: false });
-    sign(g, 'LYCÉE VESPER-NORD', '#ffffff', '#2f4fa8', 136, 4.35, 10.98, Math.PI, 6.4, 1.6);
+    box(g, 127.6, 3.0, 11.1, 144.4, 3.15, 11.3, MAT.dark, { collide: false }); // linteau du portail
     // Abribus « LYCÉE »
     busShelter(d, 124, 9.8, 'LYCÉE');
     // Arbres en bacs, bancs, local à vélos, mât
@@ -731,7 +861,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     bike(103.2, 30.5, 0, '#3d6fd1');
     bike(105.8, 30.5, 0, '#ffcd20');
     cyl(g, 150, S, 31, 0.5, 0.5, 0.4, MAT.stone);
-    d.I('lpole', G.pole, MAT.white).add(150, S, 31, 0, 1, 10, 1);
+    d.I('flagpole', G.pole, MAT.white).add(150, S, 31, 0, 1, 10, 1);
     flag(d, 150.08, 8.9, 31, -Math.PI / 2, 'VESPER', '#ffd23f', '#5b4ad6');
     // Panneau d'affichage
     cbox(g, 116, S, 31.6, 3.2, 2.2, 0.25, MAT.woodDark, { cast: true });
@@ -881,25 +1011,38 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     const cz = (z0 + z1) / 2;
     const y0 = S;
     const H = 6.0;
-    const wallM = mat(o.wall);
+    // Murs, pignons, pans de toit et portes : instances colorées (1 appel de
+    // dessin par type pour tout le quartier, quelle que soit la palette).
+    const hw = (key, geoFn, material) => d.I(key, geoFn, material, { colored: true, shadow: !low });
     const trim = o.trim || '#f4f0e8';
     const trimM = mat(trim);
     box(g, x0 - 0.12, 0, z0 - 0.12, x1 + 0.12, y0 + 0.45, z1 + 0.12, mat('#8a7f9a'), { collide: false });
-    box(g, x0, y0, z0, x1, y0 + H, z1, wallM, { cast: true, collide: false });
+    hw('hwall', G.ubox, MAT.inst).add(cx, y0 + H / 2, cz, 0, w, H, dz, o.wall);
     box(g, x0 - 0.08, y0 + 2.95, z0 - 0.08, x1 + 0.08, y0 + 3.12, z1 + 0.08, trimM, { collide: false });
     box(g, x0 - 0.14, y0 + H - 0.22, z0 - 0.14, x1 + 0.14, y0 + H, z1 + 0.14, trimM, { collide: false });
     const yTop = y0 + H;
     const rh = o.roofH ?? R(2.6, 3.6);
     const kind = o.roofKind ?? (w >= dz ? 'gable' : 'gableZ');
     if (kind === 'hip') {
-      const m = new THREE.Mesh(geo('hip', () => new THREE.ConeGeometry(1, 1, 4, 1).rotateY(Math.PI / 4).translate(0, 0.5, 0)), roofMat(o.roof));
-      m.scale.set((w / 2 + 0.55) / 0.7071, rh, (dz / 2 + 0.55) / 0.7071);
-      m.position.set(cx, yTop - 0.05, cz);
-      m.castShadow = !low;
-      g.add(m);
+      hw('hhip', () => geo('hip', () => new THREE.ConeGeometry(1, 1, 4, 1).rotateY(Math.PI / 4).translate(0, 0.5, 0)), roofMat('#ffffff'))
+        .add(cx, yTop - 0.05, cz, 0, (w / 2 + 0.55) / 0.7071, rh, (dz / 2 + 0.55) / 0.7071, o.roof);
     } else {
+      // Toit à deux pans (même géométrie que gableRoof, en instances)
       const alongX = kind === 'gable';
-      gableRoof(g, cx, cz, yTop, alongX ? w : dz, alongX ? dz : w, rh, wallM, roofMat(o.roof), alongX);
+      const len = alongX ? w : dz;
+      const half = (alongX ? dz : w) / 2;
+      const yaw = alongX ? 0 : Math.PI / 2;
+      const ov = 0.55;
+      const th = 0.22;
+      const a = Math.atan2(rh, half);
+      const sl = (half + ov) / Math.cos(a);
+      const ey = -ov * Math.tan(a);
+      hw('hgable', G.prism, MAT.inst).add(cx, yTop, cz, yaw, len, rh, half * 2, o.wall);
+      for (const sg of [-1, 1]) {
+        const lz = (sg * (half + ov)) / 2;
+        hw('hroof', G.ubox, roofMat('#ffffff')).add(cx + lz * Math.sin(yaw), yTop + (ey + rh) / 2 + th / 2, cz + lz * Math.cos(yaw), yaw, len + ov * 1.4, th, sl, o.roof, sg * a);
+      }
+      hw('hroof', G.ubox, roofMat('#ffffff')).add(cx, yTop + rh + 0.12, cz, yaw, len + ov * 1.4, 0.18, 0.4, o.roof);
     }
     col.addBox({ x: x0, y: 0, z: z0 }, { x: x1, y: yTop + rh, z: z1 }, 'building');
     // Cheminée
@@ -937,7 +1080,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
           if (lit) d.I('wlit', () => geo('wpane', () => new THREE.PlaneGeometry(1.02, 1.22)), MAT.lit, { colored: true }).add(gx, y, gz, f.yaw, 1, 1, 1, pick(['#ffe27a', '#ffd9a0', '#ffe9c4', '#ffb3e6']));
           else d.I('wdark', () => geo('wpane', () => new THREE.PlaneGeometry(1.02, 1.22)), MAT.inst, { colored: true }).add(gx, y, gz, f.yaw, 1, 1, 1, pick(['#2a3170', '#33408a', '#2b2a66']));
           const [mx, mz] = at(f, u, 0.115);
-          d.I('wcross', () => geo('wcross', () => mergeGeometries([new THREE.BoxGeometry(0.07, 1.22, 0.03), new THREE.BoxGeometry(1.02, 0.07, 0.03)].map(nonIdx))), MAT.inst, { colored: true }).add(mx, y, mz, f.yaw, 1, 1, 1, trim);
+          d.I('wcross', () => geo('wcross', () => mergeGeometries([new THREE.PlaneGeometry(0.08, 1.22), new THREE.PlaneGeometry(1.02, 0.08).translate(0, 0, 0.002)])), MAT.inst, { colored: true }).add(mx, y, mz, f.yaw, 1, 1, 1, trim);
           if (shutters) {
             for (const sgn of [-1, 1]) {
               const [sx, sz] = at(f, u + sgn * 0.92, 0.06);
@@ -954,7 +1097,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     }
     // Porte, auvent, marche
     const [dx, dzp] = at(df, doorU, 0.06);
-    cbox(g, dx, y0, dzp, 1.15, 2.25, 0.12, mat(o.doorColor || pick(DOORS)), { yaw: df.yaw, collide: false });
+    hw('hdoor', G.ubox, MAT.inst).add(dx, y0 + 1.125, dzp, df.yaw, 1.15, 2.25, 0.12, o.doorColor || pick(DOORS));
     const [kx, kz] = at(df, doorU + 0.38, 0.14);
     d.I('knob', G.ball0, MAT.lampHead).add(kx, y0 + 1.1, kz, 0, 0.06, 0.06, 0.06);
     const [ax, az] = at(df, doorU, 0.6);
@@ -972,7 +1115,8 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
       const gw = 4.4;
       const gx0 = o.garage === 'e' ? x1 : x0 - gw;
       const gz0 = o.door === 'n' ? z0 : z1 - 6.5;
-      box(g, gx0, y0, gz0, gx0 + gw, y0 + 3.2, gz0 + 6.5, wallM, { colY0: 0, cast: true });
+      hw('hwall', G.ubox, MAT.inst).add(gx0 + gw / 2, y0 + 1.6, gz0 + 3.25, 0, gw, 3.2, 6.5, o.wall);
+      col.addBox({ x: gx0, y: 0, z: gz0 }, { x: gx0 + gw, y: y0 + 3.45, z: gz0 + 6.5 });
       box(g, gx0 - 0.1, y0 + 3.2, gz0 - 0.1, gx0 + gw + 0.1, y0 + 3.45, gz0 + 6.6, trimM, { collide: false });
       const gzF = o.door === 'n' ? gz0 - 0.03 : gz0 + 6.53;
       const gd = cbox(g, gx0 + gw / 2, y0, gzF, 3.3, 2.5, 0.06, ribMat('#e4e0f0'), { collide: false });
@@ -1064,9 +1208,13 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
         if (rand() < 0.8 * (0.5 + Q / 2)) {
           const tz = n ? (f1 + row.back) / 2 : (row.back + f0) / 2;
           const tx = R(l0 + 3, l1 - 3);
-          tree(d, 'round', tx, S, tz, R(0.9, 1.25));
+          if (!blocked(tx, tz, 1.0)) tree(d, 'round', tx, S, tz, R(0.9, 1.25));
         }
-        if (ri === 3 && rand() < 0.7) tree(d, 'round', R(l0 + 2, l1 - 2) < doorX ? doorX - 4.5 : doorX + 4.5, S, R(183, 187), R(1, 1.3));
+        if (ri === 3 && rand() < 0.7) {
+          const tx = rand() < 0.5 ? doorX - 4.5 : doorX + 4.8;
+          const tz = R(183.5, 186.5);
+          if (tx > l0 + 1.5 && tx < l1 - 1.5 && !blocked(tx, tz, 1.4)) tree(d, 'round', tx, S, tz, R(1, 1.3));
+        }
       });
     });
     // Lampadaires des ruelles
@@ -1090,10 +1238,10 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     d.I('gnomeHat', () => geo('gnomeHat', () => new THREE.ConeGeometry(0.2, 0.45, 8)), mat('#e8553f')).add(25.5, S + 0.85, 78.6);
     d.I('flowers', G.ball0, MAT.inst, { colored: true }).add(25.5, S + 0.58, 78.6, 0, 0.15, 0.15, 0.15, '#ffd9b0');
     for (const [x, c] of [[23.5, '#ff6fa8'], [24.5, '#ffd23f'], [35.5, '#ff8a3d'], [36.5, '#ff6fa8']]) d.I('flowers', G.ball0, MAT.inst, { colored: true }).add(x, S + 0.25, 79.3, rand() * 6, 0.5, 0.3, 0.4, c);
-    for (const k of [-0.55, 0.55]) d.I('wheel', () => geo('wheel', () => new THREE.TorusGeometry(0.33, 0.05, 4, 12)), MAT.dark).add(37.9 - 0.4, S + 0.38, 84 + k, Math.PI / 2 + 0.0, 1, 1, 1, null, 0, 0.12);
-    d.I('bframe', G.ubox, MAT.inst, { colored: true }).add(37.4, S + 0.62, 84, 0, 0.06, 0.06, 1.1, '#2fa8a8');
+    for (const k of [-0.55, 0.55]) d.I('wheel', () => geo('wheel', () => new THREE.TorusGeometry(0.33, 0.05, 4, 12)), MAT.dark).add(38.45, S + 0.38, 84 + k, Math.PI / 2, 1, 1, 1, null, 0, 0.12);
+    d.I('bframe', G.ubox, MAT.inst, { colored: true }).add(38.45, S + 0.62, 84, 0, 0.06, 0.06, 1.1, '#2fa8a8');
     // Chambre de Noa : fenêtre de l'étage allumée côté rue
-    d.I('wlit', () => geo('wpane', () => new THREE.PlaneGeometry(1.02, 1.22)), MAT.lit, { colored: true }).add(25.9, S + 4.5, 79.87, Math.PI, 1, 1, 1, '#ffd9a0');
+    d.I('wlit', () => geo('wpane', () => new THREE.PlaneGeometry(1.02, 1.22)), MAT.lit, { colored: true }).add(24, S + 4.5, 79.88, Math.PI, 1, 1, 1, '#ffd9a0');
     d.finish();
     suburbBlock('tilleuls_est', 76, 192, false).finish();
   }
@@ -1106,7 +1254,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     for (let tries = 0; tries < n * 8 && placed < n; tries++) {
       const x = R(x0, x1);
       const z = R(z0, z1);
-      if (!ok(x, z) || blocked(x, z, 1.2)) continue;
+      if (!ok(x, z) || nearKeep(x, z) || blocked(x, z, 1.2)) continue;
       tree(d, kind, x, y, z, R(sMin, sMax));
       placed++;
     }
@@ -1167,14 +1315,14 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     sign(g, 'PARC VESPER', '#ffe9a0', '#2f7a5a', -77.55, 5.4, 30, Math.PI / 2, 10, 2.2);
     sign(g, 'PARC VESPER', '#ffe9a0', '#2f7a5a', -78.45, 5.4, 30, -Math.PI / 2, 10, 2.2);
     for (const z of [21, 39]) {
-      for (let i = 0; i < 6; i++) d.I('flowers', G.ball0, MAT.inst, { colored: true }).add(-79.5 - i * 0.9, S + 0.2, z + R(-0.6, 0.6), rand() * 6, 0.5, 0.35, 0.5, pick(['#ff6fa8', '#ffd23f', '#ff8a3d', '#c9a6ff']));
+      for (let i = 0; i < 6; i++) d.I('flowers', G.ball0, MAT.inst, { colored: true }).add(-79.5 - i * 0.9, S + 0.42, z + R(-0.6, 0.6), rand() * 6, 0.5, 0.35, 0.5, pick(['#ff6fa8', '#ffd23f', '#ff8a3d', '#c9a6ff']));
       box(g, -84.6, S, z - 1, -79, S + 0.3, z + 1, MAT.woodDark, { collide: true });
     }
     // --- Café du Parc (-100, 22) : kiosque, terrasse, guirlandes ---
     const kx = -100;
     const kz = 22;
-    cyl(g, kx, S, kz, 3.2, 3.2, 3.0, mat('#f2e2c8'), { seg: 8, cast: true });
-    cyl(g, kx, S + 3.0, kz, 3.3, 3.3, 0.25, mat('#2f7a5a'), { seg: 8, collide: false });
+    cyl(g, kx, S, kz, 3.2, 3.2, 3.0, mat('#f2e2c8'), { seg: 8, cast: true, rotY: Math.PI / 8 });
+    cyl(g, kx, S + 3.0, kz, 3.3, 3.3, 0.25, mat('#2f7a5a'), { seg: 8, collide: false, rotY: Math.PI / 8 });
     const roofK = new THREE.Mesh(new THREE.ConeGeometry(4.2, 2.2, 8), M({ map: awningTexture(), color: '#ff8a8a' }));
     roofK.position.set(kx, S + 3.25 + 1.1, kz);
     roofK.castShadow = !low;
@@ -1182,14 +1330,23 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     cyl(g, kx, S + 5.35, kz, 0.12, 0.05, 0.9, MAT.dark, { collide: false });
     // Comptoir (côté ouest, vers la terrasse)
     const win = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.3), MAT.warmGlass);
-    win.position.set(kx - 3.0, S + 1.75, kz);
+    win.position.set(kx - 2.98, S + 1.75, kz);
     win.rotation.y = -Math.PI / 2;
     g.add(win);
     cbox(g, kx - 3.35, S, kz, 0.7, 1.1, 3.0, MAT.wood, { collide: false });
     box(g, kx - 4.6, S + 2.45, kz - 1.6, kx - 3.0, S + 2.6, kz + 1.6, mat('#e86f6f'), { collide: false });
-    sign(g, 'CAFÉ DU PARC', '#fff4d6', '#c0563f', kx - 3.1, S + 2.95, kz, -Math.PI / 2, 4.4, 1.1);
+    sign(g, 'CAFÉ DU PARC', '#fff4d6', '#c0563f', kx - 4.66, S + 3.15, kz, -Math.PI / 2, 4.0, 1.0);
     for (const sgn of [-1, 1]) sign(g, 'CAFÉ DU PARC', '#fff4d6', '#c0563f', kx, S + 6.4, kz + sgn * 0.02, sgn > 0 ? 0 : Math.PI, 4.8, 1.2);
     cbox(g, kx, S + 5.4, kz, 0.15, 0.6, 0.15, MAT.dark, { collide: false });
+    cbox(g, kx + 2.98, S, kz, 0.1, 2.2, 1.1, mat('#2f7a5a'), { collide: false });
+    for (const a of [Math.PI / 4, -Math.PI / 4]) {
+      const wx = kx + Math.cos(a) * 2.75;
+      const wz = kz + Math.sin(a) * 2.75;
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.9), MAT.warmGlass);
+      p.position.set(wx, S + 1.8, wz);
+      p.rotation.y = Math.PI / 2 - a;
+      g.add(p);
+    }
     // Terrasse en bois + tables, chaises, parasols
     box(g, -113, 0, 14, -104.5, S + 0.08, 30, MAT.wood, { tile: 2 });
     const tables = [[-107, 17.5], [-110.5, 20.5], [-107, 24], [-110.5, 27]];
@@ -1205,10 +1362,8 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
         d.I('chairSeat', G.ubox, MAT.inst, { colored: true }).add(tx + cxo, yb + 0.45, tz + czo, yaw, 0.45, 0.06, 0.45, '#2f7a5a');
         d.I('chairBack', G.ubox, MAT.inst, { colored: true }).add(tx + cxo * 1.22, yb + 0.72, tz + czo, yaw, 0.45, 0.5, 0.06, '#2f7a5a');
         d.I('tleg', G.ubase, MAT.dark).add(tx + cxo, yb, tz + czo, 0, 0.05, 0.45, 0.05);
-        hangouts.cafe.push([tx + cxo * 1.15, tz + czo, yaw + Math.PI]);
       }
     });
-    hangouts.cafe.length = 0;
     hangouts.cafe.push([-105.4, 22, -Math.PI / 2], [-104.6, 19.5, -Math.PI / 2], [-108.5, 22.2, Math.PI / 2], [-112, 23.8, Math.PI / 2], [-105.2, 25.8, -Math.PI / 2]);
     // Guirlandes lumineuses entre poteaux
     const garland = [[-113.2, 13.8], [-113.2, 30.2], [-104.3, 30.2], [-104.3, 13.8]];
@@ -1217,12 +1372,13 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
       const [ax, az] = garland[i];
       const [bx, bz] = garland[(i + 1) % 4];
       const n = 12;
+      const wl = Math.hypot(bx - ax, bz - az);
+      d.I('wire', G.ubox, MAT.dark).add((ax + bx) / 2, S + 2.85, (az + bz) / 2, Math.atan2(bx - ax, bz - az), 0.03, 0.03, wl);
       for (let k = 1; k < n; k++) {
         const t = k / n;
-        d.I('bulb', G.ball0, MAT.inst, { colored: true }).add(ax + (bx - ax) * t, S + 3.1 - Math.sin(t * Math.PI) * 0.6, az + (bz - az) * t, 0, 0.09, 0.09, 0.09, pick(['#ffe27a', '#ff9ccf', '#9ff3ff']));
+        d.I('bulb', G.ball0, MAT.lit, { colored: true }).add(ax + (bx - ax) * t, S + 2.78, az + (bz - az) * t, 0, 0.09, 0.09, 0.09, pick(['#ffe27a', '#ff9ccf', '#9ff3ff']));
       }
     }
-    MAT.inst.emissive.set('#000000');
     addLight(g, -108.5, 3.4, 22, '#ffc46b');
     // --- Fontaine (-134, -35) ---
     cyl(g, fx, S, fz, 4.2, 4.2, 0.7, MAT.stone, { seg: 10, collide: false, cast: true });
@@ -1252,7 +1408,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
       jets.forEach((j, i) => j.scale.set(1, 0.85 + Math.sin(t * 6 + i) * 0.15, 1));
     });
     // Bancs autour de la fontaine et de l'étang
-    for (const a of [0.8, 2.35, 3.9, 5.5]) bench(d, fx + Math.cos(a) * 8.2, fz + Math.sin(a) * 8.2, Math.atan2(-Math.cos(a), -Math.sin(a)));
+    for (const a of [0.8, 2.35, 3.9, 5.5]) bench(d, fx + Math.cos(a) * 8.7, fz + Math.sin(a) * 8.7, Math.atan2(-Math.cos(a), -Math.sin(a)));
     for (const a of [0.35, 1.2, 2.0, 2.75, 3.5, 4.35, 5.1, 5.85]) {
       const bx = px + Math.cos(a) * 21;
       const bz = pz + Math.sin(a) * 21;
@@ -1312,7 +1468,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     cbox(g, -163, S, -31, 0.4, 0.5, 0.4, MAT.metal);
     cbox(g, -163, S + 0.45, -31, 0.3, 0.08, 3.6, mat('#c9a6ff'), { pitch: 0.18, collide: false });
     // --- Lampadaires (quelques vraies lumières) ---
-    for (const [x, z, l] of [[-88, 33, true], [-118, 40, false], [-150, 50, true], [-153, 24, false], [-131, 13, false], [-131, -12, true], [-124, -30, false], [-144, -40, true], [-100, -32, false], [-131, -52, false], [-160, -45, false]]) {
+    for (const [x, z, l] of [[-88, 33, true], [-114, 43, false], [-150, 50, true], [-153, 24, false], [-131, 13, false], [-131, -12, true], [-124, -30, false], [-144, -40, true], [-100, -32, false], [-131, -52, false], [-160, -45, false]]) {
       if (!blocked(x, z, 0.5)) postLamp(d, x, S, z, { light: l });
     }
     // --- Arbres (instanciés) ---
@@ -1430,9 +1586,10 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
       d.I('blink', G.ball0, MAT.blink).add(x, S + 3 + h + 0.3, z, 0, 0.35, 0.35, 0.35);
     }
     // Petit bâtiment de bureaux + citerne
-    box(g, -150, S, -104, -136, S + 4.5, -92, ribMat('#c9b8ff'), { colY0: 0, cast: true, tile: 4 });
-    box(g, -150.3, S + 4.5, -104.3, -135.7, S + 4.8, -91.7, MAT.dark, { collide: false });
-    for (let x = -148; x < -137; x += 3) d.I('gfWin', () => geo('gfWin', () => new THREE.PlaneGeometry(2.6, 1.7)), MAT.lit, { colored: true }).add(x, S + 2.6, -91.95, 0, 0.7, 0.8, 1, rand() < 0.5 ? '#ffe8b0' : '#9ff3ff');
+    box(g, -160, S, -104, -146, S + 4.5, -92, ribMat('#c9b8ff'), { colY0: 0, cast: true, tile: 4 });
+    box(g, -160.3, S + 4.5, -104.3, -145.7, S + 4.8, -91.7, MAT.dark, { collide: false });
+    sign(g, 'BUREAUX', '#ffffff', '#2b2050', -153, S + 3.7, -91.9, 0, 3.6, 0.9);
+    for (let x = -158; x < -147; x += 3) d.I('gfWin', () => geo('gfWin', () => new THREE.PlaneGeometry(2.6, 1.7)), MAT.lit, { colored: true }).add(x, S + 2.6, -91.95, 0, 0.7, 0.8, 1, rand() < 0.5 ? '#ffe8b0' : '#9ff3ff');
     cyl(g, -170, S, -100, 3, 3, 6, mat('#d8d4e8'), { seg: 10, cast: true });
     cyl(g, -170, S + 6, -100, 3.05, 0.4, 1.4, mat('#d8d4e8'), { seg: 10, collide: false });
     // Conteneurs : pile escaladable (paliers ≤ 1,3 m) jusqu'à 7,95 m
@@ -1480,13 +1637,13 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     slab(d, -62, -192, -8, -76, MAT.pave);
     const kit = d.useKit();
     const blds = [
-      [-60, -188, -36, -166, 24, 'brick'], [-32, -188, -10, -170, 30, 'stucco'],
-      [-60, -150, -42, -124, 18, 'stucco'], [-36, -150, -10, -132, 27, 'brick'],
-      [-60, -104, -34, -80, 21, 'stucco'], [-28, -110, -10, -82, 15, 'brick'],
+      [-60, -188, -36, -166, 22, 'brick'], [-32, -188, -10, -170, 26, 'office'],
+      [-60, -150, -42, -124, 18, 'stucco'], [-36, -150, -10, -132, 24, 'brick'],
+      [-60, -104, -34, -80, 20, 'office'], [-28, -110, -10, -82, 15, 'stucco'],
     ];
     blds.forEach(([x0, z0, x1, z1, h, style], i) => {
       if (low && (i === 1 || i === 4)) return;
-      kit.building(x0, z0, x1, z1, h, style, { style, seed: i });
+      kit.building(x0, z0, x1, z1, h, style === 'office' ? 'glass' : style, { style, seed: i % 2 });
     });
     // Cour intérieure : arbres en bacs, bancs
     for (const [x, z] of [[-50, -158], [-24, -158], [-50, -114], [-20, -122]]) {
@@ -1537,10 +1694,10 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     sign(g, 'AEGIS — ACCÈS RESTREINT', '#ffffff', '#2a6fd1', 35, S + 3.25, -81.82, 0, 6, 1.2);
     addLight(g, 35, 4.5, -79.5, '#a8e6ff');
     // Bassin miroir, mâts, guérite, hélisurface
-    box(g, 25.4, 0, -112.6, 44.6, S + 0.5, -95.4, MAT.stone, { cast: true });
-    flat(g, 26, -112, 44, -96, S + 0.52, MAT.water, 8);
+    box(g, 25.4, 0, -112.6, 44.6, S + 0.7, -95.4, MAT.stone, { cast: true });
+    flat(g, 26, -112, 44, -96, S + 0.72, MAT.water, 8);
     for (const x of [28, 35, 42]) {
-      d.I('lpole', G.pole, MAT.white).add(x, S, -116, 0, 1, 9, 1);
+      d.I('flagpole', G.pole, MAT.white).add(x, S, -116, 0, 1, 9, 1);
       col.addCentered(x, 0, -116, 0.3, 9, 0.3);
       flag(d, x + 0.08, 8, -116, 0, 'AEGIS', '#ffffff', '#2a6fd1', 2.6, 1.5);
     }
@@ -1574,12 +1731,12 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     const kit = d.useKit();
     const towers = [
       [80, -188, 106, -162, 72, 'glass'], [116, -186, 142, -166, 52, 'office'], [152, -190, 188, -160, 80, 'glass'],
-      [80, -146, 104, -120, 44, 'office'], [124, -150, 150, -126, 64, 'glass'], [162, -146, 188, -122, 40, 'stucco'],
+      [80, -146, 104, -120, 44, 'office'], [124, -150, 150, -126, 64, 'glass'], [162, -146, 188, -122, 40, 'artdeco'],
       [84, -104, 110, -82, 48, 'office'], [142, -106, 170, -82, 58, 'glass'],
     ];
     towers.forEach(([x0, z0, x1, z1, h, style], i) => {
       if (low && (i === 1 || i === 5 || i === 6)) return;
-      kit.building(x0, z0, x1, z1, h, style === 'glass' ? 'glass' : 'concrete', { style, seed: i });
+      kit.building(x0, z0, x1, z1, h, style === 'artdeco' ? 'concrete' : 'glass', { style: style === 'artdeco' ? 'stucco' : style, seed: i % 2 });
     });
     // Esplanade : sculpture, arbres en bacs, bancs
     const sk = new THREE.Mesh(new THREE.TorusKnotGeometry(2.6, 0.7, 48, 6), mat('#e8553f'));
@@ -1592,7 +1749,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
       cbox(g, x, S, z, 2, 0.6, 2, MAT.stone, { cast: true });
       tree(d, 'round', x, S + 0.6, z, 1.1, pick(['#3cc29a', '#7b5cd6']));
     }
-    for (const [x, z, yaw] of [[120, -108, Math.PI], [132, -108, Math.PI], [126, -118, 0]]) bench(d, x, z, yaw);
+    for (const [x, z, yaw] of [[120, -108, Math.PI], [132, -108, Math.PI]]) bench(d, x, z, yaw);
     for (const [x, z, l] of [[114, -104, true], [138, -104, false], [180, -104, true], [98, -152, false]]) postLamp(d, x, S, z, { cold: true, light: l });
     d.finish();
   }
@@ -1642,7 +1799,6 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     d.finish();
   }
   // --- Nord : le port (quai, grues, conteneurs, cargo, phare) ---
-  const blinkers = [];
   let lighthouseBeam = null;
   {
     const d = district('port', [-300, -300, 300, -208]);
@@ -1682,7 +1838,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
         const m = new THREE.Mesh(G.ubox(), MAT.metal);
         m.scale.set(0.08, 0.08, len);
         m.position.set(ax, (ay + ty) / 2, (az + tz) / 2);
-        m.rotation.x = Math.atan2(ay - ty, tz - az) * (tz < az ? -1 : 1) * 0 + Math.atan2(ay - ty, Math.abs(tz - az)) * (tz < az ? -1 : 1);
+        m.rotation.x = Math.atan2(-(ty - ay), tz - az);
         g.add(m);
       }
       // Câbles + palonnier avec un conteneur suspendu
@@ -1710,8 +1866,8 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     box(g, -30, -3, -246, 90, 3.2, -230, hull, { collide: false, cast: true });
     box(g, -30.2, 2.0, -246.2, 90.2, 3.4, -229.8, mat('#d8453f'), { collide: false });
     const bow = new THREE.Mesh(G.prism(), hull);
-    bow.scale.set(16, 14, 6.2);
-    bow.rotation.set(0, Math.PI / 2, -Math.PI / 2);
+    bow.scale.set(6.2, 14, 16);
+    bow.rotation.set(0, 0, -Math.PI / 2);
     bow.position.set(90, 0.1, -238);
     g.add(bow);
     box(g, -26, 3.2, -244, -14, 12, -232, mat('#f4f0e8'), { collide: false, cast: true });
@@ -1750,7 +1906,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
   }
   // --- Est : collines boisées, chemin de terre fermé ---
   const hill = (d, x, z, r, sy, color) => {
-    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), mat(color));
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, low ? 1 : 2), mat(color));
     m.scale.set(1, sy, 1);
     m.position.set(x, -r * sy * 0.15, z);
     m.receiveShadow = true;
@@ -1782,6 +1938,10 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     const fields = [];
     for (const [x0, x1] of [[-200, -140], [-130, -75], [-63, -6], [6, 63], [75, 130], [140, 200]]) {
       for (const [z0, z1] of [[216, 248], [254, 286]]) {
+        if ((x0 === 75 && z0 === 216) || (x0 === -130 && z0 === 254)) {
+          flat(g, x0, z0, x1, z1, 0.04, MAT.dirt, 4); // cour de ferme / pied du moulin
+          continue;
+        }
         const [c1, c2] = pick(crops);
         const m = M({ map: cropTexture(c1, c2), polygonOffset: true, polygonOffsetFactor: -1 });
         flat(g, x0, z0, x1, z1, 0.04, m, 4);
@@ -1889,8 +2049,10 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     // Lampadaires à crosse le long des nouvelles voies (tête émissive ; une
     // vraie lumière tous les 4 lampadaires environ).
     let nLamp = 0;
+    const NO_LAMP = [[116, 0, 156, 12], [-80, 20, -70, 40]]; // portail du lycée, entrée du parc
     const streetLamp = (x, z, dx, dz) => {
-      if (blocked(x, z, 1.1, 0.3)) return;
+      if (blocked(x, z, 1.1, 0.3) || nearKeep(x, z, 1.0)) return;
+      if (NO_LAMP.some(([a, b, c, e]) => x > a && x < c && z > b && z < e)) return;
       const y = col.groundHeight(x, z, 0.2, 0.3);
       const yaw = Math.atan2(dx, dz);
       d.I('slPole', G.pole, MAT.dark).add(x, y, z, 0, 1.4, 6.2, 1.4);
@@ -1902,10 +2064,10 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     // Avenues (deux côtés), segments extérieurs
     for (const [a, b] of SEG_OUT) {
       for (let s = a + 6; s < b; s += 26) {
-        streetLamp(9.3, s, -1, 0);
-        streetLamp(-9.3, s + 13, 1, 0);
-        streetLamp(s, 9.3, 0, -1);
-        streetLamp(s + 13, -9.3, 0, 1);
+        streetLamp(8.7, s, -1, 0);
+        streetLamp(-8.7, s + 13, 1, 0);
+        streetLamp(s, 8.7, 0, -1);
+        streetLamp(s + 13, -8.7, 0, 1);
       }
     }
     // Prolongements du périphérique intérieur (un côté)
@@ -1933,108 +2095,6 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
   col.addBox({ x: -300, y: 0, z: -300 }, { x: -296.5, y: 200, z: 300 }, 'bounds');
   col.addBox({ x: -300, y: 0, z: 296.5 }, { x: 300, y: 200, z: 300 }, 'bounds');
   col.addBox({ x: -300, y: 0, z: -300 }, { x: 300, y: 200, z: -296.5 }, 'bounds');
-
-  // ---------- Points d'intérêt ----------
-  const targets = {
-    school_door: { x: 136, y: S, z: 32.6 },
-    school_gate: { x: 136, y: S, z: 9.5 },
-    bus_school: { x: 124, y: S, z: 9.0 },
-    home_door: { x: 30, y: S, z: 78.6 },
-    home_mailbox: { x: 33, y: S, z: 77.8 },
-    park_entrance: { x: -76.5, y: S, z: 30 },
-    park_cafe: { x: -104.6, y: S + 0.08, z: 22 },
-    park_pond: { x: -114.8, y: S, z: 35 },
-    park_fountain: { x: -134, y: S, z: -25 },
-    aegis_tower: { x: 35, y: S, z: -78.6 },
-    harbor: { x: 20, y: S, z: -210.2 },
-    stadium: { x: 134, y: S, z: -32 },
-    stadium_gate: { x: 134, y: S, z: -9.4 },
-    industrial_gate: { x: -131, y: S, z: -77 },
-    forest_trail: { x: -214, y: 0, z: 0 },
-  };
-
-  const P = (x, z) => [x, z];
-  const ringPts = (cx, cz, r, n, a0 = 0) => Array.from({ length: n }, (_, i) => P(cx + Math.cos(a0 + (i / n) * 6.283) * r, cz + Math.sin(a0 + (i / n) * 6.283) * r));
-  const enemySpawns = [
-    // Parc : rôdeurs autour de l'étang, crawler près de l'aire de jeux
-    { after: 'p03_rings', type: 'stalker', x: -134, z: 53.5, group: 'park', patrol: ringPts(-134, 35, 18.5, 6, Math.PI / 2) },
-    { after: 'p03_rings', type: 'stalker', x: -125, z: -35, group: 'park', patrol: ringPts(-134, -35, 9.5, 6) },
-    { after: 'p03_rings', type: 'crawler', x: -152, z: -40, group: 'park', patrol: [[-152, -40], [-160, -24], [-150, -18]] },
-    // Zone industrielle
-    { after: 'p03_rings', type: 'stalker', x: -145, z: -90, group: 'industrial', patrol: [[-145, -90], [-100, -90], [-100, -95]] },
-    { after: 'p03_rings', type: 'crawler', x: -112, z: -116, group: 'industrial', patrol: [[-112, -116], [-135, -116], [-135, -108]] },
-    { after: 'p03_rings', type: 'brute', x: -125, z: -152, group: 'industrial', patrol: [[-125, -152], [-145, -152], [-145, -138]] },
-    // Port
-    { after: 'p03_rings', type: 'stalker', x: -80, z: -210.2, group: 'port', patrol: [[-80, -210.2], [-150, -210.2]] },
-    { after: 'p03_rings', type: 'stalker', x: 110, z: -210.2, group: 'port', patrol: [[110, -210.2], [160, -210.2]] },
-    { after: 'p03_rings', type: 'brute', x: 20, z: -210.2, group: 'port', patrol: [[20, -210.2], [-20, -210.2], [60, -210.2]] },
-    // Les Tilleuls
-    { after: 'p03_rings', type: 'stalker', x: 30, z: 103.4, group: 'suburb', patrol: [[30, 103.4], [58, 103.4], [12, 103.4]] },
-    { after: 'p03_rings', type: 'crawler', x: 130, z: 135.4, group: 'suburb', patrol: [[130, 135.4], [180, 135.4], [90, 135.4]] },
-    // Stade
-    { after: 'p03_rings', type: 'stalker', x: 120, z: -30, group: 'stadium', patrol: [[120, -30], [150, -24], [150, -40]] },
-    { after: 'p03_rings', type: 'stalker', x: 150, z: -40, group: 'stadium', patrol: ringPts(134, -32, 15.8, 8).map(([x, z]) => [134 + (x - 134) * 1.6, z]) },
-    { after: 'p03_rings', type: 'brute', x: 134, z: -32, group: 'stadium', patrol: [[134, -32], [118, -32], [150, -32]] },
-  ];
-  // La patrouille du stade suit la piste (forme ovale élargie en x).
-  enemySpawns[12].patrol = Array.from({ length: 10 }, (_, i) => {
-    const a = (i / 10) * 6.283;
-    return [134 + Math.cos(a) * 42, -32 + Math.sin(a) * 15.8];
-  });
-
-  const crates = [
-    { id: 'crate_supply_park', type: 'supply', x: -150, y: S, z: -18, rot: 0.4 },
-    { id: 'crate_supply_campus', type: 'supply', x: 172, y: S, z: 31, rot: 0.9 },
-    { id: 'crate_supply_stadium', type: 'supply', x: 178, y: S, z: -48, rot: 0.2 },
-    { id: 'crate_supply_suburb', type: 'supply', x: 58, y: S, z: 135.4, rot: 1.3 },
-    { id: 'crate_supply_port', type: 'supply', x: 150, y: S, z: -210.4, rot: 0.1 },
-    { id: 'crate_supply_industrial', type: 'supply', x: -162, y: S, z: -96, rot: 0.7 },
-    // Élite : au sommet de la pile de conteneurs (à escalader : caisse > conteneur > caisse…)
-    { id: 'crate_elite_containers', type: 'elite', x: -127, y: S + 7.8, z: -110.8, rot: 0.3 },
-  ];
-
-  const magnetSpots = [
-    // Parking du lycée
-    { kind: 'car', x: 81, z: 18, yaw: Math.PI / 2 }, { kind: 'car', x: 81, z: 33, yaw: Math.PI / 2 },
-    { kind: 'car', x: 91.5, z: 24, yaw: -Math.PI / 2 }, { kind: 'car', x: 91.5, z: 45, yaw: -Math.PI / 2 },
-    // Stationnement le long des avenues
-    { kind: 'car', x: 100, z: 6.2, yaw: Math.PI / 2 }, { kind: 'car', x: 170, z: -6.2, yaw: -Math.PI / 2 },
-    { kind: 'car', x: -150, z: -6.2, yaw: -Math.PI / 2 }, { kind: 'car', x: 6.2, z: 150, yaw: 0 },
-    { kind: 'car', x: -6.2, z: -130, yaw: Math.PI },
-    // Ruelles des Tilleuls
-    { kind: 'car', x: -30, z: 100.8, yaw: Math.PI / 2 }, { kind: 'car', x: 44, z: 100.8, yaw: Math.PI / 2 },
-    { kind: 'car', x: 112, z: 132.8, yaw: -Math.PI / 2 }, { kind: 'dumpster', x: 160, z: 101.2, yaw: 0 },
-    { kind: 'dumpster', x: -48, z: 132.4, yaw: 0 },
-    // Zone industrielle
-    { kind: 'dumpster', x: -110, z: -90.5, yaw: 0 }, { kind: 'dumpster', x: -145, z: -110, yaw: Math.PI / 2 },
-    { kind: 'barrel', x: -100, z: -140, yaw: 0 }, { kind: 'barrel', x: -99, z: -141.2, yaw: 0 }, { kind: 'car', x: -160, z: -152, yaw: 0.3 },
-    // Port
-    { kind: 'barrel', x: -120, z: -210.4, yaw: 0 }, { kind: 'barrel', x: 72, z: -210.4, yaw: 0 }, { kind: 'barrel', x: 73.2, z: -210.6, yaw: 0 },
-    { kind: 'car', x: -30, z: -195.5, yaw: Math.PI / 2 }, { kind: 'car', x: 140, z: -204.5, yaw: -Math.PI / 2 },
-    // Rangée nord / affaires
-    { kind: 'car', x: -22, z: -158, yaw: Math.PI / 2 }, { kind: 'car', x: 120, z: -194.5, yaw: Math.PI / 2 },
-  ];
-
-  // Boucles de promenade (jour) sur trottoirs et allées.
-  const npcRoutes = [
-    [[110, 14.5], [162, 14.5], [162, 31.5], [110, 31.5]], // parvis du lycée
-    [[80, 9.2], [190, 9.2]], // trottoir de l'avenue (campus)
-    Array.from({ length: 12 }, (_, i) => { const a = (i / 12) * 6.283; return [134 + Math.cos(a) * 46, -32 + Math.sin(a) * 15.8]; }), // piste du stade
-    [[80, -9.2], [126, -9.2]], // trottoir du stade
-    [[-60, 103.4], [-10, 103.4]], // ruelle Tilleuls ouest
-    [[10, 103.4], [60, 103.4]], // ruelle de Noa
-    [[78, 135.4], [190, 135.4]], // ruelle Tilleuls est
-    [[10, 76.6], [60, 76.6]], // trottoir devant chez Noa
-    ringPts(-134, 35, 18.5, 12), // tour de l'étang
-    [[-78, 30], [-92, 30.5], [-104, 32.5], [-115, 35]], // entrée du parc → étang
-    ringPts(-134, -35, 6.6, 10), // autour de la fontaine
-    ringPts(-134, 134, 9.5, 10), // kiosque à musique
-    [[-145, -91], [-100, -91], [-100, -95], [-145, -95]], // cour industrielle
-    [[-60, -158], [-12, -158]], // cour des immeubles nord
-    [[10, -78.6], [60, -78.6]], // devant la grille AEGIS
-    [[80, -112], [188, -112]], // esplanade d'affaires
-    [[-150, -210.4], [150, -210.4]], // quai du port
-  ];
 
   // Indices de la grille de quartier (pour le moteur / la minicarte)
   void BAND;
@@ -2073,7 +2133,6 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
       if (windmill) windmill.rotation.z = -t * 0.6;
       if (lighthouseBeam) lighthouseBeam.rotation.y = t * 0.7;
       for (const u of updaters) u(dt, t);
-      void blinkers;
     },
   };
 }

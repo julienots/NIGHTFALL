@@ -61,7 +61,7 @@ export class Game {
     this.saveData = saveData;
     this.settings = loadSettings();
     this.saveSys = new SaveSystem();
-    this.clock = new THREE.Clock();
+    this.timer = new THREE.Clock();
     this.time = 0;
     this.timeScale = 1;
     this.hitStopT = 0;
@@ -485,7 +485,7 @@ export class Game {
 
   // ---------- Boucle ----------
   #frame() {
-    const realDt = Math.min(0.05, this.clock.getDelta());
+    const realDt = Math.min(0.05, this.timer.getDelta());
     const menuOpen = this.menus.isOpen;
     this.#menuKeys();
 
@@ -696,6 +696,8 @@ export class Game {
         }
         this.cineFresh = cine;
       }
+      if (!this.camPos) this.camPos = cine.pos.clone();
+      if (!this.cineLook) this.cineLook = cine.look.clone();
       this.camPos.lerp(cine.pos, k);
       this.cineLook.lerp(cine.look, k);
       this.camera.position.copy(this.camPos);

@@ -213,7 +213,13 @@ export class Social {
 
   update(dt) {
     for (const n of Object.values(this.friends)) n.update(dt);
-    if (this.conv && !this.game.hud.dl?.choices && this.game.input.was('interact')) this.next();
+    const inp = this.game.input;
+    const hud = this.game.hud;
+    if (this.conv && hud.dl?.choices) {
+      // Manette : X / Y / B = réponses 1 / 2 / 3.
+      const n = inp.was('light') ? 0 : inp.was('heavy') ? 1 : inp.was('dodge') ? 2 : -1;
+      if (n >= 0 && n < hud.dl.choices.length) hud.choose(n);
+    } else if (this.conv && (inp.was('interact') || (inp.usingPad && inp.was('jump')))) this.next();
   }
 
   // Interactions proposées par les amis proches.

@@ -654,7 +654,6 @@ function zoneKit(group, col, ox, oz) {
       }
       if (a < a1) segs.push([a, a1]);
       const inner = p + nrm * SKIN; // face intérieure
-      const mid = p + (nrm * SKIN) / 2;
       const put = (s0, s1, y0, y1, depth, material, off = 0) => {
         const len = s1 - s0;
         const c = (s0 + s1) / 2;
@@ -689,7 +688,6 @@ function zoneKit(group, col, ox, oz) {
           collide(g0, g1, H - 0.45, H);
         }
       }
-      void mid;
     }
     if (floorMat) k.floor(x0 + 0.01, z0 + 0.01, x1 - 0.01, z1 - 0.01, floorMat, tile);
   };

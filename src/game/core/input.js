@@ -27,7 +27,7 @@ const KEYMAP = {
 // Boutons manette (mapping « standard »).
 const PADMAP = {
   0: 'jump', 1: 'dodge', 2: 'light', 3: 'heavy', 4: 'lock', 5: 'power',
-  10: 'sprint', 9: 'pause', 8: 'inventory', 12: 'interact', 13: 'heal', 11: 'fly', 14: 'shield', 6: 'shield', 7: 'magnet', 15: 'transform',
+  10: 'sprint', 9: 'pause', 8: 'inventory', 12: 'interact', 13: 'heal', 11: 'fly', 14: 'relations', 6: 'shield', 7: 'magnet', 15: 'transform',
 };
 
 export class Input {

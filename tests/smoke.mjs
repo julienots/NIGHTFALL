@@ -8,7 +8,7 @@ import { mkdirSync } from 'node:fs';
 
 const out = process.argv[2] || 'exports/screens';
 mkdirSync(out, { recursive: true });
-const server = await createServer({ server: { port: 5196 }, logLevel: 'error' });
+const server = await createServer({ server: { port: 5196, hmr: false, watch: null }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
