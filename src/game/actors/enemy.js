@@ -169,7 +169,7 @@ export class Enemy {
   }
 
   // ---------- Dégâts reçus ----------
-  takeHit({ damage, dir, knock, poise, heavy, power }) {
+  takeHit({ damage, dir, knock, poise, heavy, power, pullDist = 0 }) {
     if (!this.alive) return false;
     this.hp -= damage;
     this.flash = 1;
@@ -178,7 +178,10 @@ export class Enemy {
     this.game.fx.ichor({ x: this.pos.x, y: this.pos.y + this.def.height * 0.55, z: this.pos.z }, this.def.color);
     this.game.fx.hitSpark({ x: this.pos.x - dir.x * this.radius, y: this.pos.y + this.def.height * 0.55, z: this.pos.z - dir.z * this.radius }, power ? '#c38cff' : '#ffd27a', heavy);
     this.game.audio.hit(this.pos, heavy);
-    this.vel.addScaledVector(dir, knock * this.def.mass * (this.state === 'charge' ? 0.2 : 1));
+    // Tentacules : vitesse calculée pour parcourir pullDist malgré l'amortissement
+    // (distance totale = v / 6) ; les brutes, plus lourdes, résistent à moitié.
+    if (pullDist > 0) this.vel.copy(dir).multiplyScalar(pullDist * 6 * (this.type === 'brute' ? 0.5 : 1));
+    else this.vel.addScaledVector(dir, knock * this.def.mass * (this.state === 'charge' ? 0.2 : 1));
     if (!this.alert) {
       this.lastKnown = this.game.hero.pos.clone();
       this.alertTo(this.game.hero.pos);

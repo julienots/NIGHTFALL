@@ -274,7 +274,8 @@ export class Story {
     const T = g.world.targets;
     const Z = g.interiors.zones;
     const life = this.lifeMode();
-    if (this.seq || this.social.active) return out;
+    // Une séquence non cinématique (SMS du réveil…) ne bloque pas les interactions.
+    if (this.seq?.cinematic || this.social.active) return out;
     if (g.zone === 'city') {
       if (this.drone && !this.drone.done && g.missions.currentStep('m02_aegis_echo')?.target === 'aegis_drone') {
         out.push({ kind: 'story', id: 'aegis_drone', pos: T.aegis_drone, label: '<kbd>E</kbd>Récupérer l’enregistrement — <span style="color:#5fe3ff">drone Aegis</span>' });

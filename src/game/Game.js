@@ -4,6 +4,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 import { CollisionWorld } from './core/physics.js';
@@ -91,7 +93,9 @@ export class Game {
     await Promise.race([document.fonts?.load('40px "Lilita One"'), new Promise((r) => setTimeout(r, 2000))]).catch(() => {});
     // --- Rendu ---
     const q = this.settings.quality;
-    const r = (this.renderer = new THREE.WebGLRenderer({ antialias: q !== 'low', powerPreference: 'high-performance' }));
+    // L'anticrénelage est fait dans le composeur (MSAA ou FXAA) : celui du canvas
+    // ne sert pas puisque la scène est rendue dans des cibles intermédiaires.
+    const r = (this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' }));
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.NeutralToneMapping; // préserve les couleurs saturées
     r.toneMappingExposure = 1.0;
@@ -116,11 +120,18 @@ export class Game {
     moon.shadow.normalBias = 0.03;
     scene.add(moon, moon.target);
 
-    this.composer = new EffectComposer(r);
+    // Cibles en demi-flottant avec MSAA (bords nets sans « escaliers »).
+    const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: q === 'low' ? 0 : 4 });
+    this.composer = new EffectComposer(r, rt);
     this.composer.addPass(new RenderPass(scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.55, 0.4, 0.88);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    // Qualité basse : FXAA, bien moins coûteux que le MSAA sur mobile.
+    this.fxaa = new ShaderPass(FXAAShader);
+    this.composer.addPass(this.fxaa);
+    // Résolution dynamique : on baisse la définition si le jeu rame, on la remonte sinon.
+    this.dynRes = { scale: 1, acc: 0, n: 0 };
 
     // --- Monde ---
     this.col = new CollisionWorld();
@@ -420,7 +431,15 @@ export class Game {
     saveSettings(s);
     this.audio.applySettings(s);
     const q = s.quality;
-    this.renderer.setPixelRatio(q === 'low' ? Math.min(devicePixelRatio, 1) * 0.75 : q === 'medium' ? Math.min(devicePixelRatio, 1.25) : Math.min(devicePixelRatio, 2));
+    this.dynRes.scale = 1;
+    const samples = q === 'low' ? 0 : 4;
+    for (const t of [this.composer.renderTarget1, this.composer.renderTarget2]) {
+      if (t.samples !== samples) {
+        t.samples = samples;
+        t.dispose();
+      }
+    }
+    this.fxaa.enabled = q === 'low';
     this.renderer.shadowMap.enabled = q !== 'low';
     this.moon.castShadow = q !== 'low';
     const size = q === 'high' ? 2048 : 1024;
@@ -435,14 +454,39 @@ export class Game {
     this.#resize();
   }
 
+  // Définition cible selon la qualité (avant résolution dynamique).
+  #basePixelRatio() {
+    const q = this.settings.quality;
+    const dpr = devicePixelRatio || 1;
+    return q === 'low' ? Math.min(dpr, 1.35) : q === 'medium' ? Math.min(dpr, 1.75) : Math.min(dpr, 2.25);
+  }
+
   #resize() {
     const w = innerWidth;
     const h = innerHeight;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    const pr = Math.max(0.6, this.#basePixelRatio() * this.dynRes.scale);
+    this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h);
-    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.composer.setPixelRatio(pr);
     this.composer.setSize(w, h);
+    this.fxaa.material.uniforms.resolution.value.set(1 / (w * pr), 1 / (h * pr));
+  }
+
+  // Ajuste la définition toutes les ~2 s selon la fluidité mesurée.
+  #adaptResolution(realDt) {
+    const d = this.dynRes;
+    if (realDt <= 0 || realDt > 0.25) return; // onglet en arrière-plan, chargement…
+    d.acc += realDt;
+    d.n++;
+    if (d.acc < 2) return;
+    const avg = d.acc / d.n;
+    d.acc = d.n = 0;
+    const prev = d.scale;
+    if (avg > 1 / 40) d.scale = Math.max(0.55, d.scale - 0.12);
+    else if (avg < 1 / 56) d.scale = Math.min(1, d.scale + 0.06);
+    if (d.scale !== prev) this.#resize();
   }
 
   // ---------- Statistiques ----------
@@ -506,11 +550,12 @@ export class Game {
     this.#cullDistricts();
     this.#updateHud(realDt);
     this.touch?.update({
-      menu: menuOpen, cinematic: this.story.inCinematic || this.social.active || !!this.trans, rings: this.hero.powers.rings, flight: this.hero.powers.flight,
+      menu: menuOpen, cinematic: this.story.inCinematic || this.social.active || !!this.trans, choosing: !!this.hud.dl?.choices, rings: this.hero.powers.rings, flight: this.hero.powers.flight,
       flying: this.hero.flying, canInteract: this.nearInteract,
       magnet: this.hero.powers.magnet && this.hero.form === 'human', holding: this.magnet.holding,
       umbra: this.hero.powers.umbra, canTransform: this.hero.form === 'umbra' || this.hero.abyss >= 50,
     });
+    this.#adaptResolution(realDt);
     this.composer.render();
     this.input.endFrame();
   }

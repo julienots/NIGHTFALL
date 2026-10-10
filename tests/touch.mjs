@@ -31,14 +31,29 @@ const bub = await p.evaluate(() => { const r = document.querySelector('.dialog')
 await p.touchscreen.tap(bub.x, bub.y);
 const line1 = await p.evaluate(() => document.querySelector('.dl-text').textContent);
 check('toucher la bulle fait avancer le dialogue', line0 && line1 !== line0, `${line0.slice(0, 30)}… → ${line1.slice(0, 30)}…`);
+// Dialogue à choix : un vrai toucher sur la réponse 2 doit la choisir, même
+// avec la couche tactile en mode cinématique (bug v1.3-beta : rien ne réagissait).
+const chosen = await p.evaluate(() => {
+  const g = window.__nightfall;
+  window.__picked = null;
+  g.hud.dialog({ who: 'Test', text: '…', choices: ['Un', 'Deux', 'Trois'], onChoose: (i) => { window.__picked = i; g.hud.closeDialog(); } });
+  g.touch.update({ cinematic: true, choosing: true });
+  const r = document.querySelectorAll('.dl-choice')[1].getBoundingClientRect();
+  const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2, hit: el?.closest('.dl-choice') ? 'choix' : el?.className };
+});
+check('la réponse est au premier plan (pas sous les commandes)', chosen.hit === 'choix', chosen.hit);
+await p.touchscreen.tap(chosen.x, chosen.y);
+check('toucher une réponse la choisit', (await p.evaluate(() => window.__picked)) === 1);
 await p.evaluate(() => {
   const g = window.__nightfall;
-  for (let i = 0; i < 80 && g.social.active; i++) { if (g.hud.dl?.choices) g.hud.choose(0); else g.social.next(); }
+  for (let i = 0; i < 200 && g.social.active; i++) { if (g.hud.dl?.choices) g.hud.choose(0); else g.social.next(); g.simulate(0.05); }
   g.story.skip();
   g.simulate(0.5);
   const d = g.world.targets.school_door;
   g.enterZone('city', { x: d.x, y: 0.15, z: d.z - 6, yaw: Math.PI });
   g.simulate(0.3);
+  g.touch.update({}); // boucle arrêtée : on rafraîchit la couche tactile à la main
 });
 const st = await p.evaluate(() => ({ touch: !!window.__nightfall.touch, q: window.__nightfall.settings.quality, ui: !!document.querySelector('.touch-ui') }));
 check('commandes tactiles actives', st.touch && st.ui, JSON.stringify(st));

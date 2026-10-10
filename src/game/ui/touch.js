@@ -133,6 +133,7 @@ export class TouchControls {
   update(state) {
     this.el.classList.toggle('hidden-ui', !!(state.menu || state.cinematic));
     this.el.classList.toggle('cine', !!state.cinematic);
+    this.el.classList.toggle('choosing', !!state.choosing);
     for (const [id, , , , , cond] of BUTTONS) {
       const show = !cond || (cond === 'rings' && state.rings) || (cond === 'flight' && state.flight) || (cond === 'magnet' && state.magnet) || (cond === 'umbra' && state.umbra);
       this.el.querySelector(`[data-id="${id}"]`).style.display = show ? '' : 'none';

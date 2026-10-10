@@ -254,8 +254,8 @@ export class Hero {
       const dmg = Math.round(base * (0.92 + Math.random() * 0.16));
       // Tentacules : la créature est tirée vers Noa au lieu d'être repoussée.
       const d = def.pull ? dir.clone().negate() : dir;
-      const knock = def.pull ? Math.min(def.knock, Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z) * 1.2) : def.knock;
-      if (e.takeHit({ damage: dmg, dir: d, knock, poise: def.poise, heavy: !!def.heavy, power: def === MOVES.power || umbra })) hits++;
+      const pullDist = def.pull ? Math.max(0, Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z) - 2.2) : 0;
+      if (e.takeHit({ damage: dmg, dir: d, knock: def.knock, poise: def.poise, heavy: !!def.heavy, power: def === MOVES.power || umbra, pullDist })) hits++;
       if (umbra) this.hp = Math.min(this.stats.maxHp, this.hp + Math.max(1, Math.round(dmg * 0.06))); // la substance se nourrit
       if (def.roar) e.stagger?.(1.4);
       if (def.pull) this.game.fx.emit({ x: e.pos.x, y: e.pos.y + 1, z: e.pos.z }, { count: 10, color: '#1d1530', speed: 3, size: 0.3, life: 0.4 });

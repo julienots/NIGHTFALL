@@ -473,7 +473,7 @@ check('mission « L’écho d’Aegis » active', (await G(() => window.__nightf
 await G(() => { const g = window.__nightfall; g.hero.takeDamage = ((o) => (...a) => { const r = o(...a); if (g.hero.hp < 40) g.hero.hp = g.hero.stats.maxHp; return r; })(g.hero.takeDamage.bind(g.hero)); });
 await place(20, 0.15, 30, 0);
 await sim(2.5);
-const crawl = await G(() => window.__nightfall.enemies.filter((e) => e.type === 'crawler').map((e) => e.state));
+const crawl = await G(() => window.__nightfall.enemies.filter((e) => e.type === 'crawler' && e.spawn.group === 'crawlers').map((e) => e.state));
 check('embuscade : 3 Crawlers tombent des toits', crawl.length === 3, crawl.join(','));
 const fightGroup = async (group, maxIter, label) => {
   for (let i = 0; i < maxIter; i++) {
