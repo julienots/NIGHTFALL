@@ -39,6 +39,19 @@ Déjà en place (voir `src/game/`) :
   vie »), `data/missions.js`, sélection de chapitre sur l'écran titre (`data/presets.js`).
 - Les anneaux restent collés aux avant-bras pendant la course (`actors/rings.js`).
 
+## Résultat du dernier test complet (v1.3-beta)
+`tests/smoke.mjs` : tout passe du prologue au combat du Colosse, y compris le cours,
+Malik, le casier, Inès et le bus, le Nightfall, l'éveil, le magnétisme, la tempête de métal,
+le vol, le parking, la boutique et les compétences. Échecs à corriger en premier :
+- « embuscade : 3 Crawlers » : le test compte aussi les Crawlers nocturnes des nouveaux
+  quartiers (filtrer `spawn.group === 'crawlers'`).
+- « Colosse vaincu » échoue : la fin du combat (fightGroup('colossus') puis étape 2 de
+  m03) ne se déclenche plus. Vérifier `Colossus`, `onEnemyKilled`, et si `setPhase`/le
+  nettoyage des ennemis ou les nouveaux ennemis de quartier interfèrent. Tout ce qui suit
+  (cache du Colosse, mission « L'Ombre », chapitre 2, rendez-vous, rechargement) n'a donc
+  pas encore été validé par le test complet.
+- Test temps réel (boucle de rendu) : OK, sans erreur JavaScript.
+
 ## À FAIRE (par priorité)
 1. **Valider l'intégration** : lancer `node tests/smoke.mjs exports/screens` (106
    vérifications) et `tests/touch.mjs`, corriger chaque échec. Regarder les captures
