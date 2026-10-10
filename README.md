@@ -45,6 +45,10 @@ physique, cafétéria) et la maison de Noa (salon, cuisine, chambre).
 6. **Chapitre 2 — Double vie** : lycéen le jour, héros la nuit. Cours (quiz qui rapporte de
    l'XP), amis, cadeaux, **rendez-vous et relation amoureuse** (Inès ou Camille), ronde de
    nuit, la quête de Théo. Dormir chez soi fait passer du jour à la nuit.
+   **Casier 117** (mission secondaire, v1.4) : Jordan et sa bande harcèlent Noa (casier
+   vandalisé, cafétéria). Choix : encaisser, répondre, en parler à Inès, à Mme Ferrand (la
+   CPE), médiation au CDI. Utiliser ses pouvoirs est une tentation qui a un prix (vidéo,
+   rumeurs, confiance d'Inès, pas de bonus de courage). Jordan peut devenir un allié.
 
 L'écran titre propose **Chapitres** pour démarrer directement au chapitre 1 ou 2.
 
@@ -61,7 +65,7 @@ L'écran titre propose **Chapitres** pour démarrer directement au chapitre 1 ou
   se soigne en frappant. La jauge se remplit en combat et se vide transformé.
 
 ## Relations
-Inès (romance), Camille (romance), Malik, Théo : affinité 0–100, scènes à choix qui se
+Inès (romance), Camille (romance), Malik, Théo (et Jordan, après « Casier 117 ») : affinité 0–100, scènes à choix qui se
 débloquent (une conversation par jour), cadeaux préférés, paliers d'amitié (XP, tenue),
 rendez-vous puis déclaration ; en couple : +10 % d'expérience. Menu **Relations** (L / ❤).
 
@@ -70,5 +74,15 @@ ZQSD/WASD déplacer · Maj courir · Espace saut · Ctrl/C rouler · E parler/in
 1-2-3 choisir une réponse · Clic gauche coups · Clic droit fouet · F rafale · G bouclier ·
 X magnétisme · T Forme Abysse · V voler (en vol : Espace monter, Ctrl descendre, Maj boost,
 Clic gauche piqué, X tempête de métal) · R verrouiller · H soin · I inventaire · J journal ·
-K compétences · L relations · Échap pause. Manette standard prise en charge
-(RT magnétisme, croix droite Forme Abysse).
+K compétences · L relations · Échap pause.
+
+**Manette Xbox** : A sauter/valider · B rouler/annuler (ferme les menus) · X coup léger ·
+Y coup lourd · RB pouvoir · LB verrouiller · LT bouclier · RT magnétisme · L3 courir ·
+R3 voler · croix ↑ interagir · ↓ soin · → Forme Abysse · ← relations · Menu pause · Vue
+inventaire. Dialogues : A continuer, X/Y/B réponses 1/2/3. Les invites affichent les
+glyphes manette dès qu'elle est utilisée ; page « Commandes manette » dans le menu pause.
+
+## Rendu
+Anticrénelage dans la chaîne de post-traitement (MSAA ×4 en qualité moyenne/élevée, FXAA
+en basse), définition plus haute qu'avant et **résolution dynamique** : si le téléphone
+rame, la définition baisse un peu, puis remonte quand c'est fluide.
