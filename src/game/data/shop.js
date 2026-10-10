@@ -5,6 +5,7 @@ export const SHOP_SECTIONS = {
   weapons: 'Noyaux',
   armor: 'Protections',
   skins: 'Tenues',
+  gifts: 'Cadeaux',
   resources: 'Ressources',
 };
 
@@ -21,6 +22,11 @@ export const SHOP = [
   { key: 'skin_ember', section: 'skins', item: 'hoodie_ember', price: { credits: 300 }, once: true },
   { key: 'skin_lime', section: 'skins', item: 'hoodie_lime', price: { credits: 300 }, once: true },
   { key: 'skin_abyss', section: 'skins', item: 'hoodie_abyss', price: { shards: 20 }, once: true },
+  { key: 'gift_flowers', section: 'gifts', item: 'gift_flowers', qty: 1, price: { credits: 45 } },
+  { key: 'gift_choco', section: 'gifts', item: 'gift_choco', qty: 1, price: { credits: 30 } },
+  { key: 'gift_comic', section: 'gifts', item: 'gift_comic', qty: 1, price: { credits: 70 } },
+  { key: 'gift_starmap', section: 'gifts', item: 'gift_starmap', qty: 1, price: { credits: 85 } },
+  { key: 'gift_game', section: 'gifts', item: 'gift_game', qty: 1, price: { credits: 110 } },
   { key: 'res_medkit', section: 'resources', item: 'medkit', qty: 1, price: { credits: 55 } },
   { key: 'res_scrap', section: 'resources', item: 'scrap', qty: 5, price: { credits: 75 } },
   { key: 'res_fragment', section: 'resources', item: 'abyss_fragment', qty: 1, price: { shards: 6 } },

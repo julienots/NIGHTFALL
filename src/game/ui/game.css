@@ -165,7 +165,7 @@
 .letterbox i { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height .6s ease; }
 .letterbox i:first-child { top: 0; } .letterbox i:last-child { bottom: 0; }
 .hud.cine .letterbox i { height: 11vh; }
-.hud.cine > :not(.letterbox):not(.subtitle):not(.chapter):not(.phone):not(.toasts) { opacity: 0; transition: opacity .4s; }
+.hud.cine > :not(.letterbox):not(.subtitle):not(.chapter):not(.phone):not(.toasts):not(.dialog):not(.fade) { opacity: 0; transition: opacity .4s; }
 .hud.cine .subtitle { bottom: 13vh; }
 .hud.no-powers .abilities .pw, .hud.no-powers .abilities .med, .hud.no-powers .weapon, .hud.no-powers .bar.en { display: none; }
 .phone { position: absolute; right: 24px; top: 170px; width: 250px; background: #f4f0ff; color: var(--ink-dark); text-shadow: none;
@@ -202,6 +202,10 @@ body.touch .hint { display: none; }
 .b-dodge { right: 22px; bottom: 34px; }
 .b-fly { right: 34px; bottom: 192px; background: #7fe3ff; }
 .b-fly.active { background: #ffcd20; }
+.b-magnet { right: 282px; bottom: 40px; background: #ff9aa6; font-size: 24px; }
+.b-magnet.active { background: #ffcd20; animation: ready 1s ease-in-out infinite; }
+.b-umbra { right: 118px; bottom: 214px; width: 56px; height: 56px; background: #3a2a6a; color: #5fe3ff; opacity: .6; }
+.b-umbra.ready { opacity: 1; background: #4a2a9a; box-shadow: 0 5px 0 var(--ink-dark), 0 0 18px #7a5cff; }
 .b-interact { right: 270px; bottom: 150px; width: 54px; height: 54px; font-size: 22px; background: var(--amber); opacity: .55; }
 .b-interact.pulse { opacity: 1; animation: ready 1s ease-in-out infinite; }
 .t-top { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; margin-top: 30px; }
@@ -253,3 +257,53 @@ body.touch .hud .vitals { width: min(280px, 34vw); }
 .bossbar .bs { font-size: .85em; color: var(--dim); margin-top: 3px; }
 .bossbar.exposed .bs { color: var(--amber); animation: ready .6s ease-in-out infinite; }
 body.touch .bossbar { top: 54px; width: 46vw; }
+
+/* ---------- v1.3 : Abysse, magnétisme, horloge, dialogues, fondu ---------- */
+.bar.ab { height: 12px; border-width: 3px; margin-top: 4px; }
+.bar.ab > i { background: linear-gradient(90deg, #2a1650, #7a5cff 70%, #5fe3ff); }
+.bar.ab .bar-label { font-size: 10px; letter-spacing: .12em; opacity: .9; }
+.bar.ab.full { box-shadow: 0 0 0 3px #7a5cff66, 0 0 18px #7a5cff; animation: ready 1.2s ease-in-out infinite; }
+.bar.ab.active > i { background: linear-gradient(90deg, #120a20, #3a1d6e, #7a5cff); }
+.slot.mag { background: #3a1430; } .slot.mag.ready { background: #ff5a6a; }
+.slot.umb { background: #140c22; } .slot.umb.ready { background: #4a2a9a; box-shadow: 0 0 16px #7a5cff; }
+.hud.umbra .vignette { box-shadow: inset 0 0 180px 40px rgba(30, 10, 60, .65); }
+.hud .clock { position: absolute; left: 50%; top: 58px; transform: translateX(-50%); font: 13px var(--display); letter-spacing: .12em;
+  background: #2b2050cc; border: 3px solid var(--ink-dark); border-radius: 14px; padding: 3px 12px; display: none; text-transform: uppercase; }
+.hud .clock.on { display: block; }
+.hud .dialog { position: absolute; left: 50%; bottom: 120px; transform: translate(-50%, 20px); width: min(720px, 86vw); opacity: 0; pointer-events: none;
+  background: #fbf8ff; color: var(--ink-dark); text-shadow: none; border: 4px solid var(--ink-dark); border-radius: 22px; padding: 14px 20px 16px;
+  box-shadow: 0 8px 0 var(--ink-dark); transition: opacity .2s, transform .2s; z-index: 6; }
+.hud .dialog.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.hud .dl-who { font: 1.15em var(--display); -webkit-text-stroke: 1px var(--ink-dark); paint-order: stroke; margin-bottom: 4px; }
+.hud .dl-text { font-weight: 800; font-size: 1.05em; line-height: 1.4; }
+.hud .dl-choices { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.hud .dl-choice { text-align: left; font: 800 .98em var(--body, inherit); background: #ece6ff; color: var(--ink-dark); border: 3px solid var(--ink-dark);
+  border-radius: 14px; padding: 7px 12px; cursor: pointer; }
+.hud .dl-choice:hover { background: #ffcd20; }
+.hud .dl-choice .n { display: inline-block; width: 22px; height: 22px; margin-right: 8px; text-align: center; border-radius: 8px; background: var(--ink-dark); color: #fff; font: 13px/22px var(--display); }
+.hud .dl-next { position: absolute; right: 16px; bottom: 6px; font-size: 14px; animation: ready 1s ease-in-out infinite; }
+.hud .dialog.choices .dl-next { display: none; }
+.hud .fade { position: absolute; inset: 0; background: #0b0618; opacity: 0; pointer-events: none; transition: opacity .45s; z-index: 20; }
+.hud .fade.on { opacity: 1; }
+.hud.cine .dialog { bottom: 14vh; }
+body.touch .hud .dialog { bottom: 10px; width: 56vw; left: 50%; font-size: .9em; padding: 10px 14px; }
+body.touch .hud .clock { top: 62px; font-size: 11px; }
+
+/* ---------- Relations ---------- */
+.menu.relations .body { max-width: 1100px; margin: 0 auto; }
+.rel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 12px; }
+.rel-card { background: #2a1a56; border: 4px solid var(--ink-dark); border-top: 8px solid var(--rc); border-radius: 18px; padding: 12px 14px; }
+.rel-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rel-name { font: 1.5em var(--display); color: var(--rc); -webkit-text-stroke: 1px var(--ink-dark); paint-order: stroke; }
+.rel-tag { font: 11px var(--display); background: #ffffff22; padding: 2px 8px; border-radius: 10px; letter-spacing: .05em; }
+.rel-tag.love { background: #ff4d8d; color: #fff; }
+.rel-lvl { font-weight: 800; margin-top: 2px; }
+.rel-bar { height: 12px; background: #140c2a; border: 3px solid var(--ink-dark); border-radius: 8px; overflow: hidden; margin: 6px 0; }
+.rel-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--rc), #fff); }
+.rel-card p { font-size: .88em; color: var(--dim); line-height: 1.4; margin: 6px 0; }
+.rel-meta { font-size: .85em; line-height: 1.5; }
+.rel-grades { margin-top: 16px; background: #2a1a56; border: 4px solid var(--ink-dark); border-radius: 18px; padding: 10px 16px; }
+.rel-grades h3 { margin: 0 0 4px; font-family: var(--display); }
+.rel-help { color: var(--dim); font-size: .85em; }
+.rel-bonus { background: #ff4d8d33; border: 3px solid #ff4d8d; border-radius: 14px; padding: 8px 12px; margin: 8px 0 0; }
+.rel-clock { font: 13px var(--display); letter-spacing: .1em; opacity: .8; }

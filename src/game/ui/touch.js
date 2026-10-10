@@ -15,6 +15,8 @@ const BUTTONS = [
   ['dodge', 'dodge', '⤓', 'b-dodge', true, null],
   ['fly', 'fly', '🜁', 'b-fly', false, 'flight'],
   ['interact', 'interact', 'E', 'b-interact', false, null],
+  ['magnet', 'magnet', '🧲', 'b-magnet', false, 'magnet'],
+  ['transform', 'transform', '◉', 'b-umbra', false, 'umbra'],
 ];
 const TOP = [
   ['pause', 'pause', '☰'],
@@ -23,6 +25,7 @@ const TOP = [
   ['skills', 'skills', '★'],
   ['lock', 'lock', '◇'],
   ['heal', 'heal', '✚'],
+  ['relations', 'relations', '❤'],
 ];
 
 export class TouchControls {
@@ -131,7 +134,7 @@ export class TouchControls {
     this.el.classList.toggle('hidden-ui', !!(state.menu || state.cinematic));
     this.el.classList.toggle('cine', !!state.cinematic);
     for (const [id, , , , , cond] of BUTTONS) {
-      const show = !cond || (cond === 'rings' && state.rings) || (cond === 'flight' && state.flight);
+      const show = !cond || (cond === 'rings' && state.rings) || (cond === 'flight' && state.flight) || (cond === 'magnet' && state.magnet) || (cond === 'umbra' && state.umbra);
       this.el.querySelector(`[data-id="${id}"]`).style.display = show ? '' : 'none';
     }
     // En vol : « saut » = monter, « roulade » = descendre.
@@ -139,5 +142,7 @@ export class TouchControls {
     this.el.querySelector('.b-dodge').textContent = state.flying ? '▼' : '⤓';
     this.el.querySelector('.b-interact').classList.toggle('pulse', !!state.canInteract);
     this.el.querySelector('.b-fly').classList.toggle('active', !!state.flying);
+    this.el.querySelector('.b-magnet').classList.toggle('active', !!state.holding);
+    this.el.querySelector('.b-umbra').classList.toggle('ready', !!state.canTransform);
   }
 }

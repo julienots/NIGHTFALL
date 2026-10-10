@@ -87,6 +87,10 @@ test('missions : prologue, chaînage et types d’étapes', () => {
   const targets = (n) => ({ rally: { x: 0, z: 0 }, parking_entry: { x: 20, z: -14 }, lumen_roof: { x: 50, y: 26, z: 45 }, safehouse: { x: -34, z: 24 } })[n];
   assert.equal(log.tracked, 'p01_after_school');
   assert.equal(log.state.m01_first_contact, undefined, 'chapitre 1 verrouillé au début');
+  assert.equal(log.checkPosition({ x: 1, y: 0, z: 0 }, targets).length, 0, 'pas de raccourci : il faut d’abord finir le cours');
+  log.handle({ type: 'event', id: 'class_over' });
+  log.handle({ type: 'interact', target: 'malik' });
+  log.handle({ type: 'interact', target: 'locker' });
   log.handle({ type: 'interact', target: 'ines' });
   const ev = log.checkPosition({ x: 1, y: 0, z: 0 }, targets);
   assert.ok(ev.some((e) => e.type === 'missionStart' && e.id === 'p02_nightfall'));
@@ -96,7 +100,7 @@ test('missions : prologue, chaînage et types d’étapes', () => {
   assert.equal(log.tracked, 'p03_rings');
   log.handle({ type: 'kill', group: 'chaser', enemyType: 'stalker' });
   assert.equal(log.state.c01_stalker_hunt, undefined);
-  for (const id of ['volley', 'shield', 'flight']) log.handle({ type: 'event', id });
+  for (const id of ['volley', 'shield', 'magnet_throw', 'flight']) log.handle({ type: 'event', id });
   assert.equal(log.checkPosition({ x: 50, y: 10, z: 45 }, targets).length, 0, 'il faut être sur le toit, pas en dessous');
   const done = log.checkPosition({ x: 50, y: 26, z: 45 }, targets);
   assert.ok(done.some((e) => e.type === 'missionComplete' && e.id === 'p03_rings'));
@@ -107,6 +111,30 @@ test('missions : prologue, chaînage et types d’étapes', () => {
   log.handle({ type: 'interact', target: 'crate_tactical_1' });
   log.checkPosition({ x: -34, y: 0, z: 24 }, targets);
   assert.equal(log.isDone('m01_first_contact'), true);
+});
+
+test('missions : l’Ombre puis la double vie (chapitre 2)', () => {
+  const ids = ['p01_after_school', 'p02_nightfall', 'p03_rings', 'm01_first_contact', 'm02_aegis_echo', 'm03_colossus'];
+  const state = Object.fromEntries(ids.map((id) => [id, { status: 'done', step: 9, progress: 0 }]));
+  const log = new MissionLog({ state });
+  assert.ok(log.state.m04_umbra, 'l’Ombre démarre après le Colosse');
+  assert.equal(log.state.d01_double_life, undefined);
+  const T = (n) => ({ home_door: { x: 30, z: 78 } })[n];
+  log.handle({ type: 'interact', target: 'abyss_ooze' });
+  log.handle({ type: 'event', id: 'transform' });
+  for (let i = 0; i < 4; i++) log.handle({ type: 'kill', group: 'umbra_test', enemyType: 'stalker' });
+  log.checkPosition({ x: 30, y: 0, z: 78 }, T);
+  assert.ok(log.isDone('m04_umbra'));
+  assert.equal(log.tracked, 'd01_double_life');
+  log.handle({ type: 'event', id: 'enter_school' });
+  log.handle({ type: 'interact', target: 'ines' });
+  log.handle({ type: 'event', id: 'lesson' });
+  log.handle({ type: 'interact', target: 'camille' });
+  const ev = log.handle({ type: 'event', id: 'night' });
+  assert.ok(ev.some((e) => e.type === 'missionComplete' && e.id === 'd01_double_life'));
+  assert.ok(log.state.n01_night_watch && log.state.s02_lucas, 'contrat de nuit et quête de Théo débloqués');
+  for (let i = 0; i < 8; i++) log.handle({ type: 'kill', group: 'park', enemyType: 'crawler' });
+  assert.ok(log.isDone('n01_night_watch'), 'toute créature compte pour la ronde');
 });
 
 test('sauvegarde v1 (ancienne histoire) ignorée proprement', () => {
@@ -193,4 +221,52 @@ test('boutique : monnaies, unicité, inventaire plein', () => {
   const c = inv.credits;
   assert.equal(buy('core_amber', inv).reason, 'Inventaire plein');
   assert.equal(inv.credits, c, 'rien n’est débité si l’achat échoue');
+});
+
+test('relations : affinité bornée, paliers uniques, conditions de rendez-vous', async () => {
+  const { Social } = await import('../src/game/systems/social.js');
+  const xp = [];
+  const fake = { hud: { toast() {}, banner() {} }, audio: { heart() {} }, grantXp: (n) => xp.push(n), clock: { day: 2, phase: 'afternoon' } };
+  const s = new Social(fake, null);
+  s.addAff('malik', 200);
+  assert.equal(s.aff.malik, 100, 'affinité plafonnée à 100');
+  assert.deepEqual(xp, [80, 150], 'les deux paliers d’amitié donnent de l’XP une seule fois');
+  s.addAff('malik', 5);
+  assert.equal(xp.length, 2);
+  assert.equal(s.canDate('malik'), false, 'Malik n’est pas une romance');
+  s.aff.ines = 49;
+  assert.equal(s.canDate('ines'), false, 'il faut 50 d’affinité');
+  s.aff.ines = 55;
+  assert.equal(s.canDate('ines'), true);
+  fake.clock.phase = 'night';
+  assert.equal(s.canDate('ines'), false, 'pas de rendez-vous la nuit');
+  fake.clock.phase = 'afternoon';
+  s.partner = 'camille';
+  assert.equal(s.canDate('ines'), false, 'déjà en couple');
+  assert.equal(s.xpMult, 1.1, 'bonus d’expérience en couple');
+  const back = new Social(fake, JSON.parse(JSON.stringify(s.serialize())));
+  assert.equal(back.partner, 'camille');
+  assert.equal(back.aff.malik, 100);
+});
+
+test('données sociales et sélection de chapitre cohérentes', async () => {
+  const { CHARACTERS, SCENES, DATES, LESSONS } = await import('../src/game/data/characters.js');
+  const { chapterPreset } = await import('../src/game/data/presets.js');
+  const ids = new Set(Object.keys(CHARACTERS));
+  for (const sc of SCENES) {
+    assert.ok(ids.has(sc.char), sc.id);
+    for (const n of sc.lines) if (n.choices) assert.ok(n.choices.length >= 2 && n.choices.every((c) => c.t), sc.id);
+  }
+  for (const [id, c] of Object.entries(CHARACTERS)) if (c.romance) assert.ok(DATES[id]?.confess, `rendez-vous de ${id}`);
+  for (const L of LESSONS) for (const q of L.qs) assert.ok(q.ok >= 0 && q.ok < q.a.length);
+  assert.equal(chapterPreset('prologue'), null);
+  for (const ch of ['ch1', 'ch2']) {
+    const d = chapterPreset(ch);
+    const log = new MissionLog(d.missions);
+    const inv = new Inventory(d.inventory);
+    assert.ok(inv.equippedItem('weapon'), `${ch} : noyau équipé`);
+    assert.ok(log.activeIds().length > 0, `${ch} : missions actives`);
+    if (ch === 'ch1') assert.equal(log.tracked, 'm01_first_contact');
+    if (ch === 'ch2') assert.equal(log.tracked, 'd01_double_life');
+  }
 });

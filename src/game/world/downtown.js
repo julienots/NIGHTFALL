@@ -2,26 +2,14 @@
 // Construit la géométrie, les collisions, les lumières, la pluie et renvoie les
 // points d'intérêt (cibles de mission, apparitions d'ennemis, caisses).
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { toon } from '../fx/toon.js';
 import { createBuildingKit } from './buildings.js';
 import { buildStreet } from './street.js';
 import { mulberry32 } from '../core/rng.js';
+import { M, rbox, mergeStatic } from './helpers.js';
 import {
   asphaltTextures, sidewalkTexture, ribbedTexture, riftTexture, signTexture, roadMarkTexture,
 } from './textures.js';
-
-// Matériau cartoon à partir de paramètres « standard » (rugosité/métal ignorés).
-function M(p = {}) {
-  const m = new THREE.MeshToonMaterial({ gradientMap: toon('#fff').gradientMap });
-  for (const k of ['color', 'map', 'emissive', 'emissiveMap', 'emissiveIntensity', 'transparent', 'opacity', 'side', 'wireframe', 'polygonOffset', 'polygonOffsetFactor', 'depthWrite']) {
-    if (p[k] === undefined) continue;
-    if (k === 'color' || k === 'emissive') m[k].set(p[k]);
-    else m[k] = p[k];
-  }
-  return m;
-}
 
 const BAY = 4; // largeur d'une travée de fenêtre (m)
 const FLOOR = 3.5; // hauteur d'étage (m)
@@ -38,8 +26,8 @@ export function buildDowntown(scene, col, quality) {
 
   // ---------- Matériaux partagés ----------
   const asphalt = asphaltTextures();
-  asphalt.map.repeat.set(40, 40);
-  asphalt.roughness.repeat.set(40, 40);
+  asphalt.map.repeat.set(53, 53);
+  asphalt.roughness.repeat.set(53, 53);
   const groundMat = M({
     map: asphalt.map,
   });
@@ -51,7 +39,8 @@ export function buildDowntown(scene, col, quality) {
   const stripeMat = M({ color: '#ff8a3d' });
 
   // ---------- Sol & routes ----------
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(320, 320), groundMat);
+  // Asphalte de toute la ville (les quartiers ajoutent trottoirs et pelouses).
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(424, 424), groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   root.add(ground);
@@ -144,27 +133,7 @@ export function buildDowntown(scene, col, quality) {
     return res;
   }
 
-  // Périmètre : tours continues qui ferment la zone ; seule la façade côté ville est détaillée.
-  const ring = (a0, a1, side) => {
-    let a = a0;
-    const face = { n: 's', s: 'n', w: 'e', e: 'w' }[side];
-    while (a < a1) {
-      const len = Math.min(a1 - a, 14 + rand() * 16);
-      const h = 30 + rand() * 50;
-      const depth = 18 + rand() * 10;
-      const style = ['concrete', 'glass', 'brick'][Math.floor(rand() * 3)];
-      const o = { bareRoof: true, faces: [face] };
-      if (side === 'n') building(a, -76 - depth, a + len, -76, h, style, o);
-      if (side === 's') building(a, 76, a + len, 76 + depth, h, style, o);
-      if (side === 'w') building(-76 - depth, a, -76, a + len, h, style, o);
-      if (side === 'e') building(76, a, 76 + depth, a + len, h, style, o);
-      a += len;
-    }
-  };
-  ring(-104, -8, 'n'); ring(8, 104, 'n');
-  ring(-104, -8, 's'); ring(8, 104, 's');
-  ring(-76, -8, 'w'); ring(8, 76, 'w');
-  ring(-76, -8, 'e'); ring(8, 76, 'e');
+  // (Ancien périmètre fermé supprimé : la ville continue dans districts.js.)
 
   // Q1 — bloc du refuge
   building(-60, 10, -46, 30, 22, 'concrete', { style: 'stucco' });
@@ -175,7 +144,7 @@ export function buildDowntown(scene, col, quality) {
   // Q2 — bloc commerçant + ruelle
   building(10, 11, 28, 26, 14, 'brick', { sign: ['NOVA MARKET', '#4dd2ff', 'n'] });
   building(32, 11, 59, 24, 42, 'glass');
-  building(12, 40, 40, 59, 18, 'concrete', { style: 'office', seed: 4, sign: ['LYCÉE VESPER-NORD', '#ffffff', 'n'] });
+  building(12, 40, 40, 59, 18, 'concrete', { style: 'office', seed: 4, sign: ['MÉDIATHÈQUE', '#ffffff', 'n'] });
   building(44, 32, 59, 59, 26, 'concrete', { style: 'stucco', seed: 5, sign: ['HOTEL LUMEN', '#ff4d6d', 'w'] });
 
   // Q3 — immeuble Corvin (toit accessible) et voisins
@@ -241,7 +210,6 @@ export function buildDowntown(scene, col, quality) {
   const wheelGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.36, 18);
   const hubGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.38, 12);
   const burntMat = M({ color: '#4a3550' });
-  const rbox = (w, h, d, r = 0.12) => new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2.1, h / 2.1, d / 2.1));
 
   // Voiture « bulle » : carrosserie arrondie, grosses roues, phares ronds.
   function car(x, z, rot, opts = {}) {
@@ -458,10 +426,15 @@ export function buildDowntown(scene, col, quality) {
 
   // Voitures abandonnées sur les avenues
   car(-40, -70, -Math.PI / 2 + 0.6, { burnt: true });
-  car(66, 20, 0.1, { van: true, color: '#d0d0c8' });
+  car(66, 20, 0.1, { van: true, color: '#d0d0c8' }); // camionnette-plateforme (caisse sur le toit)
   car(-20, -68, Math.PI / 2 + 0.3, { burnt: true });
-  car(-68, 20, 0.2);
-  car(68, -30, Math.PI);
+  // Objets métalliques soulevables par le magnétisme de Noa (voir magnetism.js).
+  const magnetSpots = [
+    { kind: 'car', x: -68, z: 20, yaw: 0.2 }, { kind: 'car', x: 68, z: -30, yaw: Math.PI },
+    { kind: 'dumpster', x: 48, z: 28, yaw: 0 }, { kind: 'barrel', x: -40, z: 11.6, yaw: 0 }, { kind: 'barrel', x: -38.8, z: 11.2, yaw: 0 },
+    { kind: 'dumpster', x: -56, z: -30, yaw: Math.PI / 2 }, { kind: 'car', x: -68, z: -48, yaw: 0.1 }, { kind: 'car', x: 69, z: 48, yaw: Math.PI + 0.1 },
+    { kind: 'barrel', x: 44, z: -16, yaw: 0 }, { kind: 'barrel', x: 45.2, z: -15.2, yaw: 0 },
+  ];
 
   // ---------- Refuge (Q1) ----------
   const safe = { x: -34, z: 24 };
@@ -569,12 +542,11 @@ export function buildDowntown(scene, col, quality) {
   lotFloor.position.set(30, 0.155, -36);
   lotFloor.receiveShadow = true;
   root.add(lotFloor);
-  car(17, -22, 0.05);
-  car(23.4, -22, -0.1, { color: '#7a1f24' });
-  car(33, -22, Math.PI);
-  car(20, -44, Math.PI + 0.1);
+  magnetSpots.push(
+    { kind: 'car', x: 17, z: -22, yaw: 0.05 }, { kind: 'car', x: 23.4, z: -22, yaw: -0.1, color: '#7a1f24' }, { kind: 'car', x: 33, z: -22, yaw: Math.PI },
+    { kind: 'car', x: 20, z: -44, yaw: Math.PI + 0.1 }, { kind: 'car', x: 39, z: -44, yaw: Math.PI },
+  );
   car(29.6, -44, 0.3, { burnt: true });
-  car(39, -44, Math.PI);
   car(40.5, -52, 0.9, { van: true, color: '#e6e6e0', decal: 'AEGIS', tilt: 0.12 });
   lamp(14, -33, Math.PI / 2, { cold: true, priority: 0 });
   lamp(44, -30, -Math.PI / 2, { cold: true, priority: 0 });
@@ -636,10 +608,10 @@ export function buildDowntown(scene, col, quality) {
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
-      uniforms: { uTime: { value: 0 }, uNight: { value: 1 } },
+      uniforms: { uTime: { value: 0 }, uNight: { value: 1 }, uDay: { value: 0 } },
       vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
       fragmentShader: `
-        varying vec3 vDir; uniform float uTime; uniform float uNight;
+        varying vec3 vDir; uniform float uTime; uniform float uNight; uniform float uDay;
         float hash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
         void main(){
           float h = clamp(vDir.y, -0.1, 1.0);
@@ -653,6 +625,10 @@ export function buildDowntown(scene, col, quality) {
           vec3 dTop = vec3(0.24, 0.32, 0.68), dMid = vec3(0.85, 0.48, 0.66), dHor = vec3(1.0, 0.68, 0.42);
           vec3 dusk = k < 0.3 ? mix(dHor, dMid, k / 0.3) : mix(dMid, dTop, (k - 0.3) / 0.7);
           col = mix(dusk, col, uNight);
+          // Plein jour : bleu ciel lumineux, horizon presque blanc.
+          vec3 yTop = vec3(0.22, 0.48, 0.95), yMid = vec3(0.45, 0.7, 1.0), yHor = vec3(0.86, 0.93, 1.0);
+          vec3 day = k < 0.3 ? mix(yHor, yMid, k / 0.3) : mix(yMid, yTop, (k - 0.3) / 0.7);
+          col = mix(col, day, uDay);
           // Lueur de l'anomalie au nord (-Z)
           float a = max(dot(normalize(vec3(vDir.x, 0.0, vDir.z)), vec3(0.0, 0.0, -1.0)), 0.0);
           col = mix(col, vec3(0.75, 0.35, 1.0), step(0.93, a) * (1.0 - smoothstep(0.0, 0.35, h)) * 0.5 * uNight);
@@ -795,30 +771,40 @@ export function buildDowntown(scene, col, quality) {
       const on = activeSet.has(l);
       l.light.userData.active = on;
       l.light.visible = on;
-      if (!l.blink && !l.pulse) l.light.intensity = on && !l.light.userData.off ? l.base : 0;
+      if (!l.blink && !l.pulse) l.light.intensity = on && !l.light.userData.off && !(l.light.userData.day && l.priority >= 2) ? l.base : 0;
     }
   });
 
   // ---------- Ambiance : 0 = crépuscule (prologue), 1 = nuit du Nightfall ----------
+  // k < 0 : journée (−1 = plein jour), 0 = crépuscule, 1 = nuit du Nightfall.
   let night = 1;
-  function setNight(k) {
+  function setNight(kIn) {
+    const day = Math.max(0, -kIn);
+    const k = Math.max(0, kIn);
     night = k;
     sky.material.uniforms.uNight.value = k;
+    sky.material.uniforms.uDay.value = day;
     anomaly.material.uniforms.uNight.value = k;
     anomaly.scale.y = Math.max(0.001, k);
     anomaly.position.y = 300 * k - 150 * (1 - k);
     moonG.visible = k > 0.05;
+    // En journée : lampadaires éteints, halos au sol invisibles.
+    poolWarm.opacity = poolCold.opacity = 0.16 * (1 - day);
+    lampHeadMat.emissiveIntensity = lampColdMat.emissiveIntensity = 2.5 * (1 - day * 0.9);
+    for (const l of lampLights) l.light.userData.day = day > 0.5;
     moonG.traverse((o) => {
       if (!o.material) return;
       o.material.transparent = true;
       if (o.material.userData.base == null) o.material.userData.base = o.material.opacity;
       o.material.opacity = o.material.userData.base * k;
     });
-    cloudMat.color.set('#ffb8d0').lerp(new THREE.Color('#4b2f7e'), k);
+    cloudMat.color.set('#ffb8d0').lerp(new THREE.Color('#4b2f7e'), k).lerp(new THREE.Color('#ffffff'), day);
     rain.visible = k > 0.5;
     for (const r of rifts) r.visible = k > 0.5;
-    kit.setLights(0.75 + k * 0.25);
+    kit.setLights(0.75 + k * 0.25 - day * 0.55);
+    for (const f of nightHooks) f(kIn);
   }
+  const nightHooks = [];
   // Coupure de courant : fenêtres et lampadaires s'éteignent quelques instants.
   function setPower(on) {
     kit.setLights(on ? 0.75 + night * 0.25 : 0);
@@ -871,43 +857,12 @@ export function buildDowntown(scene, col, quality) {
   const drawCalls = mergeStatic(root);
 
   return {
-    root, targets, enemySpawns, crates, spawn, schoolSpawn, street, setBarricades, toppleMonument, drawCalls, smokeSources, setNight, setPower,
+    root, targets, enemySpawns, crates, magnetSpots, spawn, lampLights, nightHooks, rain,
+    // Voiture détachée (objet soulevable) : construite à l'origine, sans collision.
+    makeCar: (opts = {}) => car(0, 0, 0, { ...opts, dynamic: true, parent: opts.parent || scene }), schoolSpawn, street, setBarricades, toppleMonument, drawCalls, smokeSources, setNight, setPower,
     update(dt, t, cam, player) {
       for (const u of updaters) u(dt, t, cam, player);
       street.update(dt, t);
     },
   };
-}
-
-// Fusionne les maillages statiques qui partagent un matériau (optimisation :
-// quelques dizaines d'appels de dessin au lieu de près d'un millier).
-function mergeStatic(root) {
-  root.updateMatrixWorld(true);
-  const buckets = new Map();
-  const victims = [];
-  root.traverse((o) => {
-    if (!o.isMesh || Array.isArray(o.material) || o.userData.dynamic) return;
-    const g = o.geometry;
-    if (!g.attributes.uv || !g.attributes.normal) return;
-    const key = `${o.material.uuid}:${o.castShadow ? 1 : 0}:${o.receiveShadow ? 1 : 0}`;
-    if (!buckets.has(key)) buckets.set(key, { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, geos: [] });
-    const geo = g.index ? g.toNonIndexed() : g.clone();
-    geo.applyMatrix4(o.matrixWorld);
-    for (const name of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(name)) geo.deleteAttribute(name);
-    buckets.get(key).geos.push(geo);
-    victims.push(o);
-  });
-  for (const o of victims) o.parent.remove(o);
-  let calls = 0;
-  for (const b of buckets.values()) {
-    const merged = mergeGeometries(b.geos, false);
-    for (const g of b.geos) g.dispose();
-    if (!merged) continue;
-    const m = new THREE.Mesh(merged, b.mat);
-    m.castShadow = b.cast;
-    m.receiveShadow = b.recv;
-    root.add(m);
-    calls++;
-  }
-  return calls;
 }

@@ -49,6 +49,14 @@ function titleScreen() {
   addEventListener('keydown', reveal, { once: true });
   addEventListener('pointerdown', reveal, { once: true });
   $('btn-continue').addEventListener('click', () => startGame(existing.data));
+  // Sélection de chapitre : démarre une partie au début du chapitre choisi.
+  $('btn-chapters').addEventListener('click', () => $('chapters').classList.toggle('hidden'));
+  document.querySelectorAll('#chapters [data-ch]').forEach((b) => b.addEventListener('click', async () => {
+    if (existing && !confirm('Démarrer ce chapitre ? La sauvegarde actuelle sera remplacée.')) return;
+    saves.clear();
+    const { chapterPreset } = await import('./game/data/presets.js');
+    startGame(chapterPreset(b.dataset.ch));
+  }));
   $('btn-new').addEventListener('click', () => {
     if (existing && !confirm('Commencer une nouvelle partie ? La sauvegarde actuelle sera remplacée.')) return;
     saves.clear();

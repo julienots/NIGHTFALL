@@ -1,5 +1,7 @@
 // HUD en DOM superposé au canvas.
 const POWER_ICON = `<svg class="ico" viewBox="0 0 24 24"><path d="M12 2 4 13h6l-2 9 10-13h-6l2-7z" fill="#c9a0ff"/></svg>`;
+const MAG_ICON = `<svg class="ico" viewBox="0 0 24 24"><path d="M5 3h4v9a3 3 0 0 0 6 0V3h4v9a7 7 0 0 1-14 0z" fill="#ff5a6a"/><path d="M5 3h4v3H5zM15 3h4v3h-4z" fill="#f4f0ff"/></svg>`;
+const UMBRA_ICON = `<svg class="ico" viewBox="0 0 24 24"><path d="M12 2c5 0 8 4 8 9 0 3-1 5-3 7l1 4-4-2-2 2-2-2-4 2 1-4c-2-2-3-4-3-7 0-5 3-9 8-9z" fill="#1d1530" stroke="#7a5cff" stroke-width="1.5"/><path d="M7 10l4 2-4 1zM17 10l-4 2 4 1z" fill="#5fe3ff"/></svg>`;
 const MED_ICON = `<svg class="ico" viewBox="0 0 24 24"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z" fill="#ff5a6a"/></svg>`;
 
 export class Hud {
@@ -22,17 +24,23 @@ export class Hud {
       <div class="letterbox"><i></i><i></i></div>
       <div class="phone"><div class="ph-app">Messages</div><div class="ph-from"></div><div class="ph-text"></div></div>
       <div class="bossbar"><div class="bn"></div><div class="bar"><i></i></div><div class="bs"></div></div>
+      <div class="clock"></div>
+      <div class="dialog"><div class="dl-who"></div><div class="dl-text"></div><div class="dl-choices"></div><div class="dl-next">▼</div></div>
+      <div class="fade"></div>
       <div class="chapter"><div class="c1"></div><div class="c2"></div><div class="c3"></div></div>
       <div class="vitals">
         <div class="name">NOA <small class="lvl">NIV. 1</small></div>
         <div class="bar hp"><b></b><i></i><span class="bar-label hpv"></span></div>
         <div class="bar en"><i></i><span class="bar-label env"></span></div>
+        <div class="bar ab"><i></i><span class="bar-label abv">ABYSSE</span></div>
         <div class="bar xp"><i></i></div>
       </div>
       <div class="abilities">
         <div class="weapon"><div class="lbl">NOYAU</div><div class="wn"></div></div>
         <div class="slot small med">${MED_ICON}<span class="qty">0</span><span class="key">H</span></div>
         <div class="slot pw">${POWER_ICON}<div class="cd"></div><span class="key">F</span></div>
+        <div class="slot small mag">${MAG_ICON}<div class="cd"></div><span class="key">X</span></div>
+        <div class="slot small umb">${UMBRA_ICON}<span class="key">T</span></div>
         <div class="slot small fly"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3c2 3 2 6 0 9-2-3-2-6 0-9zM4 14c3-1 5 0 8 3 3-3 5-4 8-3-2 3-5 5-8 6-3-1-6-3-8-6z" fill="#7fe3ff"/></svg><span class="key">V</span></div>
       </div>`;
     parent.appendChild(this.el);
@@ -42,8 +50,15 @@ export class Hud {
       lvl: q('.lvl'), cr: q('.cr'), sh: q('.sh'), obj: q('.objective'), prompt: q('.prompt'), toasts: q('.toasts'),
       sub: q('.subtitle'), bars: q('.bars'), nums: q('.nums'), ret: q('.reticle'), marker: q('.marker'), markerTxt: q('.marker span'),
       pw: q('.slot.pw'), pwcd: q('.slot.pw .cd'), med: q('.med .qty'), wn: q('.wn'), vig: q('.vignette'), compass: q('.compass'),
-      hint: q('.hint'),
+      hint: q('.hint'), ab: q('.bar.ab > i'), abBar: q('.bar.ab'), mag: q('.slot.mag'), magcd: q('.slot.mag .cd'), umb: q('.slot.umb'),
+      clock: q('.clock'), dialog: q('.dialog'), dlWho: q('.dl-who'), dlText: q('.dl-text'), dlChoices: q('.dl-choices'), fade: q('.fade'),
     };
+    // Choix de dialogue au clavier (1, 2, 3) ou au toucher / clic.
+    addEventListener('keydown', (e) => {
+      if (!this.dl?.choices) return;
+      const n = { Digit1: 0, Digit2: 1, Digit3: 2, Numpad1: 0, Numpad2: 1, Numpad3: 2 }[e.code];
+      if (n != null && n < this.dl.choices.length) this.#choose(n);
+    });
     this.barEls = new Map();
     this.last = {};
     this.subQueue = [];
@@ -70,6 +85,19 @@ export class Hud {
     this.#setText('sh', this.$.sh, String(s.shards));
     this.#setText('med', this.$.med, String(s.medkits));
     this.el.classList.toggle('no-powers', !s.rings);
+    // Jauge d'Abysse + emplacements magnétisme / transformation
+    this.$.abBar.style.display = s.umbra ? '' : 'none';
+    if (s.umbra) {
+      this.$.ab.style.transform = `scaleX(${(s.abyss || 0) / 100})`;
+      this.$.abBar.classList.toggle('full', s.abyss >= 50 && s.form !== 'umbra');
+      this.$.abBar.classList.toggle('active', s.form === 'umbra');
+    }
+    this.$.umb.style.display = s.umbra ? '' : 'none';
+    this.$.umb.classList.toggle('ready', s.form === 'umbra' || s.abyss >= 50);
+    this.$.mag.style.display = s.magnet && s.form !== 'umbra' ? '' : 'none';
+    this.$.mag.classList.toggle('ready', !!s.holding);
+    this.$.magcd.style.setProperty('--cd', `${s.stormCd > 0 ? (s.stormCd / s.stormMax) * 100 : 0}%`);
+    this.el.classList.toggle('umbra', s.form === 'umbra');
     this.el.querySelector('.fly').style.display = s.flight ? '' : 'none';
     this.el.querySelector('.fly').classList.toggle('ready', !!s.flying);
     const cdK = s.powerCd > 0 ? (s.powerCd / s.powerCdMax) * 100 : s.energy < s.powerCost ? 100 : 0;
@@ -292,6 +320,65 @@ export class Hud {
     this.$.vig.style.boxShadow = 'inset 0 0 160px 60px rgba(200,0,20,.55)';
     clearTimeout(this.hurtTimer);
     this.hurtTimer = setTimeout(() => (this.$.vig.style.boxShadow = ''), 160);
+  }
+
+  // Horloge du jour (« Jour 2 · Après-midi »).
+  clock(text) {
+    if (this.last.clock === text) return;
+    this.last.clock = text;
+    this.$.clock.textContent = text || '';
+    this.$.clock.classList.toggle('on', !!text);
+  }
+
+  // Fondu au noir (transitions de porte, sommeil). Renvoie une promesse
+  // résolue quand l'écran est noir ; fade(false) pour revenir.
+  fade(on) {
+    this.$.fade.classList.toggle('on', on);
+  }
+
+  // ---------- Dialogue avec choix ----------
+  // dialog({ who, color, text, choices: [label…], onChoose(i) }) ; sans choix, ▼ « continuer ».
+  dialog(d) {
+    this.dl = d;
+    const $ = this.$;
+    $.dialog.classList.add('on');
+    $.dlWho.textContent = d.who || '';
+    $.dlWho.style.color = d.color || '#ffcd20';
+    $.dlText.textContent = d.text || '';
+    $.dlChoices.innerHTML = '';
+    $.dialog.classList.toggle('choices', !!d.choices);
+    (d.choices || []).forEach((label, i) => {
+      const b = document.createElement('button');
+      b.className = 'dl-choice';
+      b.innerHTML = `<span class="n">${i + 1}</span>${label}`;
+      b.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.#choose(i);
+      });
+      $.dlChoices.appendChild(b);
+    });
+  }
+
+  #choose(i) {
+    const d = this.dl;
+    if (!d?.choices) return;
+    this.dl = null;
+    d.onChoose?.(i);
+  }
+
+  // Pour les tests et le tactile : choisir l'option i.
+  choose(i) {
+    this.#choose(i);
+  }
+
+  closeDialog() {
+    this.dl = null;
+    this.$.dialog.classList.remove('on');
+  }
+
+  get dialogOpen() {
+    return this.$.dialog.classList.contains('on');
   }
 
   setVisible(on) {

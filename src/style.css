@@ -33,3 +33,7 @@ canvas.screen { display: block; }
 .loading { font: 28px "Lilita One", sans-serif; letter-spacing: .1em; color: #ffcd20; text-shadow: 0 4px 0 #2a1260; animation: breathe 1.4s ease-in-out infinite; }
 #loading { background: #2a1260; }
 #game.hidden { display: none; }
+
+.tbtn.alt { background: #b9a8ff; }
+.tbtn.small { width: 320px; padding: 9px; font-size: .85em; background: #e8e4ff; }
+.chapters { display: flex; flex-direction: column; gap: 8px; align-items: center; }

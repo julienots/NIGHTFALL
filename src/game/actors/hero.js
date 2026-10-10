@@ -2,7 +2,7 @@
 // pouvoirs des anneaux magnétiques (coups, fouet, rafale, bouclier/parade)
 // et vol (décollage, stationnaire, vol, boost, virages, atterrissage).
 import * as THREE from 'three';
-import { HeroModel } from './heroModel.js';
+import { HeroModel, PALETTES } from './heroModel.js';
 import { RingSystem } from './rings.js';
 
 export const MOVES = {
@@ -14,6 +14,19 @@ export const MOVES = {
   heavy: { anim: 'whip', dur: 0.85, hit: 0.45, range: 5.6, arc: 3.6, mult: 2.4, knock: 9, poise: 70, lunge: 0.5, heavy: true, whip: true },
   power: { anim: 'volley', dur: 0.75, hit: 0.42, range: 15, mult: 2.6, knock: 10, poise: 90, energy: 30, cooldown: 3.5, heavy: true, maxTargets: 5 },
   dive: { anim: 'diveImpact', dur: 0.45, aoe: 3.3, mult: 2.0, knock: 8, poise: 50, heavy: true },
+};
+
+// Forme Abysse : griffes, tentacules qui attirent, rugissement de zone.
+export const UMBRA = {
+  light: [
+    { anim: 'clawR', dur: 0.4, hit: 0.32, range: 3.1, arc: 2.3, mult: 1.7, knock: 5, poise: 30, lunge: 4 },
+    { anim: 'clawL', dur: 0.4, hit: 0.32, range: 3.1, arc: 2.3, mult: 1.8, knock: 5, poise: 30, lunge: 4 },
+    { anim: 'smash', dur: 0.7, hit: 0.4, aoe: 3.6, mult: 2.9, knock: 11, poise: 80, lunge: 2.5, heavy: true, smash: true },
+  ],
+  heavy: { anim: 'lash', dur: 0.75, hit: 0.45, range: 11, arc: 1.1, mult: 1.6, knock: 9, poise: 60, lunge: 0, heavy: true, pull: true },
+  power: { anim: 'roar', dur: 1.1, hit: 0.3, aoe: 7.5, centered: true, mult: 1.4, knock: 15, poise: 140, energy: 25, cooldown: 6, heavy: true, roar: true },
+  drain: 4.2, // jauge perdue par seconde transformé
+  min: 50, // jauge minimale pour se transformer
 };
 
 const RADIUS = 0.4;
@@ -33,6 +46,11 @@ export class Hero {
   constructor(game) {
     this.game = game;
     this.model = new HeroModel();
+    // Seconde silhouette : la forme Abysse (même squelette, autre modèle).
+    this.umbraModel = new HeroModel(PALETTES.umbra);
+    this.umbraModel.root.visible = false;
+    this.form = 'human';
+    this.abyss = 0;
     this.rings = new RingSystem(game.scene, this);
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -55,7 +73,7 @@ export class Hero {
     this.lean = 0;
     this.dead = false;
     this.deadT = 0;
-    this.powers = { rings: false, flight: false };
+    this.powers = { rings: false, flight: false, magnet: false, umbra: false };
     this.flying = false;
     this.flightMode = 'hover';
     this.flyRoll = 0;
@@ -88,7 +106,8 @@ export class Hero {
 
   setPowers(p) {
     Object.assign(this.powers, p);
-    if (!this.powers.rings) this.rings.set('hidden');
+    if (!this.powers.umbra && this.form === 'umbra') this.#revert(true);
+    if (!this.powers.rings || this.form === 'umbra') this.rings.set('hidden');
     else if (this.rings.mode === 'hidden') this.rings.set('idle');
     this.model.setBackpack(!this.powers.rings);
   }
@@ -127,6 +146,53 @@ export class Hero {
     this.action = { kind: 'anim', anim, dur, t: 0, lockMove };
   }
 
+  // Jeu de coups selon la forme.
+  get moves() {
+    return this.form === 'umbra' ? UMBRA : MOVES;
+  }
+
+  // ---------- Forme Abysse ----------
+  canTransform() {
+    return this.powers.umbra && this.form === 'human' && this.abyss >= UMBRA.min && !this.flying && !this.dead;
+  }
+
+  #toggleForm() {
+    if (this.form === 'umbra') return this.#revert();
+    if (!this.powers.umbra) return;
+    if (this.abyss < UMBRA.min) {
+      this.game.onPowerDenied('abyss', UMBRA.min);
+      return;
+    }
+    if (this.flying) return;
+    this.game.magnet?.drop();
+    this.action = { kind: 'transform', t: 0, dur: 1.1, swapped: false, lockMove: true };
+    this.shieldT = -1;
+    this.game.audio.transform();
+    this.game.onTransform?.('start');
+  }
+
+  #swapModel(umbra) {
+    this.form = umbra ? 'umbra' : 'human';
+    this.model.root.visible = !umbra;
+    this.umbraModel.root.visible = umbra;
+    if (umbra) this.rings.set('hidden');
+    else if (this.powers.rings) this.rings.set('idle');
+    const fx = this.game.fx;
+    const c = this.pos.clone().add(new THREE.Vector3(0, 1.1, 0));
+    fx.emit(c, { count: 40, color: '#1d1530', speed: 6, up: 3, size: 0.4, life: 0.8, gravity: 4 });
+    fx.emit(c, { count: 18, color: '#5fe3ff', speed: 5, up: 2, size: 0.18, life: 0.6, gravity: 2 });
+    fx.ring(this.pos, { color: umbra ? '#7a5cff' : '#7fe3ff', from: 0.4, to: 6, life: 0.5 });
+    this.game.shake(umbra ? 0.5 : 0.2);
+  }
+
+  #revert(instant = false) {
+    if (this.form !== 'umbra') return;
+    this.#swapModel(false);
+    this.game.audio.revert();
+    if (!instant) this.action = { kind: 'anim', anim: 'scared', dur: 0.6, t: 0, lockMove: true };
+    this.game.onTransform?.('end');
+  }
+
   // ---------- Combat ----------
   #pickAim(maxDist, inputDir) {
     const { enemies, lockTarget } = this.game;
@@ -152,7 +218,7 @@ export class Hero {
   }
 
   #startMove(def, kind, inputDir) {
-    const target = this.#pickAim(kind === 'power' ? 14 : def.whip ? 6 : 5, inputDir);
+    const target = def.roar ? null : this.#pickAim(kind === 'power' ? 14 : def.whip ? 6 : def.pull ? 11 : 5, inputDir);
     if (target) this.yaw = Math.atan2(target.pos.x - this.pos.x, target.pos.z - this.pos.z);
     else if (inputDir) this.yaw = Math.atan2(inputDir.x, inputDir.z);
     let lunge = def.lunge || 0;
@@ -162,6 +228,8 @@ export class Hero {
     }
     this.action = { kind, def, t: 0, hitDone: false, anim: def.anim, lunge };
     this.game.audio.swing(!!def.heavy);
+    if (def.roar) this.game.audio.roar(this.pos);
+    if (this.form === 'umbra') return;
     if (def.ring) this.rings.set('punch', { side: def.ring });
     if (def.whip) this.rings.set('whip');
   }
@@ -181,9 +249,16 @@ export class Hero {
   #resolveHit(def) {
     let hits = 0;
     const base = this.stats.damage * def.mult * (def === MOVES.power ? 1 + this.stats.powerDamage : 1) * this.#dmgMult();
+    const umbra = this.form === 'umbra';
     const hit = (e, dir) => {
       const dmg = Math.round(base * (0.92 + Math.random() * 0.16));
-      if (e.takeHit({ damage: dmg, dir, knock: def.knock, poise: def.poise, heavy: !!def.heavy, power: def === MOVES.power })) hits++;
+      // Tentacules : la créature est tirée vers Noa au lieu d'être repoussée.
+      const d = def.pull ? dir.clone().negate() : dir;
+      const knock = def.pull ? Math.min(def.knock, Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z) * 1.2) : def.knock;
+      if (e.takeHit({ damage: dmg, dir: d, knock, poise: def.poise, heavy: !!def.heavy, power: def === MOVES.power || umbra })) hits++;
+      if (umbra) this.hp = Math.min(this.stats.maxHp, this.hp + Math.max(1, Math.round(dmg * 0.06))); // la substance se nourrit
+      if (def.roar) e.stagger?.(1.4);
+      if (def.pull) this.game.fx.emit({ x: e.pos.x, y: e.pos.y + 1, z: e.pos.z }, { count: 10, color: '#1d1530', speed: 3, size: 0.3, life: 0.4 });
     };
     if (def === MOVES.power) {
       // Rafale : jusqu'à 5 cibles devant, les anneaux volent vers elles.
@@ -201,7 +276,7 @@ export class Hero {
       return list.length;
     }
     const f = this.facing();
-    const center = def.aoe ? this.pos.clone().addScaledVector(f, def === MOVES.dive ? 0 : 1.2) : this.pos;
+    const center = def.aoe ? this.pos.clone().addScaledVector(f, def === MOVES.dive || def.centered ? 0 : 1.2) : this.pos;
     for (const e of this.game.enemies) {
       if (!e.alive) continue;
       if (Math.abs(e.pos.y - this.pos.y) > 2.6) continue;
@@ -217,6 +292,8 @@ export class Hero {
       if (ok) hit(e, new THREE.Vector3(e.pos.x - this.pos.x, 0, e.pos.z - this.pos.z).normalize());
     }
     if (hits) {
+      // La jauge d'Abysse se remplit en frappant (elle se vide transformé).
+      if (this.powers.umbra) this.abyss = Math.min(100, this.abyss + hits * (umbra ? 2 : 4));
       this.chain++;
       this.chainT = 2;
       this.energy = Math.min(this.stats.maxEnergy, this.energy + hits * (5 + this.stats.energyGain));
@@ -278,8 +355,10 @@ export class Hero {
         this.shieldT = -1; // garde brisée faute d'énergie
       }
     }
-    const dmg = Math.max(1, Math.round(amount * (100 / (100 + this.stats.defense * 4))));
+    const armor = this.form === 'umbra' ? 0.5 : 1;
+    const dmg = Math.max(1, Math.round(amount * armor * (100 / (100 + this.stats.defense * 4))));
     this.hp -= dmg;
+    if (this.powers.umbra && this.form === 'human') this.abyss = Math.min(100, this.abyss + 6);
     this.game.onHeroHurt(dmg);
     this.vel.addScaledVector(new THREE.Vector3(this.pos.x - from.x, 0, this.pos.z - from.z).normalize(), knock);
     if (this.flying) {
@@ -287,7 +366,7 @@ export class Hero {
       this.vy = 2;
       this.grounded = false;
     }
-    if (this.action?.kind !== 'power') this.action = { kind: 'hurt', t: 0, dur: heavy ? 0.55 : 0.3 };
+    if (this.action?.kind !== 'power' && this.action?.kind !== 'transform' && !(this.form === 'umbra' && !heavy)) this.action = { kind: 'hurt', t: 0, dur: heavy ? 0.55 : 0.3 };
     this.hurtT = 1;
     if (this.hp <= 0) this.#die();
     return true;
@@ -302,6 +381,7 @@ export class Hero {
       this.game.slowT = 0.6;
       return;
     }
+    if (this.form === 'umbra') this.#revert(true);
     this.hp = 0;
     this.dead = true;
     this.action = null;
@@ -312,7 +392,7 @@ export class Hero {
 
   // ---------- Vol ----------
   #toggleFlight() {
-    if (!this.powers.flight) return;
+    if (!this.powers.flight || this.form === 'umbra') return;
     if (this.flying) {
       this.flying = false;
       this.grounded = false;
@@ -442,6 +522,22 @@ export class Hero {
     const wishLen = Math.min(1, wish.length());
     const wishDir = wishLen > 0.01 ? wish.clone().normalize() : null;
     const R = this.powers.rings;
+    const U = this.form === 'umbra';
+    const MV = this.moves;
+
+    // Jauge d'Abysse : se vide pendant la transformation, retour humain à zéro.
+    if (U) {
+      this.abyss -= UMBRA.drain * dt;
+      if (this.abyss <= 0) {
+        this.abyss = 0;
+        this.#revert();
+      }
+    }
+    if (input.was('transform') && (!this.action || this.action.kind === 'attack' || this.action.kind === 'hurt')) this.#toggleForm();
+    // Magnétisme : saisir / lancer (forme humaine seulement).
+    const mag = this.game.magnet;
+    if (input.was('magnet') && R && this.powers.magnet && !U && mag && (!this.action || this.action.lockMove === false)) mag.press();
+    const holding = mag?.holding;
 
     if (input.was('fly')) this.#toggleFlight();
     if (input.was('jump')) this.jumpBuffer = 0.15;
@@ -450,7 +546,7 @@ export class Hero {
     const canCancel = !a || (a.kind === 'attack' && a.hitDone && a.t / a.def.dur > a.def.hit + 0.1);
 
     // Bouclier (maintenu)
-    if (R && input.is('shield') && !this.flying && (!a || a.kind === 'hurt') && this.energy > 0) {
+    if (R && !U && !holding && input.is('shield') && !this.flying && (!a || a.kind === 'hurt') && this.energy > 0) {
       if (this.shieldT < 0) {
         this.shieldT = 0;
         this.game.audio.shield();
@@ -465,17 +561,19 @@ export class Hero {
         this.dodgeCd = 0.55 - this.mods.dodgeCd;
         this.game.audio.dodge();
         this.game.fx.dustRing(this.pos, 0.8, 7, '#c9b8ff');
+      } else if (holding && (input.was('light') || input.was('heavy') || input.was('power'))) {
+        mag.throwHeld();
       } else if (input.was('power') || input.was('light') || input.was('heavy')) {
         if (!R) this.game.onNoPowers();
         else if (input.was('power')) {
-          const def = MOVES.power;
-          const cost = def.energy - this.mods.volleyCost;
+          const def = MV.power;
+          const cost = def.energy - (U ? 0 : this.mods.volleyCost);
           if (this.powerCd > 0 || this.energy < cost) this.game.onPowerDenied(this.powerCd > 0 ? 'cooldown' : 'energy');
           else if (!a || canCancel || a.kind === 'attack') {
             this.energy -= cost;
             this.powerCd = def.cooldown;
             this.#startMove(def, 'power', wishDir);
-            this.game.audio.powerCharge();
+            if (!U) this.game.audio.powerCharge();
           }
         } else if (input.was('light')) {
           if (!this.grounded && this.pos.y - col.groundHeight(this.pos.x, this.pos.z, RADIUS, this.pos.y) > 1.0 && !a) {
@@ -483,13 +581,13 @@ export class Hero {
             this.vy = -22;
             this.game.audio.swing(true);
           } else if (!a || canCancel) {
-            this.#startMove(MOVES.light[this.combo % 3], 'attack', wishDir);
+            this.#startMove(MV.light[this.combo % 3], 'attack', wishDir);
             this.combo = (this.combo + 1) % 3;
             this.comboReset = 0.9;
           } else if (a.kind === 'attack') this.buffer = 'light';
         } else if (input.was('heavy')) {
           if (!a || canCancel) {
-            this.#startMove(MOVES.heavy, 'attack', wishDir);
+            this.#startMove(MV.heavy, 'attack', wishDir);
             this.combo = 0;
           } else if (a.kind === 'attack') this.buffer = 'heavy';
         }
@@ -522,7 +620,14 @@ export class Hero {
             this.game.fx.ring(this.pos.clone().addScaledVector(this.facing(), 2), { color: '#7fe3ff', from: 0.3, to: 2.5, life: 0.3, y: 1.2 });
           }
           if (act.def.whip) this.game.fx.slamWave(this.pos, 4, '#7fe3ff');
-          if (act.kind === 'power') this.game.audio.voidStrike();
+          if (act.def.smash) this.game.fx.slamWave(this.pos.clone().addScaledVector(this.facing(), 1.2), 3.6, '#7a5cff');
+          if (act.def.roar) {
+            this.game.fx.ring(this.pos, { color: '#7a5cff', from: 0.5, to: 9, life: 0.6, y: 1 });
+            this.game.fx.ring(this.pos, { color: '#5fe3ff', from: 0.5, to: 7, life: 0.5 });
+            this.game.shake(0.6);
+          }
+          if (act.def.pull) this.game.fx.emit(this.pos.clone().add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(this.facing(), 2), { count: 20, color: '#1d1530', speed: 9, size: 0.3, life: 0.35, gravity: 0, dir: this.facing() });
+          if (act.kind === 'power' && !U) this.game.audio.voidStrike();
           this.#resolveHit(act.def);
         }
         if (p >= 1) {
@@ -530,16 +635,16 @@ export class Hero {
           const b = this.buffer;
           this.buffer = null;
           if (b === 'light') {
-            this.#startMove(MOVES.light[this.combo % 3], 'attack', wishDir);
+            this.#startMove(MV.light[this.combo % 3], 'attack', wishDir);
             this.combo = (this.combo + 1) % 3;
             this.comboReset = 0.9;
-          } else if (b === 'heavy') this.#startMove(MOVES.heavy, 'attack', wishDir);
+          } else if (b === 'heavy') this.#startMove(MV.heavy, 'attack', wishDir);
         } else if (this.buffer && act.hitDone && p > act.def.hit + 0.15 && act.kind === 'attack') {
           act.t = act.def.dur;
         }
       } else if (act.kind === 'dodge') {
         const k = 1 - act.t / act.dur;
-        const sp = 13 * Math.max(0, k) ** 0.6;
+        const sp = (this.form === 'umbra' ? 17 : 13) * Math.max(0, k) ** 0.6;
         moveX = act.dir.x * sp;
         moveZ = act.dir.z * sp;
         if (act.t >= act.dur) this.action = null;
@@ -560,13 +665,22 @@ export class Hero {
           this.action = null;
           this.#beginFlight(true);
         }
+      } else if (act.kind === 'transform') {
+        // La substance enveloppe Noa : bascule de silhouette à mi-animation.
+        if (!act.swapped && act.t >= act.dur * 0.45) {
+          act.swapped = true;
+          this.#swapModel(true);
+          this.game.onTransform?.('done');
+        }
+        if (act.t < act.dur * 0.45 && Math.random() < 0.7) this.game.fx.emit(this.pos.clone().add(new THREE.Vector3(0, 1, 0)), { count: 2, color: '#1d1530', speed: 2.5, size: 0.3, life: 0.5, gravity: -3 });
+        if (act.t >= act.dur) this.action = null;
       } else if (act.kind === 'hurt' || act.kind === 'anim') {
         if (act.t >= act.dur) this.action = null;
       }
     }
 
     // --- Mode des anneaux selon l'action ---
-    if (R) {
+    if (R && this.form === 'human') {
       const m = this.rings.mode;
       const transient = m === 'volley' || m === 'awaken' || m === 'ringShot' || m === 'whip' || m === 'punch';
       const done = (m === 'ringShot' && this.rings.modeT > 0.5) || ((m === 'whip' || m === 'punch') && !(this.action?.kind === 'attack'));
@@ -582,7 +696,7 @@ export class Hero {
     // --- Locomotion au sol ---
     const free = !this.action || this.action.lockMove === false;
     const sprint = input.is('sprint') && wishLen > 0.3;
-    const maxSpeed = this.shielding ? 2.5 : sprint ? 9.5 * this.mods.sprintMult : 5.8;
+    const maxSpeed = this.shielding ? 2.5 : U ? (sprint ? 13 : 7.4) : holding ? 4.2 : sprint ? 9.5 * this.mods.sprintMult : 5.8;
     const targetV = free && wishDir ? wish.clone().multiplyScalar(maxSpeed) : new THREE.Vector3();
     const accel = this.grounded ? 14 : 4;
     const kv = 1 - Math.exp(-accel * dt);
@@ -601,7 +715,7 @@ export class Hero {
     if (this.grounded) this.coyote = 0.12;
     else this.coyote -= dt;
     if (this.jumpBuffer > 0 && this.coyote > 0 && free) {
-      this.vy = JUMP_V;
+      this.vy = U ? JUMP_V * 1.45 : JUMP_V;
       this.grounded = false;
       this.coyote = 0;
       this.jumpBuffer = 0;
@@ -668,9 +782,22 @@ export class Hero {
     } else if (a?.kind === 'takeoff') {
       anim = 'superLanding';
       animP = 0.3;
+    } else if (a?.kind === 'transform') {
+      anim = 'transform';
+      animP = Math.min(1, a.t / a.dur);
+    }
+    // Objet en lévitation : bras levés (les jambes continuent de marcher).
+    if (!anim && this.game.magnet?.holding) {
+      anim = 'magnetHold';
+      animP = 0.5;
+    }
+    if (!anim && this.pose) {
+      anim = this.pose; // pose imposée par l'histoire (assis en classe…)
+      animP = 0.5;
     }
     this.landT = Math.max(0, (this.landT || 0) - dt * 3.5);
-    this.model.animate({
+    const model = this.form === 'umbra' ? this.umbraModel : this.model;
+    model.animate({
       dt,
       accel: this.accelLean,
       turn: this.turnRate,
@@ -689,8 +816,8 @@ export class Hero {
       deadP: this.deadT,
       flight: this.flying ? { mode: this.flightMode, pitch: this.flyPitch, roll: this.flyRoll } : null,
     });
-    this.model.root.position.copy(this.pos);
-    this.model.root.rotation.y = this.yaw;
+    model.root.position.copy(this.pos);
+    model.root.rotation.y = this.yaw;
     this.rings.update(dt, this.game.time, this.energy / this.stats.maxEnergy);
   }
 }

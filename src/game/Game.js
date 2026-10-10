@@ -10,6 +10,10 @@ import { CollisionWorld } from './core/physics.js';
 import { Input } from './core/input.js';
 import { AudioEngine } from './core/audio.js';
 import { buildDowntown } from './world/downtown.js';
+import { buildDistricts } from './world/districts.js';
+import { buildInteriors } from './world/interiors.js';
+import { mulberry32 } from './core/rng.js';
+import { Social } from './systems/social.js';
 import { Crate } from './world/crate.js';
 import { Effects } from './fx/effects.js';
 import { Hero, MOVES } from './actors/hero.js';
@@ -26,6 +30,7 @@ import { ITEMS, RARITY_INFO } from './data/items.js';
 import { MISSIONS, MISSION_KIND_LABEL } from './data/missions.js';
 import { Hud } from './ui/hud.js';
 import { Story } from './story/story.js';
+import { Magnetism, STORM } from './systems/magnetism.js';
 import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { Menus } from './ui/menus.js';
 import './ui/game.css';
@@ -120,6 +125,17 @@ export class Game {
     // --- Monde ---
     this.col = new CollisionWorld();
     this.world = buildDowntown(scene, this.col, q);
+    // Monde ouvert : quartiers autour du centre-ville (lycée, parc, port…).
+    const dist = buildDistricts({ scene, col: this.col, quality: q, rand: mulberry32(1891), lampLights: this.world.lampLights });
+    this.districts = dist;
+    Object.assign(this.world.targets, dist.targets);
+    this.world.enemySpawns.push(...dist.enemySpawns);
+    this.world.crates.push(...dist.crates);
+    this.world.magnetSpots.push(...dist.magnetSpots);
+    if (dist.targets.bus_school) this.world.street.schoolStop = dist.targets.bus_school;
+    // Intérieurs (lycée, maison de Noa), loin de la ville, masqués par défaut.
+    this.interiors = buildInteriors({ scene, col: this.col, quality: q });
+    this.zone = 'city';
     this.fx = new Effects(scene);
     this.audio = new AudioEngine(this.settings);
     this.input = new Input(r.domElement);
@@ -145,6 +161,8 @@ export class Game {
     this.progression = new Progression(d?.progression);
     this.skills = new SkillTree(d?.skills);
     this.missions = new MissionLog(d?.missions);
+    this.clock = { day: 1, phase: 'afternoon', ...(d?.clock || {}) };
+    this.social = new Social(this, d?.social);
     this.opened = new Set(d?.opened || []);
     this.pendingLoot = d?.pendingLoot || {};
     this.kills = d?.kills || 0;
@@ -153,10 +171,16 @@ export class Game {
 
     // --- Héros ---
     this.hero = new Hero(this);
-    scene.add(this.hero.model.root);
-    const sp = d?.hero || this.world.spawn;
+    scene.add(this.hero.model.root, this.hero.umbraModel.root);
+    this.hero.abyss = d?.hero?.abyss ?? 0;
+
+    // --- Objets métalliques soulevables ---
+    this.magnet = new Magnetism(this);
+    for (const sp of this.world.magnetSpots) this.magnet.add(sp);
+    const sp = d?.hero?.x != null ? d.hero : this.world.spawn;
     this.hero.placeAt({ x: sp.x, y: sp.y, z: sp.z }, sp.yaw ?? 0);
     this.camYaw = sp.yaw ?? 0;
+    if (d?.hero?.zone && d.hero.zone !== 'city') this.enterZone(d.hero.zone, d.hero.x != null ? d.hero : null);
     this.recomputeStats();
     if (d?.hero) {
       this.hero.hp = Math.min(this.hero.stats.maxHp, d.hero.hp ?? this.hero.stats.maxHp);
@@ -177,6 +201,8 @@ export class Game {
 
     // --- Interface ---
     this.hud = new Hud(document.body);
+    // Toucher / cliquer la bulle de dialogue la fait avancer.
+    this.hud.$.dialog.addEventListener('pointerdown', () => this.social.next());
     this.menus = new Menus(this);
     this.applySettings();
     addEventListener('resize', () => this.#resize());
@@ -216,6 +242,7 @@ export class Game {
   // Fait apparaître les créatures dont le chapitre est atteint (une seule fois).
   // Le groupe du parking déjà éliminé ne réapparaît pas.
   spawnGated() {
+    if (this.clock && this.clock.phase !== 'night') return; // les créatures ne sortent que la nuit
     const m = this.missions;
     const m01 = m.state.m01_first_contact;
     const parkingDone = m.stepReached('m01_first_contact', 1);
@@ -236,19 +263,127 @@ export class Game {
   }
 
   // Ambiance : 0 = crépuscule doré (prologue), 1 = nuit violette du Nightfall.
-  setNight(k) {
-    this.night = k;
-    this.world.setNight(k);
-    const c = (a, b) => new THREE.Color(a).lerp(new THREE.Color(b), k);
-    this.hemi.color.copy(c('#ffe0c8', '#d6d0ff'));
-    this.hemi.groundColor.copy(c('#7a5a6a', '#6a4a5a'));
-    this.hemi.intensity = 1.5 - k * 0.15;
-    this.moon.color.copy(c('#ffc08a', '#e8f0ff'));
-    this.moon.intensity = 2.0 - k * 0.4;
-    this.scene.fog.color.copy(c('#e8a0a8', '#4a2f7a'));
-    this.scene.fog.density = 0.0035 + k * 0.002;
-    this.scene.background.copy(c('#e8a0a8', '#1a0d36'));
-    this.audio.setRain?.(k > 0.5);
+  // Ambiance : −1 = plein jour, 0 = crépuscule doré (prologue), 1 = nuit violette.
+  setNight(kIn) {
+    this.night = kIn;
+    this.world.setNight(kIn);
+    const k = Math.max(0, kIn);
+    const day = Math.max(0, -kIn);
+    const c = (a, b, dayCol) => new THREE.Color(a).lerp(new THREE.Color(b), k).lerp(new THREE.Color(dayCol), day);
+    this.hemi.color.copy(c('#ffe0c8', '#d6d0ff', '#ffffff'));
+    this.hemi.groundColor.copy(c('#7a5a6a', '#6a4a5a', '#8a8070'));
+    this.hemi.intensity = 1.5 - k * 0.15 + day * 0.25;
+    this.moon.color.copy(c('#ffc08a', '#e8f0ff', '#fff6e6'));
+    this.moon.intensity = 2.0 - k * 0.4 + day * 0.5;
+    this.scene.fog.color.copy(c('#e8a0a8', '#4a2f7a', '#bcd6ff'));
+    this.scene.fog.density = 0.0035 + k * 0.002 - day * 0.001;
+    this.scene.background.copy(c('#e8a0a8', '#1a0d36', '#a8cdff'));
+    this.audio.setRain?.(k > 0.5 && this.zone === 'city');
+  }
+
+  // ---------- Horloge : matin (cours), après-midi, soirée, nuit (créatures) ----------
+  static PHASES = { morning: 'Matin', afternoon: 'Après-midi', evening: 'Soirée', night: 'Nuit' };
+  static PHASE_SKY = { morning: -1, afternoon: -0.7, evening: 0, night: 1 };
+
+  setPhase(phase, instant = true) {
+    const prev = this.clock.phase;
+    this.clock.phase = phase;
+    if (instant) this.setNight(Game.PHASE_SKY[phase]);
+    else this.story.nightTween = { from: this.night ?? 0, to: Game.PHASE_SKY[phase], t: 0, dur: 3 };
+    // La nuit, les créatures sortent ; le jour, elles se terrent.
+    if (phase === 'night' && prev !== 'night') {
+      this.spawned.clear();
+      this.spawnGated();
+    } else if (phase !== 'night') {
+      for (const e of this.enemies) {
+        if (e === this.boss || e.spawn.group === 'chaser' || !e.alive) continue;
+        this.scene.remove(e.model.root);
+        e.alive = false;
+        e.deadT = 99;
+      }
+      this.enemies = this.enemies.filter((e) => e.alive || e === this.boss);
+      this.respawnQueue.length = 0;
+    }
+    this.story.onPhase?.(phase, prev);
+  }
+
+  clockLabel() {
+    return `Jour ${this.clock.day} · ${Game.PHASES[this.clock.phase]}`;
+  }
+
+  // Passe à la phase suivante (dormir / attendre). night → matin du jour suivant.
+  advancePhase(to) {
+    if (to === 'morning' || (!to && this.clock.phase === 'night')) {
+      this.clock.day++;
+      this.setPhase('morning');
+    } else this.setPhase(to || { morning: 'afternoon', afternoon: 'evening', evening: 'night' }[this.clock.phase]);
+  }
+
+  // ---------- Zones : ville / intérieurs ----------
+  // Entre dans une zone ('city' | 'school' | 'home'), place Noa (spawn facultatif).
+  enterZone(name, spawn = null) {
+    const prev = this.zone;
+    this.zone = name;
+    const inside = name !== 'city';
+    this.world.root.visible = !inside;
+    for (const d of this.districts.districts) d.group.visible = !inside;
+    this.magnet.group.visible = !inside;
+    for (const c of this.world.street.cars) c.g.visible = !inside;
+    for (const [zn, z] of Object.entries(this.interiors.zones)) {
+      z.group.visible = zn === name;
+      for (const l of z.lights || []) l.visible = zn === name;
+    }
+    this.world.rain.visible = !inside && Math.max(0, this.night ?? 0) > 0.5;
+    this.audio.setRain?.(!inside && (this.night ?? 0) > 0.5);
+    if (spawn) {
+      this.hero.placeAt(spawn, spawn.yaw ?? 0);
+      this.camYaw = spawn.yaw ?? 0;
+    } else if (inside) {
+      const sp = this.interiors.zones[name].spawn;
+      this.hero.placeAt(sp, sp.yaw);
+      this.camYaw = sp.yaw;
+    }
+    this.camPos = null;
+    this.lockTarget = null;
+    this.hero.rings.placed = false;
+    if (this.hero.powers.rings && this.hero.form === 'human') this.hero.rings.set('idle');
+    this.story?.onZone?.(name, prev);
+  }
+
+  // Fondu au noir : mid() s'exécute écran noir, after() une fois revenu.
+  transition(mid, after) {
+    this.trans = { t: 0, mid, after, midDone: false };
+    this.hud.fade(true);
+    this.hero.cinematic = true;
+  }
+
+  #updateTransition(dt) {
+    const tr = this.trans;
+    if (!tr) return;
+    tr.t += dt;
+    if (!tr.midDone && tr.t >= 0.5) {
+      tr.midDone = true;
+      tr.mid?.();
+      this.hud.fade(false);
+    }
+    if (tr.t >= 1.0) {
+      this.trans = null;
+      this.hero.cinematic = false;
+      tr.after?.();
+    }
+  }
+
+  // Masque les quartiers éloignés de la caméra (économie de rendu).
+  #cullDistricts() {
+    if (this.zone !== 'city') return;
+    const c = this.camera.position;
+    const far = this.hero.flying ? 330 : 270;
+    for (const d of this.districts.districts) {
+      const [x0, z0, x1, z1] = d.bounds;
+      const dx = Math.max(x0 - c.x, 0, c.x - x1);
+      const dz = Math.max(z0 - c.z, 0, c.z - z1);
+      d.group.visible = Math.hypot(dx, dz) < far;
+    }
   }
 
   // ---------- Outils de test automatisé ----------
@@ -262,6 +397,8 @@ export class Game {
       }
       this.#updateCamera(step);
       this.world.update(step, this.time, this.camera, this.hero.pos);
+      this.districts.update(step, this.time);
+      this.#cullDistricts();
       this.input.endFrame();
     }
   }
@@ -272,6 +409,7 @@ export class Game {
 
   renderOnce() {
     this.world.update(0.016, this.time, this.camera, this.hero.pos);
+    this.#cullDistricts();
     this.#updateHud(0.016);
     this.composer.render();
   }
@@ -363,10 +501,15 @@ export class Game {
     }
     this.#updateCamera(menuOpen ? 0 : realDt);
     this.world.update(realDt, this.time, this.camera, this.hero.pos);
+    this.districts.update(realDt, this.time);
+    this.interiors.update(realDt, this.time);
+    this.#cullDistricts();
     this.#updateHud(realDt);
     this.touch?.update({
-      menu: menuOpen, cinematic: this.story.inCinematic, rings: this.hero.powers.rings, flight: this.hero.powers.flight,
+      menu: menuOpen, cinematic: this.story.inCinematic || this.social.active || !!this.trans, rings: this.hero.powers.rings, flight: this.hero.powers.flight,
       flying: this.hero.flying, canInteract: this.nearInteract,
+      magnet: this.hero.powers.magnet && this.hero.form === 'human', holding: this.magnet.holding,
+      umbra: this.hero.powers.umbra, canTransform: this.hero.form === 'umbra' || this.hero.abyss >= 50,
     });
     this.composer.render();
     this.input.endFrame();
@@ -383,6 +526,7 @@ export class Game {
     } else if (p.has('inventory') && (!m.isOpen || m.open === 'inventory' || m.open === 'journal')) m.toggle('inventory');
     else if (p.has('journal') && (!m.isOpen || m.open === 'journal' || m.open === 'inventory')) m.toggle('journal');
     else if (p.has('skills') && this.hero.powers.rings && (!m.isOpen || ['journal', 'inventory', 'skills'].includes(m.open))) m.toggle('skills', { atRefuge: this.nearRefuge() });
+    else if (p.has('relations') && (!m.isOpen || ['journal', 'inventory', 'skills', 'relations'].includes(m.open))) m.toggle('relations');
     else if (p.has('interact') && m.open === 'reward') m.hide();
   }
 
@@ -398,8 +542,11 @@ export class Game {
     const input = this.input;
 
     this.story.update(dt);
-    if (this.story.inCinematic && input.was('interact')) this.story.skip();
+    this.social.update(dt);
+    this.#updateTransition(dt);
+    if (this.story.inCinematic && !this.social.active && input.was('interact')) this.story.skip();
     hero.update(dt, input, this.camYaw, this.camPitch);
+    this.magnet.update(dt);
     this.audio.wind(hero.flying ? Math.min(1, Math.hypot(hero.vel.x, hero.vel.z, hero.vy) / 34) : 0);
 
     // Bruit émis par le joueur (perçu par l'ouïe des créatures)
@@ -638,9 +785,9 @@ export class Game {
 
   // ---------- Interactions ----------
   #interactables() {
-    const list = [...this.story.interactables()];
+    const list = [...this.story.interactables(), ...this.social.interactables()];
     // Avant le réveil, Noa n'est qu'un ado : pas de caisses, pas de refuge.
-    if (!this.hero.powers.rings) return list;
+    if (!this.hero.powers.rings || this.zone !== 'city') return list;
     for (const c of this.crates) {
       if (this.crateHidden(c)) continue;
       const pending = this.pendingLoot[c.id]?.length;
@@ -655,6 +802,7 @@ export class Game {
 
   #interactions() {
     const hero = this.hero;
+    if (this.social.active || this.trans) return this.hud.prompt('');
     if (hero.dead || this.story.inCinematic) return this.hud.prompt(this.story.inCinematic ? '<kbd>E</kbd>Passer la cinématique' : '');
     let near = null;
     let nd = 2.6;
@@ -682,13 +830,14 @@ export class Game {
       } else if (this.inspected === c) {
         html = `<kbd>E</kbd>Ouvrir — <span style="color:${color}">${info.label}</span><div class="sub">${this.#crateHint(c.type)}</div>`;
       } else html = `<kbd>E</kbd>Inspecter — <span style="color:${color}">${info.label}</span>`;
-    } else if (near.kind === 'story') html = near.label;
+    } else if (near.kind === 'story' || near.kind === 'friend') html = near.label;
     else if (near.kind === 'terminal') html = '<kbd>E</kbd>Terminal de Mara — se reposer, sauvegarder, boutique';
     else html = '<kbd>E</kbd>Établi — atelier d’amélioration';
     this.hud.prompt(html);
 
     if (!this.input.was('interact') || hero.busy) return;
     if (near.kind === 'story') return this.story.interact(near);
+    if (near.kind === 'friend') return this.social.open(near.id);
     if (near.kind === 'crate') {
       const c = near.crate;
       if (c.locked) {
@@ -845,7 +994,7 @@ export class Game {
   }
 
   grantXp(xp) {
-    const gained = this.progression.addXp(xp);
+    const gained = this.progression.addXp(xp * (this.social?.xpMult || 1));
     if (gained) {
       this.recomputeStats();
       this.hero.hp = this.hero.stats.maxHp;
@@ -903,7 +1052,7 @@ export class Game {
     this.grantXp(def.xp);
     this.missionEvents(this.missions.handle({ type: 'kill', group: e.spawn.group, enemyType: e.type }));
     // Seules les créatures « de quartier » réapparaissent (pas celles des missions).
-    if (['alley', 'avenue', 'corvin', 'north'].includes(e.spawn.group)) this.respawnQueue.push({ spawn: e.spawn, t: 75 });
+    if (['alley', 'avenue', 'corvin', 'north', 'park', 'port', 'industrial', 'suburb', 'stadium'].includes(e.spawn.group) && this.clock.phase === 'night') this.respawnQueue.push({ spawn: e.spawn, t: 75 });
     if (e === this.boss) this.boss = null;
   }
 
@@ -949,12 +1098,37 @@ export class Game {
     this.fx.ring(this.hero.pos, { color: '#a060ff', from: 0.3, to: 3, life: 0.4 });
   }
 
-  onPowerDenied(why) {
+  onPowerDenied(why, need) {
     const now = performance.now();
     if (now - (this.deniedAt || 0) < 600) return;
     this.deniedAt = now;
     this.audio.denied();
-    this.hud.toast(why === 'cooldown' ? 'Void Strike en recharge' : `Énergie insuffisante (${MOVES.power.energy} requis)`, '#a060ff');
+    const msg = {
+      cooldown: this.hero.form === 'umbra' ? 'Rugissement en recharge' : 'Rafale d’anneaux en recharge',
+      storm: 'Tempête de métal en recharge',
+      abyss: `Jauge d’Abysse insuffisante (${need}% requis) — frappe pour la remplir`,
+    }[why] || `Énergie insuffisante (${need ?? this.hero.moves.power.energy} requis)`;
+    this.hud.toast(msg, '#a060ff');
+  }
+
+  // Forme Abysse : début / transformation effective / retour à la normale.
+  onTransform(phase) {
+    if (phase === 'start') {
+      this.slowT = 0.5;
+      if (!this.saidOnce.has('umbraFirst')) {
+        this.saidOnce.add('umbraFirst');
+        this.hud.say('L’Ombre', 'Enfin… Laisse-moi sortir, Noa. Juste un peu.', 3.5);
+      }
+    } else if (phase === 'done') {
+      this.hud.toast('FORME ABYSSE · griffes, tentacules [Clic D], rugissement [F]', '#7a5cff');
+      this.missionEvents(this.missions.handle({ type: 'event', id: 'transform' }));
+    } else if (phase === 'end') this.hud.toast('La substance se retire…', '#9a8ab8');
+  }
+
+  onMagnet(what) {
+    if (what === 'throw') this.missionEvents(this.missions.handle({ type: 'event', id: 'magnet_throw' }));
+    if (what === 'grab') this.missionEvents(this.missions.handle({ type: 'event', id: 'magnet_grab' }));
+    if (what === 'storm') this.missionEvents(this.missions.handle({ type: 'event', id: 'magnet_storm' }));
   }
 
   onHeroDeath() {
@@ -992,7 +1166,10 @@ export class Game {
     return {
       seed: this.seed,
       playTime: Math.round(this.playTime),
-      hero: { x: h.pos.x, y: h.pos.y, z: h.pos.z, yaw: h.yaw, hp: h.hp, energy: h.energy },
+      hero: { x: h.pos.x, y: h.pos.y, z: h.pos.z, yaw: h.yaw, hp: h.hp, energy: h.energy, abyss: Math.round(h.abyss), zone: this.zone },
+      clock: { ...this.clock },
+      social: this.social.serialize(),
+      storyFlags: [...this.story.flags],
       inventory: this.inventory.serialize(),
       progression: this.progression.serialize(),
       skills: this.skills.serialize(),
@@ -1049,6 +1226,8 @@ export class Game {
       objBearing: op && this.settings.markers ? Math.atan2(op.x - h.pos.x, op.z - h.pos.z) : null,
       camYaw: this.camYaw,
       rings: h.powers.rings, flight: h.powers.flight, flying: h.flying,
+      umbra: h.powers.umbra, abyss: h.abyss, form: h.form, magnet: h.powers.magnet, holding: this.magnet.holding,
+      stormCd: this.magnet.stormCd, stormMax: STORM.cooldown,
     });
     // Marqueur d'objectif
     if (op && this.settings.markers && !this.menus.isOpen) {
@@ -1066,6 +1245,7 @@ export class Game {
       }
     }
     this.hud.enemyBars(bars);
+    this.hud.clock(this.story.showClock?.() ? this.clockLabel() : '');
     const b = this.boss;
     this.hud.boss(b && b.alive && b.state !== 'intro' && !this.menus.isOpen ? { name: b.name, hp: b.hp / b.def.hp, stage: b.stage, exposed: b.exposed } : null);
     const lt = this.lockTarget;

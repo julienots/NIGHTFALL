@@ -15,8 +15,8 @@ const LANES = [
   { id: 'W', base: [0, -3.4], dir: [-1, 0], axis: 'EW' },
 ];
 const STOP_S = -14.2; // ligne d'arrêt avant le passage piéton
-const S_MIN = -84;
-const S_MAX = 84;
+const S_MIN = -204;
+const S_MAX = 204;
 const CYCLE = [
   ['NS', 'green', 9], ['NS', 'yellow', 2.2], ['ALL', 'red', 1.2],
   ['EW', 'green', 9], ['EW', 'yellow', 2.2], ['ALL', 'red', 1.2],
@@ -79,41 +79,6 @@ export function buildStreet({ root, col, rand, quality, car, box, M, barrierMat,
       // Bonhomme vert quand l'autre axe roule
       h.ped.material.color.set(lights.powerOff ? '#222' : st === 'red' ? '#30ff70' : '#ff3040');
     }
-  }
-
-  // ---------- Tunnels sous les voies rapides (sorties des avenues) ----------
-  const tunnelMat = new THREE.MeshBasicMaterial({ color: '#07040f' });
-  const stripMat = new THREE.MeshBasicMaterial({ color: '#ffd27a' });
-  for (const [sx, sz, along] of [[0, -78, true], [0, 78, true], [-78, 0, false], [78, 0, false]]) {
-    const sgn = Math.sign(sx + sz);
-    const g = new THREE.Group();
-    // Piliers, tablier du pont, garde-corps
-    for (const k of [-1, 1]) {
-      const p = new THREE.Mesh(new THREE.BoxGeometry(1.4, 7, 6), concreteMat);
-      p.position.set(k * 8.9, 3.5, 0);
-      g.add(p);
-    }
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(20, 2.2, 6.4), concreteMat);
-    deck.position.set(0, 8, 0);
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(20, 0.9, 0.2), barrierMat);
-    rail.position.set(0, 9.55, -3.1 * sgn);
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 1.3), new THREE.MeshBasicMaterial({ map: signTexture('VOIE RAPIDE  A7', '#ffffff', '#2f7de1') }));
-    sign.position.set(0, 8, -3.25 * sgn);
-    sign.rotation.y = sgn > 0 ? Math.PI : 0;
-    const inside = new THREE.Mesh(new THREE.BoxGeometry(16.4, 6.9, 8), tunnelMat);
-    inside.position.set(0, 3.45, 4 * sgn);
-    g.add(deck, rail, sign, inside);
-    for (let i = 0; i < 4; i++) {
-      const s = new THREE.Mesh(new THREE.BoxGeometry(14, 0.12, 0.25), stripMat);
-      s.position.set(0, 6.6, (0.8 + i * 1.8) * sgn);
-      g.add(s);
-    }
-    g.position.set(sx, 0, sz);
-    if (!along) g.rotation.y = Math.PI / 2;
-    root.add(g);
-    // Collision : on ne s'enfonce pas dans le tunnel (et piliers)
-    if (along) col.addBox({ x: -8.2, y: 0, z: sz + (sgn > 0 ? 0.5 : -8) }, { x: 8.2, y: 7, z: sz + (sgn > 0 ? 8 : -0.5) });
-    else col.addBox({ x: sx + (sgn > 0 ? 0.5 : -8), y: 0, z: -8.2 }, { x: sx + (sgn > 0 ? 8 : -0.5), y: 7, z: 8.2 });
   }
 
   // ---------- Mobilier urbain ----------
@@ -307,13 +272,12 @@ export function buildStreet({ root, col, rand, quality, car, box, M, barrierMat,
     const l = c.lane;
     c.g.position.set(l.base[0] + l.dir[0] * c.s, 0, l.base[1] + l.dir[1] * c.s);
     c.g.rotation.y = Math.atan2(l.dir[0], l.dir[1]);
-    // Invisible dans les tunnels
-    c.g.visible = Math.abs(c.s) < 80;
+    c.g.visible = true;
   }
   if (quality !== 'low' || true) {
     for (const lane of LANES) {
-      const n = quality === 'low' ? 2 : 3;
-      for (let i = 0; i < n; i++) spawnCar(lane, S_MIN + 10 + i * (150 / n) + rand() * 10);
+      const n = quality === 'low' ? 4 : 7;
+      for (let i = 0; i < n; i++) spawnCar(lane, S_MIN + 10 + i * (390 / n) + rand() * 12);
     }
   }
 
@@ -410,6 +374,8 @@ export function buildStreet({ root, col, rand, quality, car, box, M, barrierMat,
     lights,
     lightState,
     busStop: { x: 16, z: 9.6 },
+    // Arrêt « Lycée » (fixé par Game après la construction des quartiers).
+    schoolStop: null,
     setTraffic(on) {
       traffic.on = on;
       lights.powerOff = !on;
@@ -417,11 +383,11 @@ export function buildStreet({ root, col, rand, quality, car, box, M, barrierMat,
       for (const c of cars) if (c.v < 0.05 || !c.g.visible) park(c);
     },
     // Fait venir le bus jusqu'à l'abribus ; onDepart quand il repart.
-    callBus({ waitFor, onDepart, wait = 5 } = {}) {
+    callBus({ waitFor, onDepart, wait = 5, stopX = 16 } = {}) {
       if (traffic.bus) return traffic.bus;
       const lane = LANES[2];
-      const bus = spawnCar(lane, S_MIN, { bus: true });
-      bus.busStopS = 16;
+      const bus = spawnCar(lane, Math.max(S_MIN, stopX - 70), { bus: true });
+      bus.busStopS = stopX;
       bus.busWait = wait;
       bus.waitFor = waitFor;
       bus.onDepart = onDepart;

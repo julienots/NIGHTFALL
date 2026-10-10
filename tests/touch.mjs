@@ -23,6 +23,23 @@ await p.touchscreen.tap(400, 200);
 await p.tap('#btn-new');
 await p.waitForFunction(() => window.__nightfall?.running, null, { timeout: 120000 });
 await p.evaluate(() => window.__nightfall.stopLoop());
+// Le jeu commence en classe : on vérifie qu'un toucher sur la bulle fait avancer
+// le dialogue, puis on termine l'introduction et on sort sur le parvis.
+await p.evaluate(() => { const g = window.__nightfall; g.story.skip(); g.simulate(0.2); });
+const line0 = await p.evaluate(() => document.querySelector('.dl-text').textContent);
+const bub = await p.evaluate(() => { const r = document.querySelector('.dialog').getBoundingClientRect(); return { x: r.x + 30, y: r.y + 20 }; });
+await p.touchscreen.tap(bub.x, bub.y);
+const line1 = await p.evaluate(() => document.querySelector('.dl-text').textContent);
+check('toucher la bulle fait avancer le dialogue', line0 && line1 !== line0, `${line0.slice(0, 30)}… → ${line1.slice(0, 30)}…`);
+await p.evaluate(() => {
+  const g = window.__nightfall;
+  for (let i = 0; i < 80 && g.social.active; i++) { if (g.hud.dl?.choices) g.hud.choose(0); else g.social.next(); }
+  g.story.skip();
+  g.simulate(0.5);
+  const d = g.world.targets.school_door;
+  g.enterZone('city', { x: d.x, y: 0.15, z: d.z - 6, yaw: Math.PI });
+  g.simulate(0.3);
+});
 const st = await p.evaluate(() => ({ touch: !!window.__nightfall.touch, q: window.__nightfall.settings.quality, ui: !!document.querySelector('.touch-ui') }));
 check('commandes tactiles actives', st.touch && st.ui, JSON.stringify(st));
 check('qualité basse par défaut sur mobile', st.q === 'low');
@@ -57,13 +74,22 @@ await ptr('pointerdown', jb.x, jb.y, 13);
 await p.evaluate(() => window.__nightfall.simulate(0.3));
 check('bouton saut', (await p.evaluate(() => window.__nightfall.hero.pos.y)) > 1);
 // Avec les pouvoirs : boutons visibles, vol au bouton
-await p.evaluate(() => { const g = window.__nightfall; g.hero.setPowers({ rings: true, flight: true }); g.simulate(1); g.touch.update({ rings: true, flight: true }); });
-const vis = await p.evaluate(() => ['.b-light', '.b-power', '.b-shield', '.b-fly'].every((s) => getComputedStyle(document.querySelector(s)).display !== 'none'));
+await p.evaluate(() => { const g = window.__nightfall; g.hero.setPowers({ rings: true, flight: true, magnet: true, umbra: true }); g.simulate(1); g.touch.update({ rings: true, flight: true, magnet: true, umbra: true }); });
+const vis = await p.evaluate(() => ['.b-light', '.b-power', '.b-shield', '.b-fly', '.b-magnet', '.b-umbra'].every((s) => getComputedStyle(document.querySelector(s)).display !== 'none'));
 check('boutons de pouvoirs affichés', vis);
 const fb = await p.evaluate(() => { const r = document.querySelector('.b-fly').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
 await ptr('pointerdown', fb.x, fb.y, 14);
 await p.evaluate(() => window.__nightfall.simulate(0.8));
 check('bouton vol', await p.evaluate(() => window.__nightfall.hero.flying));
+// Bouton Abysse : transformation au toucher (jauge pleine, au sol)
+await p.evaluate(() => { const g = window.__nightfall; g.hero.flying = false; g.hero.placeAt({ ...g.hero.pos, y: 0.15 }, 0); g.hero.abyss = 100; g.simulate(0.5); });
+const ub = await p.evaluate(() => { const r = document.querySelector('.b-umbra').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+await ptr('pointerdown', ub.x, ub.y, 15);
+await p.evaluate(() => window.__nightfall.simulate(1.4));
+check('bouton Forme Abysse', (await p.evaluate(() => window.__nightfall.hero.form)) === 'umbra');
+await p.evaluate(() => { window.__nightfall.renderOnce(); window.__nightfall.touch.update({ rings: true, umbra: true, canTransform: true }); });
+await p.screenshot({ path: `${out}/touch_abysse.png` });
+await p.evaluate(() => { const g = window.__nightfall; g.hero.abyss = 0.1; g.simulate(1.2); });
 await p.evaluate(() => { window.__nightfall.renderOnce(); window.__nightfall.touch.update({ rings: true, flight: true, flying: true }); });
 await p.screenshot({ path: `${out}/touch_vol.png` });
 check('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));

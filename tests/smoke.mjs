@@ -70,29 +70,76 @@ const place = (x, y, z, yaw = 0) => G(([x, y, z, yaw]) => {
 
 console.log('draw calls monde fusionné :', await G(() => window.__nightfall.world.drawCalls));
 
-// ================= PROLOGUE =================
+// Fait défiler une conversation : choix n° pick (ou le premier), répliques avancées.
+const talkThrough = (pick = 0, max = 60) => G(([pick, max]) => {
+  const g = window.__nightfall;
+  let n = 0;
+  for (; n < max && g.social.active; n++) {
+    if (g.hud.dl?.choices) g.hud.choose(Math.min(pick, g.hud.dl.choices.length - 1));
+    else g.social.next();
+    g.simulate(0.05);
+  }
+  return n;
+}, [pick, max]);
+const near = (pos, dx = 1.2, dz = 0) => place(pos.x + dx, pos.y ?? 0.15, pos.z + dz, Math.atan2(-dx, -dz));
+const promptText = () => page.evaluate(() => document.querySelector('.prompt').textContent);
+
+// ================= PROLOGUE : COURS DE PHYSIQUE =================
 await sim(1);
-await shot('01_lycee');
 const pro = await G(() => {
   const g = window.__nightfall;
-  return { st: g.story.stage(), rings: g.hero.powers.rings, enemies: g.enemies.length, night: g.night, npcs: g.story.npcs.length, crates: g.crates.some((c) => c.root.visible) };
+  return { st: g.story.stage(), zone: g.zone, sit: g.hero.pose, cine: g.story.inCinematic, rings: g.hero.powers.rings, enemies: g.enemies.length, students: g.story.students.length, teacher: !!g.story.teacher };
 });
-check('prologue : ado sans pouvoirs au lycée', pro.st === 'prologue' && !pro.rings && pro.night === 0, JSON.stringify(pro));
-check('prologue : aucune créature, passants présents', pro.enemies === 0 && pro.npcs >= 5);
-check('prologue : caisses cachées', !pro.crates);
+check('prologue : Noa assis en cours de physique, au lycée', pro.st === 'prologue' && pro.zone === 'school' && pro.sit === 'sit' && pro.cine && !pro.rings, JSON.stringify(pro));
+check('prologue : classe remplie (élèves + professeur), aucune créature', pro.students >= 5 && pro.teacher && pro.enemies === 0);
+await shot('01_cours_physique');
+await sim(6);
+check('dialogue du professeur (boîte de dialogue)', await G(() => window.__nightfall.social.active && document.querySelector('.dialog.on') !== null));
+await shot('02_dialogue_delcourt');
+const aff0 = await G(() => window.__nightfall.social.aff.camille);
+const nLines = await talkThrough(1);
+const aff1 = await G(() => window.__nightfall.social.aff.camille);
+check('choix de dialogue : affinité de Camille modifiée', aff1 > aff0, `${aff0} → ${aff1} (${nLines} répliques)`);
+await sim(2.2);
+await shot('03_fragment');
+await sim(10);
+const cls = await G(() => ({ step: window.__nightfall.missions.state.p01_after_school.step, sit: window.__nightfall.hero.pose, cine: window.__nightfall.story.inCinematic }));
+check('le fragment « pique » Noa, fin du cours', cls.step === 1 && !cls.sit && !cls.cine, JSON.stringify(cls));
+
+// Malik dans le couloir
+const mk = await G(() => ({ ...window.__nightfall.social.friends.malik.pos }));
+await near(mk, 1.3);
+await sim(0.2);
+check('Malik est là pour discuter', (await promptText()).includes('Malik'));
+await press('interact', 0.1);
+await talkThrough(1);
+check('scène avec Malik → étape suivante', (await G(() => window.__nightfall.missions.state.p01_after_school.step)) === 2);
+await shot('04_couloir');
+const lk = await G(() => ({ ...window.__nightfall.interiors.zones.school.locker }));
+await near(lk, 0.6, 0.6);
+await sim(0.2);
+await press('interact', 0.2);
+check('casier 117', (await G(() => window.__nightfall.missions.state.p01_after_school.step)) === 3);
+const ex = await G(() => ({ ...window.__nightfall.interiors.zones.school.exit }));
+await near(ex, 0.8, 0.8);
+await sim(0.2);
+await press('interact', 0.1);
+await sim(1.2);
+const outside = await G(() => ({ zone: window.__nightfall.zone, phase: window.__nightfall.clock.phase, x: window.__nightfall.hero.pos.x }));
+check('sortie du lycée : retour en ville, fin d’après-midi', outside.zone === 'city' && outside.phase === 'evening' && outside.x > 76, JSON.stringify(outside));
+await sim(4);
+await shot('05_parvis_lycee');
 
 const p0 = await G(() => ({ ...window.__nightfall.hero.pos }));
 await hold(['up'], 1.5);
 const p1 = await G(() => ({ ...window.__nightfall.hero.pos }));
 check('déplacement', Math.hypot(p1.x - p0.x, p1.z - p0.z) > 6, `${Math.hypot(p1.x - p0.x, p1.z - p0.z).toFixed(1)} m`);
-// Directions : « droite » doit déplacer Noa vers la droite de l'écran (projection caméra).
 for (const [act, sign] of [['right', 1], ['left', -1]]) {
   const r = await G(([act]) => {
     const g = window.__nightfall;
     g.simulate(0.5);
     g.renderOnce();
     g.camera.updateMatrixWorld();
-    // Axe « droite » réel de la caméra (1re colonne de sa matrice monde).
     const camRight = g.hero.pos.clone().setFromMatrixColumn(g.camera.matrixWorld, 0).setY(0).normalize();
     const before = g.hero.pos.clone();
     g.input.down.add(act); g.simulate(0.4); g.input.down.delete(act);
@@ -118,33 +165,41 @@ check('feux tricolores qui cyclent', city0.lights.length >= 3, city0.lights.join
 check('circulation en mouvement', city0.moving >= 3, `${city0.moving}/${city0.cars} voitures roulent`);
 const stopTest = await G(() => {
   const g = window.__nightfall; const st = g.world.street;
-  const c = st.cars.filter((x) => x.lane.id === 'S' && x.s > -70 && x.s < -35 && !x.bus).sort((a, b) => b.s - a.s)[0] || st.cars.find((x) => x.lane.id === 'S');
+  const c = st.cars.filter((x) => x.lane.id === 'S' && !x.bus).sort((a, b) => b.s - a.s)[0];
   c.s = -50; c.v = 10;
-  // Noa se plante au milieu de la voie, devant la voiture.
   const hx = c.lane.base[0], hz = c.lane.base[1] + c.lane.dir[1] * (-50 + 10);
+  for (const o of st.cars) if (o !== c && o.lane === c.lane && o.s > -60 && o.s < -30) o.s = 150;
   g.hero.placeAt({ x: hx, y: 0, z: hz }, 0);
   g.simulate(3);
   const gap = (hz - (c.lane.base[1] + c.lane.dir[1] * c.s)) * c.lane.dir[1];
   return { v: c.v, gap };
 });
 check('une voiture s’arrête devant Noa', stopTest.v < 0.3 && stopTest.gap > 2, JSON.stringify(stopTest));
-await place(25, 0.15, 37.5, Math.PI);
 
-// Parler à Inès
-const ines = await G(() => ({ ...window.__nightfall.story.ines.pos }));
-await place(ines.x + 1.6, 0.15, ines.z, -Math.PI / 2);
+// Monde ouvert : quartiers, limites
+const ow = await G(() => {
+  const g = window.__nightfall;
+  return { districts: g.districts.districts.length, names: g.districts.districts.map((d) => d.name).join(','), cars: g.magnet.props.length, targets: ['school_door', 'home_door', 'park_cafe', 'park_pond', 'aegis_tower'].every((k) => !!g.world.targets[k]) };
+});
+check('monde ouvert : quartiers construits', ow.districts >= 6 && ow.targets, JSON.stringify(ow));
+const edge = await G(() => { const g = window.__nightfall; g.hero.placeAt({ x: 0, y: 0.15, z: 230 }, 0); g.camYaw = 0; g.input.down.add('up'); g.input.down.add('sprint'); g.simulate(12); g.input.down.clear(); return g.hero.pos.z; });
+check('limite de la carte infranchissable', edge < 299, `z=${edge.toFixed(1)}`);
+
+// Inès devant le lycée
+const inesP = await G(() => ({ ...window.__nightfall.social.friends.ines.pos }));
+await near(inesP, 1.4);
 await sim(0.2);
-const prompt1 = await page.evaluate(() => document.querySelector('.prompt').textContent);
-check('Inès est interactive', prompt1.includes('Inès'), prompt1.trim());
+check('Inès est interactive', (await promptText()).includes('Inès'));
 await press('interact', 0.1);
-await sim(4);
-await shot('02_ines');
-await sim(34);
-await shot('03_message_maman');
+await sim(0.5);
+await shot('06_ines');
+await talkThrough(1);
 const s1 = await G(() => window.__nightfall.missions.state.p01_after_school.step);
-check('dialogue Inès terminé', s1 === 1);
-await sim(30);
-const busT = await G(() => ({ ines: window.__nightfall.story.ines.mode, bus: !!window.__nightfall.world.street.traffic.bus }));
+check('dialogue Inès terminé', s1 === 4);
+await sim(12);
+await shot('07_message_maman');
+await sim(40);
+const busT = await G(() => ({ ines: window.__nightfall.social.friends.ines.mode, bus: !!window.__nightfall.world.street.traffic.bus }));
 check('Inès prend le bus 12', busT.ines === 'gone', JSON.stringify(busT));
 
 // Place Halden -> le Nightfall
@@ -236,14 +291,51 @@ const blockTest = await G(() => {
   return { parry, block };
 });
 check('parade et blocage', blockTest.parry === 'parried' && blockTest.block === 'blocked', JSON.stringify(blockTest));
-check('vol débloqué', await G(() => window.__nightfall.hero.powers.flight));
+check('vol pas encore débloqué', !(await G(() => window.__nightfall.hero.powers.flight)));
+
+// ================= ANNEAUX & MAGNÉTISME =================
+const ringGap = await G(() => {
+  const g = window.__nightfall; const h = g.hero;
+  h.placeAt({ x: 30, y: 0.15, z: -30 }, 0); g.camYaw = 0;
+  h.rings.set('idle'); g.simulate(0.6);
+  g.input.down.add('up'); g.input.down.add('sprint');
+  let worst = 0;
+  for (let i = 0; i < 50; i++) {
+    g.simulate(1 / 60);
+    const el = h.model.joints.elR; el.updateWorldMatrix(true, false);
+    const o = el.position.clone().setFromMatrixPosition(el.matrixWorld);
+    for (const r of h.rings.rings.filter((r) => r.side === 'R')) worst = Math.max(worst, r.pos.distanceTo(o));
+  }
+  g.input.down.clear();
+  return worst;
+});
+check('anneaux collés à l’avant-bras pendant la course', ringGap < 0.35, `écart max ${ringGap.toFixed(2)} m`);
+const mg = await G(() => {
+  const g = window.__nightfall; const h = g.hero;
+  const p = g.magnet.props.filter((p) => p.kind === 'car' && p.state === 'rest').sort((a, b) => a.pos.distanceTo(h.pos) - b.pos.distanceTo(h.pos))[0];
+  h.placeAt({ x: p.pos.x + 7, y: 0.15, z: p.pos.z }, -Math.PI / 2); g.camYaw = -Math.PI / 2; h.energy = 100;
+  const foe = g.spawnEnemy({ type: 'stalker', x: p.pos.x - 6, z: p.pos.z, group: 'magtest', patrol: [[p.pos.x - 6, p.pos.z]] });
+  foe.stagger(10);
+  const hp0 = foe.hp;
+  const from = p.pos.clone();
+  g.input.pressed.add('magnet'); g.simulate(1.0);
+  const held = g.magnet.holding; const y = p.pos.y;
+  g.renderOnce();
+  g.input.pressed.add('magnet'); g.simulate(3);
+  return { held, y, moved: p.pos.distanceTo(from), state: p.state, step: g.missions.state.p03_rings.step, dmg: hp0 - foe.hp };
+});
+check('magnétisme : une voiture arrachée du sol lévite', mg.held && mg.y > 2.5, JSON.stringify(mg));
+check('magnétisme : lancée sur la créature, elle la blesse et retombe', mg.dmg > 20 && mg.moved > 5 && mg.state === 'rest');
+check('tutoriel : lancer magnétique validé, vol débloqué', mg.step === 4 && (await G(() => window.__nightfall.hero.powers.flight)));
+await G(() => { const g = window.__nightfall; for (const e of g.enemies) if (e.spawn.group === 'magtest') { g.scene.remove(e.model.root); e.alive = false; e.deadT = 99; } });
+await place(36, 0.15, -46, 0);
 
 // ================= VOL =================
 await sim(0.5);
 await press('fly', 0.6);
 const f1 = await G(() => ({ flying: window.__nightfall.hero.flying, y: window.__nightfall.hero.pos.y, step: window.__nightfall.missions.state.p03_rings.step }));
 check('décollage', f1.flying && f1.y > 2, JSON.stringify(f1));
-check('événement vol du tutoriel', f1.step === 4);
+check('événement vol du tutoriel', f1.step === 5);
 await hold(['jump'], 1.5);
 await shot('11_vol_stationnaire');
 const yUp = await G(() => window.__nightfall.hero.pos.y);
@@ -311,6 +403,22 @@ heroHits = await G(() => window.__hits);
 const m = await G(() => window.__nightfall.missions.state.m01_first_contact);
 check('parking nettoyé', m.step === 1, `étape=${m.step}`);
 console.log('   coups encaissés :', heroHits);
+const storm = await G(() => {
+  const g = window.__nightfall; const h = g.hero;
+  h.placeAt({ x: 28, y: 6, z: -33 }, 0); h.flying = true; h.grounded = false; h.energy = 100; g.magnet.stormCd = 0;
+  const foe = g.spawnEnemy({ type: 'brute', x: 28, z: -40, group: 'stormtest', patrol: [[28, -40]] });
+  const hp0 = foe.hp;
+  g.input.pressed.add('magnet'); g.simulate(0.8);
+  const lifted = g.magnet.props.filter((p) => p.state === 'storm').length;
+  g.renderOnce();
+  g.simulate(4);
+  const left = g.magnet.props.filter((p) => p.state !== 'rest').length;
+  foe.alive && g.scene.remove(foe.model.root); foe.alive = false; foe.deadT = 99;
+  h.flying = false;
+  return { lifted, left, dmg: hp0 - foe.hp };
+});
+check('tempête de métal (en vol) : objets soulevés puis projetés', storm.lifted >= 3 && storm.left === 0 && storm.dmg > 0, JSON.stringify(storm));
+await sim(1);
 
 // Caisse Aegis + document sur le père
 await place(37.5, 0.15, -52.4, Math.PI);
@@ -440,6 +548,142 @@ await press('interact', 0.05);
 check('fin du chapitre 1', await G(() => window.__nightfall.missions.isDone('m03_colossus')));
 check('butin de boss (Noyau du Vide)', await G(() => window.__nightfall.inventory.owns('void_phalanx')));
 
+// ================= L'OMBRE (symbiote) =================
+await sim(24);
+const oz = await G(() => ({ m04: window.__nightfall.missions.state.m04_umbra?.status, ooze: !!window.__nightfall.story.ooze }));
+check('« L’Ombre » : la flaque noire attend sur la place', oz.m04 === 'active' && oz.ooze, JSON.stringify(oz));
+const opos = await G(() => ({ ...window.__nightfall.world.targets.abyss_ooze }));
+await near(opos, 1.8);
+await sim(0.2);
+await press('interact', 0.1);
+await sim(4);
+await shot('24_ombre_bondit');
+await sim(14);
+const bond = await G(() => ({ umbra: window.__nightfall.hero.powers.umbra, abyss: window.__nightfall.hero.abyss, step: window.__nightfall.missions.state.m04_umbra.step }));
+check('l’Ombre se lie à Noa (jauge pleine)', bond.umbra && bond.abyss >= 99 && bond.step === 1, JSON.stringify(bond));
+await press('transform', 0.2);
+await sim(1.4);
+const tf = await G(() => { const h = window.__nightfall.hero; return { form: h.form, um: h.umbraModel.root.visible, hu: h.model.root.visible, rings: h.rings.mode, step: window.__nightfall.missions.state.m04_umbra.step }; });
+check('transformation en Forme Abysse', tf.form === 'umbra' && tf.um && !tf.hu && tf.rings === 'hidden' && tf.step === 2, JSON.stringify(tf));
+await shot('25_forme_abysse');
+const pulled = await G(() => {
+  const g = window.__nightfall; const h = g.hero;
+  const e = g.enemies.filter((x) => x.alive && x.spawn.group === 'umbra_test').sort((a, b) => a.pos.distanceTo(h.pos) - b.pos.distanceTo(h.pos))[0];
+  e.pos.set(h.pos.x + 8, e.pos.y, h.pos.z); e.vel.set(0, 0, 0); e.stagger(3);
+  h.yaw = Math.PI / 2; g.camYaw = Math.PI / 2; g.lockTarget = e;
+  const d0 = e.pos.distanceTo(h.pos);
+  g.input.pressed.add('heavy'); g.simulate(1.0);
+  g.lockTarget = null;
+  return { d0, d1: e.pos.distanceTo(h.pos) };
+});
+check('tentacules : la créature est attirée vers Noa', pulled.d1 < pulled.d0 - 2, JSON.stringify(pulled));
+check('créatures de test vaincues en Forme Abysse', await fightGroup('umbra_test', 500, '26_combat_abysse'));
+const rv = await G(() => { const g = window.__nightfall; g.hero.abyss = 0.3; g.simulate(1.2); return g.hero.form; });
+check('jauge vide : retour à la forme humaine', rv === 'human');
+check('étape : rentrer à la maison', (await G(() => window.__nightfall.missions.state.m04_umbra.step)) === 3);
+const hd = await G(() => ({ ...window.__nightfall.world.targets.home_door }));
+await place(hd.x, 0.15, hd.z - 1, 0);
+await sim(0.5);
+check('« L’Ombre » terminée', await G(() => window.__nightfall.missions.isDone('m04_umbra')));
+await sim(8);
+const morning = await G(() => ({ zone: window.__nightfall.zone, day: window.__nightfall.clock.day, phase: window.__nightfall.clock.phase, d01: window.__nightfall.missions.state.d01_double_life?.status, night: window.__nightfall.night, enemies: window.__nightfall.enemies.filter((e) => e.alive).length }));
+check('le lendemain : réveil chez soi, jour 2, matin', morning.zone === 'home' && morning.day === 2 && morning.phase === 'morning' && morning.d01 === 'active', JSON.stringify(morning));
+check('le jour : ciel de jour, aucune créature', morning.night === -1 && morning.enemies === 0);
+await sim(10);
+await shot('27_chambre');
+
+// ================= CHAPITRE 2 : DOUBLE VIE =================
+const hx = await G(() => ({ ...window.__nightfall.interiors.zones.home.exit }));
+await near(hx, 0.8, 0.8);
+await sim(0.2);
+await press('interact', 0.1);
+await sim(1.2);
+check('sortie de la maison', (await G(() => window.__nightfall.zone)) === 'city');
+await G(() => { const g = window.__nightfall; g.camYaw = Math.PI; g.camPitch = 0.2; });
+await sim(1);
+await shot('28_matin_tilleuls');
+const sd = await G(() => ({ ...window.__nightfall.world.targets.school_door }));
+await place(sd.x, 0.15, sd.z - 1.2, 0);
+await sim(0.2);
+check('porte du lycée interactive', (await promptText()).includes('lycée'));
+await press('interact', 0.1);
+await sim(1.2);
+const insch = await G(() => ({ zone: window.__nightfall.zone, step: window.__nightfall.missions.state.d01_double_life.step, students: window.__nightfall.story.students.length }));
+check('au lycée : élèves présents, étape validée', insch.zone === 'school' && insch.step === 1 && insch.students >= 5, JSON.stringify(insch));
+await shot('29_hall_lycee');
+const ip = await G(() => ({ ...window.__nightfall.social.friends.ines.pos }));
+await near(ip, 1.3);
+await sim(0.2);
+await press('interact', 0.1);
+const affI0 = await G(() => window.__nightfall.social.aff.ines);
+await talkThrough(2);
+check('Inès à la cafétéria (scène à choix)', (await G(() => window.__nightfall.missions.state.d01_double_life.step)) === 2 && (await G(() => window.__nightfall.social.aff.ines)) > affI0);
+const lessonPos = await G(() => window.__nightfall.story.interactables().find((i) => i.id === 'lesson')?.pos);
+check('place de cours proposée', !!lessonPos);
+await near(lessonPos, 0.5, 0.5);
+await sim(0.2);
+const xp0 = await G(() => window.__nightfall.progression.xp + window.__nightfall.progression.level * 10000);
+await press('interact', 0.1);
+await sim(0.5);
+check('en cours : Noa assis', (await G(() => window.__nightfall.hero.pose)) === 'sit');
+await shot('30_cours');
+await talkThrough(1);
+await sim(0.5);
+const les = await G(() => ({ step: window.__nightfall.missions.state.d01_double_life.step, phase: window.__nightfall.clock.phase, grades: window.__nightfall.social.grades.length, xp: window.__nightfall.progression.xp + window.__nightfall.progression.level * 10000 }));
+check('cours suivi : note, XP, après-midi', les.step === 3 && les.phase === 'afternoon' && les.grades === 1 && les.xp > xp0, JSON.stringify(les));
+const sx = await G(() => ({ ...window.__nightfall.interiors.zones.school.exit }));
+await near(sx, 0.8, 0.8);
+await sim(0.2);
+await press('interact', 0.1);
+await sim(1.2);
+const cp2 = await G(() => ({ ...window.__nightfall.social.friends.camille.pos, vis: window.__nightfall.social.friends.camille.model.root.visible }));
+await near(cp2, 1.3);
+await sim(0.3);
+check('Camille à l’étang du parc', (await promptText()).includes('Camille'), JSON.stringify(cp2));
+await press('interact', 0.1);
+await sim(0.3);
+await shot('31_camille_etang');
+await talkThrough(0);
+check('scène avec Camille', (await G(() => window.__nightfall.missions.state.d01_double_life.step)) === 4);
+await place(hd.x, 0.15, hd.z - 1.2, 0);
+await sim(0.2);
+await press('interact', 0.1);
+await sim(1.2);
+const bed = await G(() => ({ ...window.__nightfall.interiors.zones.home.bed }));
+await near(bed, 0.9, 0.9);
+await sim(0.2);
+check('lit : attendre la nuit', (await promptText()).includes('nuit'));
+await press('interact', 0.1);
+await sim(1.4);
+const nt = await G(() => ({ phase: window.__nightfall.clock.phase, d01: window.__nightfall.missions.isDone('d01_double_life'), n01: window.__nightfall.missions.state.n01_night_watch?.status, enemies: window.__nightfall.enemies.filter((e) => e.alive).length }));
+check('la nuit tombe : « Double vie » terminée, ronde de nuit, créatures dehors', nt.phase === 'night' && nt.d01 && nt.n01 === 'active' && nt.enemies >= 6, JSON.stringify(nt));
+
+// Cadeau, rendez-vous et couple
+await G(() => { const g = window.__nightfall; g.social.aff.ines = 58; g.inventory.add('gift_flowers', 1); g.setPhase('afternoon'); g.enterZone('city', { x: 0, y: 0.15, z: 20, yaw: 0 }); });
+const ic = await G(() => ({ ...window.__nightfall.social.friends.ines.pos }));
+await near(ic, 1.3);
+await sim(0.2);
+await press('interact', 0.1);
+await G(() => window.__nightfall.social.next()); // salutation → menu
+const opts = await G(() => window.__nightfall.hud.dl?.choices || []);
+check('menu d’amitié : cadeau et rendez-vous proposés', opts.some((o) => o.includes('cadeau')) && opts.some((o) => o.includes('rendez-vous')), opts.join(' | '));
+await G((i) => window.__nightfall.hud.choose(i), opts.findIndex((o) => o.includes('rendez-vous')));
+await sim(0.2);
+await sim(1.3);
+check('rendez-vous au café du parc', await G(() => window.__nightfall.social.active));
+await shot('32_rendez_vous');
+await talkThrough(0);
+await sim(0.2);
+await talkThrough(0);
+const love = await G(() => ({ p: window.__nightfall.social.partner, m: window.__nightfall.social.xpMult }));
+check('déclaration : en couple avec Inès (+10 % XP)', love.p === 'ines' && love.m === 1.1, JSON.stringify(love));
+await press('relations', 0.1);
+await page.waitForTimeout(200);
+check('menu Relations', await page.isVisible('.menu.relations.on'));
+await shot('33_relations');
+await press('relations', 0.1);
+await G(() => { const g = window.__nightfall; g.menus.hide(); });
+
 // ================= SAUVEGARDE / RECHARGEMENT =================
 await sim(0.5);
 await G(() => window.__nightfall.save('test', true));
@@ -449,7 +693,8 @@ await startGame('#btn-continue');
 const re = await G(() => ({ s: window.__nightfall.serialize(), powers: window.__nightfall.hero.powers, night: window.__nightfall.night, parking: window.__nightfall.enemies.filter((e) => e.spawn.group === 'parking').length }));
 check('rechargement : missions', JSON.stringify(re.s.missions) === JSON.stringify(saved.missions));
 check('rechargement : inventaire', JSON.stringify(re.s.inventory) === JSON.stringify(saved.inventory));
-check('rechargement : pouvoirs et nuit restaurés', re.powers.rings && re.powers.flight && re.night === 1);
+check('rechargement : relations, couple et horloge', JSON.stringify(re.s.social) === JSON.stringify(saved.social) && JSON.stringify(re.s.clock) === JSON.stringify(saved.clock), JSON.stringify(re.s.clock));
+check('rechargement : pouvoirs restaurés', re.powers.rings && re.powers.flight && re.powers.magnet && re.powers.umbra);
 check('rechargement : groupe vaincu absent', re.parking === 0);
 
 await G(() => { const g = window.__nightfall; g.hero.takeDamage(9999, g.hero.pos.clone().add({ x: 1, y: 0, z: 0 })); });

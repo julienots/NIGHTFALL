@@ -24,6 +24,33 @@ export class CollisionWorld {
     return box;
   }
 
+  // Retire une boîte de la grille (objets déplaçables).
+  removeBox(box) {
+    for (let gx = Math.floor(box.min.x / CELL); gx <= Math.floor(box.max.x / CELL); gx++) {
+      for (let gz = Math.floor(box.min.z / CELL); gz <= Math.floor(box.max.z / CELL); gz++) {
+        const cell = this.grid.get(gx + ',' + gz);
+        if (!cell) continue;
+        const i = cell.indexOf(box);
+        if (i >= 0) cell.splice(i, 1);
+      }
+    }
+  }
+
+  // Déplace une boîte existante (même identité) vers de nouvelles bornes.
+  moveBox(box, min, max) {
+    this.removeBox(box);
+    Object.assign(box.min, min);
+    Object.assign(box.max, max);
+    for (let gx = Math.floor(min.x / CELL); gx <= Math.floor(max.x / CELL); gx++) {
+      for (let gz = Math.floor(min.z / CELL); gz <= Math.floor(max.z / CELL); gz++) {
+        const k = gx + ',' + gz;
+        if (!this.grid.has(k)) this.grid.set(k, []);
+        this.grid.get(k).push(box);
+      }
+    }
+    return box;
+  }
+
   // Boîte centrée (pratique pour les décors).
   addCentered(x, y, z, sx, sy, sz, tag) {
     return this.addBox({ x: x - sx / 2, y, z: z - sz / 2 }, { x: x + sx / 2, y: y + sy, z: z + sz / 2 }, tag);

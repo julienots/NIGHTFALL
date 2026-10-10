@@ -6,6 +6,7 @@ import { INVENTORY_CAPACITY } from '../systems/inventory.js';
 import { BRANCHES, SKILLS, RESPEC_COST } from '../data/skills.js';
 import { SHOP, SHOP_SECTIONS } from '../data/shop.js';
 import { buy, canBuy } from '../systems/shop.js';
+import { CHARACTERS, GIFTS } from '../data/characters.js';
 
 const STAT_LABEL = {
   damage: 'Dégâts', defense: 'Défense', maxHp: 'Santé max', maxEnergy: 'Énergie max', energyGain: 'Énergie / coup', powerDamage: 'Bonus pouvoirs',
@@ -29,7 +30,7 @@ export class Menus {
     this.sel = null;
     this.el = {};
     this.shopSection = 'featured';
-    for (const name of ['inventory', 'journal', 'pause', 'reward', 'death', 'skills', 'shop']) {
+    for (const name of ['inventory', 'journal', 'pause', 'reward', 'death', 'skills', 'shop', 'relations']) {
       const d = document.createElement('div');
       d.className = `menu ${name === 'inventory' ? 'inv' : name}`;
       document.body.appendChild(d);
@@ -66,13 +67,14 @@ export class Menus {
 
   toggle(name, opts) {
     if (this.open === name) this.hide();
-    else if (!this.open || ['inventory', 'journal', 'skills'].includes(this.open)) this.show(name, opts);
+    else if (!this.open || ['inventory', 'journal', 'skills', 'relations'].includes(this.open)) this.show(name, opts);
   }
 
   render() {
     const r = {
       inventory: () => this.#inventory(), journal: () => this.#journal(), pause: () => this.#pause(),
       reward: () => this.#reward(), death: () => this.#death(), skills: () => this.#skills(), shop: () => this.#shop(),
+      relations: () => this.#relations(),
     }[this.open];
     r?.();
   }
@@ -189,6 +191,34 @@ export class Menus {
   }
 
   // ---------- Journal ----------
+  // ---------- Relations ----------
+  #relations() {
+    const g = this.game;
+    const so = g.social;
+    const cards = Object.entries(CHARACTERS).map(([id, c]) => {
+      const met = so.friends[id] || so.seen.size && [...so.seen].some((k) => k.startsWith(id)) || (so.aff[id] || 0) > 0;
+      const aff = so.aff[id] || 0;
+      const lvl = so.level(id);
+      const likes = GIFTS.filter((k) => (c.likes[k] || 0) >= 15).map((k) => ITEMS[k].name);
+      const known = aff >= 30 ? likes.join(', ') || '—' : '<i>Deviens plus proche pour le découvrir</i>';
+      const heart = c.romance ? (so.partner === id ? '<span class="rel-tag love">En couple ❤</span>' : '<span class="rel-tag">Romance possible</span>') : '<span class="rel-tag">Ami</span>';
+      const today = so.talkedDay[id] === g.clock.day ? 'Déjà parlé aujourd’hui' : 'Disponible aujourd’hui';
+      return `<div class="rel-card" style="--rc:${c.color}">
+        <div class="rel-top"><div class="rel-name">${met ? c.name : '???'}</div>${heart}</div>
+        <div class="rel-lvl">${lvl}</div>
+        <div class="rel-bar"><i style="width:${aff}%"></i></div>
+        <p>${c.desc}</p>
+        <div class="rel-meta">Cadeau préféré : ${known}<br>${today}${c.romance && aff >= 50 && !so.partner ? '<br><b>Tu peux lui proposer un rendez-vous ❤</b>' : ''}</div>
+      </div>`;
+    }).join('');
+    const grades = so.grades.slice(-6).map((gr) => `<li>Jour ${gr.day} · ${gr.subject} : <b>${gr.score}/3</b></li>`).join('') || '<li>Aucun cours suivi pour l’instant.</li>';
+    const partner = so.partner ? `<p class="rel-bonus">❤ En couple avec <b>${CHARACTERS[so.partner].name}</b> — bonus permanent : +10 % d’expérience.</p>` : '';
+    this.el.relations.innerHTML = `<div class="body"><div class="head"><h2>RELATIONS</h2><span class="rel-clock">${g.clockLabel()}</span><button class="btn" data-act="close">Fermer [L]</button></div>
+      ${partner}<div class="rel-grid">${cards}</div>
+      <div class="rel-grades"><h3>Bulletin</h3><ul>${grades}</ul>
+      <p class="rel-help">Parle à tes amis une fois par jour pour faire avancer vos histoires. Offre des cadeaux (boutique, section « Cadeaux »). À 50 d’affinité, propose un rendez-vous à Inès ou Camille.</p></div></div>`;
+  }
+
   #journal() {
     const log = this.game.missions;
     const rows = Object.entries(MISSIONS).map(([id, def]) => {

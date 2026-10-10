@@ -29,7 +29,8 @@ export class Npc {
     this.talk = def.talk || null;
     const palette = def.palette ? PALETTES[def.palette] : randomPalette(def.seed ?? Math.floor(Math.random() * 1e6));
     this.model = new HeroModel(palette, { backpack: !!palette.bag, rim: '#ffd9a8' });
-    this.pos = new THREE.Vector3(def.x, 0.15, def.z);
+    this.pos = new THREE.Vector3(def.x, def.y ?? 0.15, def.z);
+    this.pose = def.pose || null; // pose permanente (assis…)
     this.yaw = def.yaw ?? 0;
     this.route = (def.route || []).map(([x, z]) => new THREE.Vector3(x, 0, z));
     this.ri = 0;
@@ -133,7 +134,7 @@ export class Npc {
       while (d < -Math.PI) d += Math.PI * 2;
       this.yaw += d * (1 - Math.exp(-6 * dt));
     }
-    this.pos.y = col.groundHeight(this.pos.x, this.pos.z, this.radius, this.pos.y);
+    if (this.pose !== 'sit') this.pos.y = col.groundHeight(this.pos.x, this.pos.z, this.radius, this.pos.y);
     this.phase += (moving / (1.3 + 1.4 * Math.min(1.6, moving / 5.8))) * Math.PI * 2 * dt;
     if (this.anim) {
       this.animT += dt;
@@ -149,7 +150,7 @@ export class Npc {
     }
     this.model.animate({
       dt, speed: moving / 5.8 * 1.6, phase: this.phase, airborne: false, vy: 0,
-      anim: this.anim, animP: this.anim ? Math.min(1, this.animT / this.animDur) : 0,
+      anim: this.anim || this.pose, animP: this.anim ? Math.min(1, this.animT / this.animDur) : 0.5,
     });
     this.model.root.position.copy(this.pos);
     this.model.root.rotation.y = this.yaw;

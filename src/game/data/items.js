@@ -17,6 +17,7 @@ export const CATEGORIES = {
   weapon: 'Noyaux',
   armor: 'Protections',
   cosmetic: 'Tenues',
+  gift: 'Cadeaux',
   resource: 'Ressources',
 };
 
@@ -76,6 +77,12 @@ export const ITEMS = {
     name: 'Sweat Abyssal', category: 'cosmetic', slot: 'skin', rarity: 'legendary',
     visual: { hoodie: '#3a1a6a', hoodie2: '#7b4ad6' }, desc: 'Tissé de fibres qui absorbent la lumière de la faille.',
   },
+  // --- Cadeaux (à offrir aux amis : chacun a ses préférences) ---
+  gift_flowers: { name: 'Bouquet de fleurs', category: 'gift', rarity: 'uncommon', stackable: true, desc: 'Des tulipes du marché Nova. Un classique qui marche (presque) toujours.' },
+  gift_choco: { name: 'Boîte de chocolats', category: 'gift', rarity: 'common', stackable: true, desc: 'Praliné, caramel, noisette. Personne ne résiste.' },
+  gift_comic: { name: 'BD « Les Gardiens de Vesper »', category: 'gift', rarity: 'rare', stackable: true, desc: 'Édition collector. Des héros masqués, ça te parle ?' },
+  gift_starmap: { name: 'Carte du ciel phosphorescente', category: 'gift', rarity: 'rare', stackable: true, desc: 'Toutes les constellations visibles depuis Vesper. Brille dans le noir.' },
+  gift_game: { name: 'Jeu « Neon Racers 3 »', category: 'gift', rarity: 'epic', stackable: true, desc: 'Le jeu de course que tout le lycée attend.' },
   // --- Ressources ---
   scrap: {
     name: 'Ferraille', category: 'resource', rarity: 'common', stackable: true,

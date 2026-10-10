@@ -53,6 +53,8 @@ export class RingSystem {
     scene.add(this.arcs);
     this.targets = [];
     this.placed = false;
+    this.lastHero = new THREE.Vector3();
+    this.lastYaw = 0;
   }
 
   setColor(hex) {
@@ -96,6 +98,18 @@ export class RingSystem {
     this.arcs.visible = !hidden;
     if (hidden) return;
     const hero = this.hero;
+    // Les anneaux suivent le corps : on reporte d'abord le déplacement et la
+    // rotation du héros depuis l'image précédente (sinon ils traînent derrière
+    // les bras quand on court ou qu'on tourne).
+    const dYaw = hero.yaw - this.lastYaw;
+    for (const r of this.rings) {
+      if (this.mode === 'volley' || this.mode === 'awaken') continue;
+      r.pos.sub(this.lastHero).applyAxisAngle(_up, dYaw).add(hero.pos);
+      _q.setFromAxisAngle(_up, dYaw);
+      r.quat.premultiply(_q);
+    }
+    this.lastHero.copy(hero.pos);
+    this.lastYaw = hero.yaw;
     const arms = { R: this.#forearm('R'), L: this.#forearm('L') };
     const fwd = new THREE.Vector3(Math.sin(hero.yaw), 0, Math.cos(hero.yaw));
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
@@ -219,12 +233,14 @@ export class RingSystem {
         }
       }
 
-      // Lissage position/orientation/échelle
-      const k = 1 - Math.exp(-rate * dt);
+      // Lissage position/orientation/échelle. Une fois posés sur l'avant-bras,
+      // les anneaux y sont verrouillés (aucun retard pendant la course).
+      const attached = (this.mode === 'idle' || (this.mode === 'punch' && r.side !== (this.opts.side || 'R'))) && this.modeT > 0.3;
+      const k = attached ? 1 : 1 - Math.exp(-rate * dt);
       r.pos.lerp(pos, k);
       _q.setFromUnitVectors(_z, normal.normalize());
       _q.multiply(new THREE.Quaternion().setFromAxisAngle(_z, r.spin));
-      r.quat.slerp(_q, Math.min(1, k * 1.4));
+      r.quat.slerp(_q, attached ? 1 : Math.min(1, k * 1.4));
       r.scale += (scale - r.scale) * k;
       r.g.position.copy(r.pos);
       r.g.quaternion.copy(r.quat);

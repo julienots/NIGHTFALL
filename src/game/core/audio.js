@@ -392,4 +392,92 @@ export class AudioEngine {
     if (!this.ctx) return;
     this.#tone({ type: 'square', f0: 180, dur: 0.12, peak: 0.08 });
   }
+  // ---------- Magnétisme ----------
+  // Grincement métallique quand un objet est arraché du sol.
+  magnetGrab(pos) {
+    if (!this.ctx) return;
+    const dest = this.#spatial(pos, 50);
+    this.#tone({ type: 'sawtooth', f0: 70, f1: 140, dur: 0.6, peak: 0.25, attack: 0.05, dest });
+    this.#burst({ type: 'bandpass', f0: 900, f1: 2400, q: 6, dur: 0.5, peak: 0.25, dest });
+    this.#tone({ type: 'triangle', f0: 440, f1: 880, dur: 0.4, peak: 0.06, delay: 0.1 });
+  }
+
+  // Bourdonnement pendant la lévitation (appelé chaque image : 0 = arrêt).
+  magnetHum(level) {
+    if (!this.ctx) return;
+    if (!this.humO) {
+      this.humO = this.ctx.createOscillator();
+      this.humO.type = 'sawtooth';
+      this.humO.frequency.value = 55;
+      const f = this.ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 400;
+      this.humG = this.ctx.createGain();
+      this.humG.gain.value = 0;
+      this.humO.connect(f).connect(this.humG).connect(this.sfx);
+      this.humO.start();
+    }
+    const t = this.ctx.currentTime;
+    this.humG.gain.setTargetAtTime(level * 0.12, t, 0.1);
+    this.humO.frequency.setTargetAtTime(55 + level * 25, t, 0.2);
+  }
+
+  magnetThrow() {
+    if (!this.ctx) return;
+    this.#burst({ type: 'lowpass', f0: 2600, f1: 300, dur: 0.45, peak: 0.45 });
+    this.#tone({ f0: 220, f1: 60, dur: 0.4, peak: 0.3 });
+  }
+
+  // Impact lourd d'un objet métallique (voiture qui retombe).
+  crash(pos) {
+    if (!this.ctx) return;
+    const dest = this.#spatial(pos, 70);
+    this.#tone({ f0: 80, f1: 28, dur: 0.7, peak: 0.8, dest });
+    this.#burst({ type: 'bandpass', f0: 2200, f1: 600, q: 2, dur: 0.6, peak: 0.6, dest });
+    this.#burst({ type: 'highpass', f0: 5000, dur: 0.35, peak: 0.3, dest, delay: 0.05 });
+  }
+
+  // ---------- Forme Abysse ----------
+  transform() {
+    if (!this.ctx) return;
+    this.#burst({ type: 'lowpass', f0: 180, f1: 900, dur: 1.2, peak: 0.6, attack: 0.3 });
+    this.#tone({ type: 'sawtooth', f0: 45, f1: 90, dur: 1.4, peak: 0.35, attack: 0.4 });
+    this.#tone({ type: 'square', f0: 110, f1: 55, dur: 0.6, peak: 0.15, delay: 1.0 });
+  }
+
+  roar(pos) {
+    if (!this.ctx) return;
+    const dest = this.#spatial(pos, 60);
+    this.#tone({ type: 'sawtooth', f0: 95, f1: 60, dur: 1.0, peak: 0.5, attack: 0.05, dest });
+    this.#burst({ type: 'bandpass', f0: 420, f1: 260, q: 1.5, dur: 1.0, peak: 0.7, dest });
+  }
+
+  revert() {
+    if (!this.ctx) return;
+    this.#burst({ type: 'lowpass', f0: 900, f1: 150, dur: 0.8, peak: 0.35 });
+  }
+
+  // ---------- Vie quotidienne ----------
+  schoolBell() {
+    if (!this.ctx) return;
+    for (let i = 0; i < 6; i++) this.#tone({ type: 'triangle', f0: i % 2 ? 1046 : 880, dur: 0.22, peak: 0.07, delay: i * 0.25 });
+  }
+
+  door() {
+    if (!this.ctx) return;
+    this.#burst({ type: 'bandpass', f0: 500, f1: 300, q: 2, dur: 0.25, peak: 0.25 });
+    this.#tone({ type: 'square', f0: 140, f1: 90, dur: 0.1, peak: 0.06, delay: 0.2 });
+  }
+
+  // Petit « bip » de dialogue (choix, bulle).
+  blip(pitch = 1) {
+    if (!this.ctx) return;
+    this.#tone({ type: 'triangle', f0: 660 * pitch, f1: 880 * pitch, dur: 0.06, peak: 0.05 });
+  }
+
+  // Jingle doux (relation qui progresse, rendez-vous réussi).
+  heart() {
+    if (!this.ctx) return;
+    [523, 659, 784, 1046].forEach((f, i) => this.#tone({ type: 'sine', f0: f, dur: 0.5, peak: 0.08, attack: 0.02, delay: i * 0.12 }));
+  }
 }
