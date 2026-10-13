@@ -839,9 +839,12 @@ export class Game {
     const f = new THREE.Vector3(Math.sin(this.camYaw), 0, Math.cos(this.camYaw));
     const right = new THREE.Vector3(-f.z, 0, f.x);
     const fs = hero.flying ? Math.hypot(hero.vel.x, hero.vel.z) : 0;
-    const targetDist = hero.flying ? 6 + fs / 12 : this.lockTarget ? 5.6 : this.inCombat ? 5.0 : 4.4;
+    // Forme Abysse : le monstre est bien plus grand, la caméra recule et monte.
+    const big = hero.form === 'umbra' ? 1 : 0;
+    this.camBig = (this.camBig || 0) + (big - (this.camBig || 0)) * (1 - Math.exp(-2.5 * (dt || 0.016)));
+    const targetDist = (hero.flying ? 6 + fs / 12 : this.lockTarget ? 5.6 : this.inCombat ? 5.0 : 4.4) + this.camBig * 2.4;
     this.camDist += (targetDist - this.camDist) * (1 - Math.exp(-3 * (dt || 0.016)));
-    const pivot = hero.pos.clone().add(new THREE.Vector3(0, 1.6, 0)).addScaledVector(right, 0.55);
+    const pivot = hero.pos.clone().add(new THREE.Vector3(0, 1.6 + this.camBig * 0.9, 0)).addScaledVector(right, 0.55 + this.camBig * 0.3);
     const dir = new THREE.Vector3(
       -f.x * Math.cos(this.camPitch),
       Math.sin(this.camPitch),

@@ -107,7 +107,7 @@ const gr = await G(() => {
   const h = g.hero;
   h.abyss = 100;
   g.input.pressed.add('transform');
-  g.simulate(1.6);
+  g.simulate(2.4);
   for (let i = 0; i < 8; i++) {
     h.placeAt({ x: 0, y: 0.15, z: 20 }, 0);
     g.simulate(0.2);

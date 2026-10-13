@@ -103,7 +103,7 @@ check('bouton vol', await p.evaluate(() => window.__nightfall.hero.flying));
 await p.evaluate(() => { const g = window.__nightfall; g.hero.flying = false; g.hero.placeAt({ ...g.hero.pos, y: 0.15 }, 0); g.hero.abyss = 100; g.simulate(0.5); });
 const ub = await p.evaluate(() => { const r = document.querySelector('.b-umbra').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
 await ptr('pointerdown', ub.x, ub.y, 15);
-await p.evaluate(() => window.__nightfall.simulate(1.4));
+await p.evaluate(() => window.__nightfall.simulate(2.4));
 check('bouton Forme Abysse', (await p.evaluate(() => window.__nightfall.hero.form)) === 'umbra');
 await p.evaluate(() => { window.__nightfall.renderOnce(); window.__nightfall.touch.update({ rings: true, umbra: true, canTransform: true }); });
 await p.screenshot({ path: `${out}/touch_abysse.png` });

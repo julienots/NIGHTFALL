@@ -196,6 +196,17 @@ export const ATTACK_ANIMS = {
     { p: 0.8, pose: { spine: [-0.45, 0, 0], head: [-0.6, 0, 0], shR: [-0.6, 0, -1.4], elR: [-0.3, 0, 0], shL: [-0.6, 0, 1.4], elL: [-0.3, 0, 0], hipR: [-0.3, 0, 0.2], hipL: [-0.3, 0, -0.2], knR: [0.4, 0, 0], knL: [0.4, 0, 0], drop: [0, -0.2, 0] } },
     { p: 1, pose: { spine: [0.25, 0, 0], shR: [-0.8, 0, -0.5], elR: [-1.0, 0, 0], shL: [-0.8, 0, 0.5], elL: [-1.0, 0, 0], drop: [0, -0.15, 0] } },
   ],
+  // Infection : la substance gagne le corps — main sur la poitrine, Noa se plie,
+  // se débat, puis se cambre, bras écartés, avant de gonfler.
+  infect: [
+    { p: 0, pose: {} },
+    { p: 0.12, pose: { spine: [0.25, 0, 0], head: [0.3, 0, 0], shR: [-1.3, -0.6, 0.4], elR: [-1.9, 0, 0], shL: [-0.3, 0, 0.3], elL: [-0.6, 0, 0], drop: [0, -0.05, 0] } },
+    { p: 0.3, pose: { spine: [0.75, 0.2, 0.1], head: [0.4, 0.2, 0], shR: [-1.4, -0.6, 0.5], elR: [-2.1, 0, 0], shL: [-1.0, 0.3, -0.2], elL: [-1.7, 0, 0], hipR: [-0.6, 0, 0], knR: [1.0, 0, 0], hipL: [-0.4, 0, 0], knL: [0.9, 0, 0], drop: [0, -0.3, 0] } },
+    { p: 0.45, pose: { spine: [0.55, -0.3, -0.15], head: [0.1, -0.4, 0], shR: [-0.6, 0, -1.0], elR: [-0.4, 0, 0], shL: [-1.6, 0.4, 0.2], elL: [-1.9, 0, 0], hipR: [-0.5, 0, 0], knR: [0.9, 0, 0], hipL: [-0.7, 0, 0], knL: [1.2, 0, 0], drop: [0, -0.32, 0] } },
+    { p: 0.62, pose: { spine: [0.8, 0.25, 0.15], head: [0.6, 0.3, 0], shR: [-1.2, -0.4, 0.3], elR: [-2.2, 0, 0], shL: [-1.2, 0.4, -0.3], elL: [-2.2, 0, 0], hipR: [-0.9, 0, 0], knR: [1.5, 0, 0], hipL: [-0.9, 0, 0], knL: [1.5, 0, 0], drop: [0, -0.45, 0] } },
+    { p: 0.82, pose: { spine: [-0.55, 0, 0], head: [-0.75, 0, 0], shR: [-0.3, 0, -1.55], elR: [-0.15, 0, 0], shL: [-0.3, 0, 1.55], elL: [-0.15, 0, 0], hipR: [-0.2, 0, 0.15], knR: [0.3, 0, 0], hipL: [-0.2, 0, -0.15], knL: [0.3, 0, 0], drop: [0, -0.08, 0] } },
+    { p: 1, pose: { spine: [0.6, 0, 0], head: [0.2, 0, 0], shR: [-0.7, 0, -0.9], elR: [-1.2, 0, 0], shL: [-0.7, 0, 0.9], elL: [-1.2, 0, 0], hipR: [-0.8, 0, 0], knR: [1.2, 0, 0], hipL: [-0.8, 0, 0], knL: [1.2, 0, 0], drop: [0, -0.35, 0] } },
+  ],
   // Transformation : recroquevillé, puis explose vers l'extérieur.
   transform: [
     { p: 0, pose: {} },
@@ -272,6 +283,54 @@ export class HeroModel {
     });
     // Fusion des pièces fixes de chaque articulation (≈ 3x moins d'appels de dessin).
     bakeJoints(this.root, new Set([this.phone, this.mouth, this.ponytail, this.bagFlap, ...(this.brows || [])].filter(Boolean)));
+  }
+
+  // Infection par la substance de l'Abysse : un shader recouvre peu à peu le
+  // corps de noir brillant à partir d'un point (la poitrine), avec un front de
+  // veines cyan qui avance. setCorruption(0..1).
+  enableCorruption() {
+    if (this.corr) return;
+    this.corr = { k: { value: 0 }, origin: { value: new THREE.Vector3() }, t: { value: 0 } };
+    const U = this.corr;
+    for (const m of new Set(Object.values(this.mats))) {
+      if (m === this.mats.phone || m === this.mats.vein) continue;
+      const prev = m.onBeforeCompile;
+      m.onBeforeCompile = (shader, r) => {
+        prev?.call(m, shader, r);
+        shader.uniforms.uCorr = U.k;
+        shader.uniforms.uCorrO = U.origin;
+        shader.uniforms.uCorrT = U.t;
+        shader.vertexShader = shader.vertexShader
+          .replace('void main() {', 'varying vec3 vCorrW;\nvoid main() {')
+          .replace('#include <project_vertex>', '#include <project_vertex>\nvCorrW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+        shader.fragmentShader = shader.fragmentShader
+          .replace('void main() {', 'varying vec3 vCorrW; uniform float uCorr; uniform vec3 uCorrO; uniform float uCorrT;\nvoid main() {')
+          .replace(
+            '#include <opaque_fragment>',
+            `float cN = sin(vCorrW.x * 23.0 + uCorrT * 3.0) * sin(vCorrW.y * 17.0 - uCorrT * 2.3) * sin(vCorrW.z * 21.0 + uCorrT) * 0.16
+                      + sin(vCorrW.y * 47.0 + vCorrW.x * 31.0) * 0.05;
+             float cFront = uCorr * 1.9 - distance(vCorrW, uCorrO) + cN;
+             float cCov = smoothstep(0.0, 0.05, cFront);
+             float cEdge = smoothstep(-0.02, 0.03, cFront) * (1.0 - smoothstep(0.03, 0.16, cFront));
+             float cFr = pow(1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0), 3.0);
+             // Noir liquide : reflet spéculaire net + liseré violet sur les bords.
+             float cSp = pow(max(dot(normalize(normal), normalize(vec3(0.3, 0.8, 0.5))), 0.0), 24.0);
+             vec3 cGoo = vec3(0.02, 0.016, 0.035) + vec3(0.7, 0.75, 0.9) * cSp * 0.6 + vec3(0.32, 0.2, 0.75) * cFr * 0.7;
+             outgoingLight = mix(outgoingLight, cGoo, cCov) + vec3(0.37, 0.89, 1.0) * cEdge * 2.4 * step(0.001, uCorr);
+             #include <opaque_fragment>`,
+          );
+      };
+      m.customProgramCacheKey = () => 'rim-corr';
+      m.needsUpdate = true;
+    }
+  }
+
+  setCorruption(k, t = 0) {
+    if (!this.corr) return;
+    this.corr.k.value = k;
+    this.corr.t.value = t;
+    this.joints.spine.getWorldPosition(this.corr.origin.value);
+    this.corr.origin.value.y += 0.35 * this.root.scale.y;
   }
 
   // Remplace les matériaux unis par un matériau commun à couleurs de sommets.
@@ -571,7 +630,29 @@ export class HeroModel {
       }
       this.tendrils.push({ chain, a, seed: Math.random() * 6 });
     }
-    this.root.scale.setScalar(1.22);
+    // Masse musculaire : trapèzes, pectoraux, dorsaux, épaules, avant-bras, mollets.
+    const S = M.skin;
+    this.#mesh(blob(0.2, 0.09, 0.12), S, spine, 0, 0.5, -0.06);
+    for (const sx of [-1, 1]) {
+      this.#mesh(blob(0.13, 0.09, 0.07), S, spine, sx * 0.1, 0.38, 0.13, 0.2, sx * 0.3, 0);
+      this.#mesh(blob(0.12, 0.17, 0.08), S, spine, sx * 0.14, 0.3, -0.12, 0, 0, sx * 0.2);
+      for (let i = 0; i < 3; i++) this.#mesh(blob(0.045, 0.035, 0.03), M.hoodie2, spine, sx * 0.05, 0.2 - i * 0.075, 0.17);
+      const sh = this.joints['sh' + (sx < 0 ? 'R' : 'L')];
+      this.#mesh(blob(0.13, 0.12, 0.12), S, sh, sx * 0.02, 0.01, 0);
+      this.#mesh(blob(0.085, 0.1, 0.085), S, sh, 0, -0.14, 0.03);
+      const el = this.joints['el' + (sx < 0 ? 'R' : 'L')];
+      this.#mesh(blob(0.09, 0.11, 0.085), S, el, 0, -0.07, 0.01);
+      const kn = this.joints['kn' + (sx < 0 ? 'R' : 'L')];
+      this.#mesh(blob(0.085, 0.12, 0.08), S, kn, 0, -0.1, -0.03);
+      // Pointes dorsales le long de la colonne
+    }
+    for (let i = 0; i < 5; i++) {
+      const m = this.#mesh(lock(0.09 + (i % 2) * 0.03, 0.025, 0.4), M.hoodie2, spine, 0, 0.5 - i * 0.1, -0.2);
+      m.quaternion.setFromUnitVectors(Y, new THREE.Vector3(0, 0.5, -1).normalize());
+    }
+    // Un monstre : bien plus grand que Noa.
+    this.baseScale = 1.72;
+    this.root.scale.setScalar(this.baseScale);
   }
 
   setPhone(on) {
@@ -789,6 +870,24 @@ export class HeroModel {
       set('drop', 0, -0.5 * d);
     }
 
+    // Monstre : voûté, épaules en avant, bras écartés, tête en avant.
+    if (this.umbra && !s.dead) {
+      const add = (k, x, y = 0, z = 0) => {
+        const v = pose[k] || [0, 0, 0];
+        pose[k] = [v[0] + x, v[1] + y, v[2] + z];
+      };
+      add('spine', 0.28);
+      add('head', -0.22);
+      add('shR', 0, 0, -0.22);
+      add('shL', 0, 0, 0.22);
+      add('elR', -0.25);
+      add('elL', -0.25);
+      add('hipR', -0.15, 0, -0.06);
+      add('hipL', -0.15, 0, 0.06);
+      add('knR', 0.25);
+      add('knL', 0.25);
+      add('drop', 0, -0.06);
+    }
     const rate = s.anim || s.dodge || s.hurt > 0 || s.shield ? 26 : s.flight ? 8 : s.land > 0 ? 30 : 18;
     const k = 1 - Math.exp(-rate * dt);
     for (const name of ['spine', 'head', 'shR', 'elR', 'shL', 'elL', 'hipR', 'knR', 'anR', 'hipL', 'knL', 'anL', 'hips', 'drop']) {

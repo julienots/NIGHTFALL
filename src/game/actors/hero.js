@@ -32,6 +32,9 @@ export const UMBRA = {
   min: 50, // jauge minimale pour se transformer
 };
 
+// Durées de la transformation (s) : recouvrement, éclosion, croissance ; retour.
+const TF = { cover: 1.25, emerge: 1.6, grow: 0.75, shrink: 0.35, recede: 1.0 };
+
 const RADIUS = 0.4;
 const HEIGHT = 1.75;
 const GRAVITY = 25;
@@ -51,6 +54,7 @@ export class Hero {
     this.model = new HeroModel();
     // Seconde silhouette : la forme Abysse (même squelette, autre modèle).
     this.umbraModel = new HeroModel(PALETTES.umbra);
+    this.model.enableCorruption();
     this.umbraModel.root.visible = false;
     this.form = 'human';
     this.abyss = 0;
@@ -168,8 +172,11 @@ export class Hero {
     }
     if (this.flying) return;
     this.game.magnet?.drop();
-    this.action = { kind: 'transform', t: 0, dur: 1.1, swapped: false, lockMove: true };
+    // Transformation en trois temps : la substance recouvre Noa depuis la
+    // poitrine (INFECT), le corps enfle, puis le monstre surgit (EMERGE).
+    this.action = { kind: 'transform', t: 0, dur: TF.emerge + TF.grow, swapped: false, lockMove: true };
     this.shieldT = -1;
+    this.rings.set('hidden'); // les anneaux sont engloutis par la substance
     this.game.audio.transform();
     this.game.onTransform?.('start');
   }
@@ -193,11 +200,16 @@ export class Hero {
       this.grapple = null;
       this.#tendril(null);
     }
-    if (this.form !== 'umbra') return;
-    this.#swapModel(false);
+    if (this.form !== 'umbra' || this.action?.kind === 'revert') return;
     this.game.audio.revert();
-    if (!instant) this.action = { kind: 'anim', anim: 'scared', dur: 0.6, t: 0, lockMove: true };
-    this.game.onTransform?.('end');
+    if (instant) {
+      this.#swapModel(false);
+      this.model.setCorruption(0);
+      this.game.onTransform?.('end');
+      return;
+    }
+    // Le monstre se ratatine et fond ; la substance se retire du corps de Noa.
+    this.action = { kind: 'revert', t: 0, dur: TF.shrink + TF.recede, swapped: false, lockMove: true };
   }
 
   // ---------- Combat ----------
@@ -401,7 +413,7 @@ export class Hero {
       this.vy = 2;
       this.grounded = false;
     }
-    if (this.action?.kind !== 'power' && this.action?.kind !== 'transform' && !(this.form === 'umbra' && !heavy)) this.action = { kind: 'hurt', t: 0, dur: heavy ? 0.55 : 0.3 };
+    if (this.action?.kind !== 'power' && this.action?.kind !== 'transform' && this.action?.kind !== 'revert' && !(this.form === 'umbra' && !heavy)) this.action = { kind: 'hurt', t: 0, dur: heavy ? 0.55 : 0.3 };
     this.hurtT = 1;
     if (this.hp <= 0) this.#die();
     return true;
@@ -711,21 +723,50 @@ export class Hero {
           this.#beginFlight(true);
         }
       } else if (act.kind === 'transform') {
-        // La substance enveloppe Noa : bascule de silhouette à mi-animation.
-        if (!act.swapped && act.t >= act.dur * 0.45) {
-          act.swapped = true;
-          this.#swapModel(true);
-          this.game.onTransform?.('done');
+        const t = act.t;
+        const chest = this.pos.clone().add(new THREE.Vector3(0, 1.3, 0));
+        if (!act.swapped) {
+          // La substance gagne tout le corps, de la poitrine aux extrémités.
+          const k = Math.min(1, t / TF.cover);
+          this.model.setCorruption(k * k * (3 - 2 * k), t);
+          if (Math.random() < 0.6) this.game.fx.emit(chest, { count: 2, color: '#1d1530', speed: 2 + k * 3, size: 0.25 + k * 0.2, life: 0.5, gravity: -2 });
+          if (Math.random() < 0.25) this.game.fx.bolt(chest, chest.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.4, (Math.random() - 0.3) * 1.4, (Math.random() - 0.5) * 1.4)), '#5fe3ff', 4);
+          if (t > TF.cover * 0.5) this.game.shakeAmp = Math.max(this.game.shakeAmp || 0, 0.08 * k);
+          if (t >= TF.emerge) {
+            act.swapped = true;
+            this.#swapModel(true);
+            this.game.audio.roar?.(this.pos);
+            this.game.shake(0.8);
+            this.game.fx.ink(chest, 2.5);
+            this.game.fx.ring(this.pos, { color: '#1d1530', from: 0.5, to: 7, life: 0.6, opacity: 0.8, dark: true });
+            this.game.onTransform?.('done');
+          }
         }
-        if (act.t < act.dur * 0.45 && Math.random() < 0.7) this.game.fx.emit(this.pos.clone().add(new THREE.Vector3(0, 1, 0)), { count: 2, color: '#1d1530', speed: 2.5, size: 0.3, life: 0.5, gravity: -3 });
         if (act.t >= act.dur) this.action = null;
+      } else if (act.kind === 'revert') {
+        if (!act.swapped && act.t >= TF.shrink) {
+          act.swapped = true;
+          this.#swapModel(false);
+          this.game.fx.ink(this.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), 2);
+        }
+        if (act.swapped) {
+          const k = Math.min(1, (act.t - TF.shrink) / TF.recede);
+          this.model.setCorruption(1 - k, act.t);
+        }
+        if (act.t >= act.dur) {
+          this.action = null;
+          this.model.setCorruption(0);
+          this.game.onTransform?.('end');
+        }
       } else if (act.kind === 'hurt' || act.kind === 'anim') {
         if (act.t >= act.dur) this.action = null;
       }
     }
 
     // --- Mode des anneaux selon l'action ---
-    if (R && this.form === 'human') {
+    const morphing = this.action?.kind === 'transform' || (this.action?.kind === 'revert' && this.action.t < TF.shrink + TF.recede * 0.6);
+    if (morphing) this.rings.set('hidden');
+    else if (R && this.form === 'human') {
       const m = this.rings.mode;
       const transient = m === 'volley' || m === 'awaken' || m === 'ringShot' || m === 'whip' || m === 'punch';
       const done = (m === 'ringShot' && this.rings.modeT > 0.5) || ((m === 'whip' || m === 'punch') && !(this.action?.kind === 'attack'));
@@ -894,8 +935,17 @@ export class Hero {
       anim = 'superLanding';
       animP = 0.3;
     } else if (a?.kind === 'transform') {
-      anim = 'transform';
-      animP = Math.min(1, a.t / a.dur);
+      // Noa se débat pendant l'infection ; le monstre rugit en surgissant.
+      if (!a.swapped) {
+        anim = 'infect';
+        animP = Math.min(1, a.t / TF.emerge);
+      } else {
+        anim = 'roar';
+        animP = Math.min(1, (a.t - TF.emerge) / TF.grow);
+      }
+    } else if (a?.kind === 'revert') {
+      anim = a.swapped ? 'scared' : 'smash';
+      animP = a.swapped ? Math.min(1, (a.t - TF.shrink) / TF.recede) : 0.4;
     }
     // Objet en lévitation : bras levés (les jambes continuent de marcher).
     if (!anim && this.game.magnet?.holding) {
@@ -928,6 +978,21 @@ export class Hero {
       flight: this.flying ? { mode: this.flightMode, pitch: this.flyPitch, roll: this.flyRoll } : null,
     });
     model.root.position.copy(this.pos);
+    // Gonflement du corps avant l'éclosion, croissance élastique du monstre.
+    if (this.form === 'human') {
+      const sw = a?.kind === 'transform' && !a.swapped ? Math.max(0, (a.t - TF.cover * 0.85) / (TF.emerge - TF.cover * 0.85)) : a?.kind === 'revert' && a.swapped ? Math.max(0, 1 - (a.t - TF.shrink) / 0.4) * 0.6 : 0;
+      const tr = a?.kind === 'transform' && !a.swapped ? Math.sin(a.t * 60) * 0.012 * Math.min(1, a.t) : 0;
+      model.root.scale.set(1 + sw * 0.28, 1 + sw * 0.16, 1 + sw * 0.28);
+      model.root.position.x += tr;
+    } else {
+      const b = model.baseScale || 1;
+      let g = 1;
+      if (a?.kind === 'transform' && a.swapped) {
+        const k = Math.min(1, (a.t - TF.emerge) / TF.grow);
+        g = 0.62 + 0.38 * (1 - Math.cos(k * Math.PI * 1.5) * Math.exp(-k * 3.5)) + 0.0;
+      } else if (a?.kind === 'revert' && !a.swapped) g = 1 - 0.4 * (a.t / TF.shrink);
+      model.root.scale.setScalar(b * g);
+    }
     model.root.rotation.y = this.yaw;
     this.rings.update(dt, this.game.time, this.energy / this.stats.maxEnergy);
   }

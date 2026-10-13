@@ -72,7 +72,10 @@ ouvertes, sans histoire imposée.
   au-dessus de soi, le lancer sur une créature (dégâts de zone à l'impact). **En vol**, X
   déclenche la **tempête de métal** : jusqu'à 5 objets proches orbitent puis s'abattent.
 - **Vol** (V) : stationnaire, incliné, boost, roulis, piqué, atterrissage de super-héros.
-- **Forme Abysse** (T, jauge ≥ 50 %) : la substance recouvre Noa (silhouette plus massive,
+- **Forme Abysse** (T, jauge ≥ 50 %) — v1.6 : transformation progressive (la substance
+  part de la poitrine et recouvre tout le corps avec un front de veines cyan, Noa se débat,
+  enfle, puis un monstre de 1,7× sa taille surgit en rugissant ; au retour la substance se
+  retire). Monstre voûté et musclé. Avant : la substance recouvre Noa (silhouette plus massive,
   yeux cyan, gueule crénelée, tentacules dorsales). Griffes, frappe au sol, tentacules qui
   **attirent** les ennemis, rugissement de zone, bond géant, dégâts subis réduits de moitié,
   se soigne en frappant et se régénère. **Grappin de tentacule** (X / RT) : accroche une

@@ -570,7 +570,7 @@ await sim(14);
 const bond = await G(() => ({ umbra: window.__nightfall.hero.powers.umbra, abyss: window.__nightfall.hero.abyss, step: window.__nightfall.missions.state.m04_umbra.step }));
 check('l’Ombre se lie à Noa (jauge pleine)', bond.umbra && bond.abyss >= 99 && bond.step === 1, JSON.stringify(bond));
 await press('transform', 0.2);
-await sim(1.4);
+await sim(2.4); // infection (1,6 s) puis éclosion du monstre
 const tf = await G(() => { const h = window.__nightfall.hero; return { form: h.form, um: h.umbraModel.root.visible, hu: h.model.root.visible, rings: h.rings.mode, step: window.__nightfall.missions.state.m04_umbra.step }; });
 check('transformation en Forme Abysse', tf.form === 'umbra' && tf.um && !tf.hu && tf.rings === 'hidden' && tf.step === 2, JSON.stringify(tf));
 await shot('25_forme_abysse');
