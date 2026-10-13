@@ -2101,6 +2101,10 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
 
   return {
     districts,
+    // Portes de commerces et halls praticables (voir world/shops.js).
+    get shopDoors() {
+      return kits.flatMap((k) => k.shopDoors);
+    },
     targets,
     enemySpawns,
     crates,

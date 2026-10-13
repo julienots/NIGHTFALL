@@ -14,6 +14,7 @@ import { AudioEngine } from './core/audio.js';
 import { buildDowntown } from './world/downtown.js';
 import { buildDistricts } from './world/districts.js';
 import { buildInteriors } from './world/interiors.js';
+import { buildShops, shopKind } from './world/shops.js';
 import { mulberry32 } from './core/rng.js';
 import { Social } from './systems/social.js';
 import { Crate } from './world/crate.js';
@@ -146,6 +147,11 @@ export class Game {
     if (dist.targets.bus_school) this.world.street.schoolStop = dist.targets.bus_school;
     // Intérieurs (lycée, maison de Noa), loin de la ville, masqués par défaut.
     this.interiors = buildInteriors({ scene, col: this.col, quality: q });
+    // Commerces et halls visitables : cinq intérieurs partagés par toutes les portes.
+    Object.assign(this.interiors.zones, buildShops({ scene, col: this.col, quality: q }));
+    this.shopDoors = [...(this.world.shopDoors || []), ...(dist.shopDoors || [])]
+      .filter((d) => !this.col.query(d.x - 0.3, d.z - 0.3, d.x + 0.3, d.z + 0.3).some((b) => b.min.y < 1 && b.max.y > 1 && b.min.x < d.x + 0.3 && b.max.x > d.x - 0.3 && b.min.z < d.z + 0.3 && b.max.z > d.z - 0.3))
+      .map((d) => ({ ...d, kind: shopKind(d.name) }));
     this.zone = 'city';
     this.fx = new Effects(scene);
     this.audio = new AudioEngine(this.settings);
@@ -297,6 +303,12 @@ export class Game {
     this.scene.fog.density = 0.0032 + k * 0.0012 - day * 0.0012;
     this.scene.background.copy(c('#e8a0a8', '#1f2350', '#9cc8ff'));
     this.renderer.toneMappingExposure = 1.0 + day * 0.12 + k * 0.08;
+    // À l'intérieur, le plafond arrête le soleil : lumière extérieure atténuée.
+    if (this.zone && this.zone !== 'city') {
+      this.moon.intensity *= 0.35;
+      this.hemi.intensity = Math.min(this.hemi.intensity, 1.35);
+      this.renderer.toneMappingExposure = 1.0;
+    }
     this.audio.setRain?.(k > 0.5 && this.zone === 'city');
   }
 
@@ -413,6 +425,7 @@ export class Game {
     this.lockTarget = null;
     this.hero.rings.placed = false;
     if (this.hero.powers.rings && this.hero.form === 'human') this.hero.rings.set('idle');
+    if (this.night != null) this.setNight(this.night);
     this.story?.onZone?.(name, prev);
   }
 

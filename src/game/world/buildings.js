@@ -100,6 +100,7 @@ const SHOPS = [
   ['CAFÉ LUNE', '#ff9a3d', '#e86f6f'], ['PHARMACIE', '#6fcf97', '#2fa88a'], ['PIZZA NOVA', '#ff5d5d', '#ffd54f'],
   ['LAVERIE', '#7fe3ff', '#4f74c9'], ['BOULANGERIE', '#ffcd20', '#c98a4a'], ['LIBRAIRIE', '#c9a6ff', '#7b4ad6'],
   ['TABAC PRESSE', '#ff8a65', '#3a5ba8'], ['RAMEN 88', '#ff4f5e', '#2b2050'], ['FLEURS', '#f06292', '#66bb6a'],
+  ['ARCADE NEON', '#b06cff', '#2b2050'], ['MODE & CO', '#ff6fa8', '#3a2a5a'], ['SUPÉRETTE', '#2fa88a', '#1d6a5a'],
 ];
 
 const PALETTES = {
@@ -111,6 +112,7 @@ const PALETTES = {
 };
 
 export function createBuildingKit(root, col, rand, quality) {
+  const shopDoors = []; // portes de vitrines et halls praticables
   const low = quality === 'low';
   const M = {
     frameWhite: toon('#f4f0e8', { shared: false }),
@@ -261,6 +263,9 @@ export function createBuildingKit(root, col, rand, quality) {
       B.shopGlass.add(gx, gy, gz, f.yaw, w - 3.2, 2.5, 1, ['#ffe8b0', '#ffd0e0', '#d0f4ff', '#fff4c0'][i % 4]);
       const [dx, , dz] = at(f, u + w / 2 - 1.3, 1.15, 0.05);
       B.door.add(dx, 1.15, dz, f.yaw, 1, 1, 1, shop[2]);
+      // Porte praticable : point devant la porte, normale vers la rue.
+      const [ox, , oz] = at(f, u + w / 2 - 1.3, 0, 1.1);
+      shopDoors.push({ x: ox, z: oz, nx: f.n[0], nz: f.n[1], name: shop[0] });
       // Store banne rayé, incliné
       const [ax, , az] = at(f, u, 3.1, 0.62);
       B.awning.add(ax, 3.1, az, f.yaw, w - 0.6, 1, 1, shop[1], 0.32);
@@ -281,6 +286,8 @@ export function createBuildingKit(root, col, rand, quality) {
 
   function entrance(f, u, frameColor) {
     const [dx, , dz] = at(f, u, 1.3, 0.06);
+    const [ox, , oz] = at(f, u, 0, 1.3);
+    shopDoors.push({ x: ox, z: oz, nx: f.n[0], nz: f.n[1], name: 'HALL' });
     B.door.add(dx, 1.3, dz, f.yaw, 1.4, 1.13, 1, '#3a2a5a');
     const [cx, , cz] = at(f, u, 2.95, 0.7);
     B.awning.add(cx, 2.95, cz, f.yaw, 2.6, 1, 1.1, frameColor, 0.05);
@@ -510,6 +517,7 @@ export function createBuildingKit(root, col, rand, quality) {
 
   return {
     building,
+    shopDoors,
     glassEmissive,
     wallMats,
     finalize() {

@@ -435,7 +435,11 @@ export class Story {
   // ---------- Événements de zone / de phase ----------
   onZone(name, prev) {
     const g = this.game;
-    if (name === 'school') {
+    if (g.interiors.zones[name]?.shop) {
+      for (const n of this.students) n.dispose();
+      this.students = [];
+      this.#populateShop(g.interiors.zones[name]);
+    } else if (name === 'school') {
       this.#populateSchool();
       g.missionEvents(g.missions.handle({ type: 'event', id: 'enter_school' }));
     } else {
@@ -482,6 +486,20 @@ export class Story {
         out.push({ kind: 'story', id: 'school_enter', pos: T.school_door, label: open ? '<kbd>E</kbd>Entrer dans le <b>lycée Vesper-Nord</b>' : '<span style="color:#ff6a6a">Lycée fermé la nuit</span>' });
       }
       if (T.home_door && life) out.push({ kind: 'story', id: 'home_enter', pos: T.home_door, label: '<kbd>E</kbd>Rentrer à la maison' });
+      // Commerces et halls d'immeuble : la porte la plus proche.
+      if (st === 'free' && !this.chaser) {
+        const hp = g.hero.pos;
+        let best = null;
+        let bd = 3;
+        for (const d of g.shopDoors || []) {
+          const dd = Math.abs(d.x - hp.x) + Math.abs(d.z - hp.z);
+          if (dd < bd) {
+            bd = dd;
+            best = d;
+          }
+        }
+        if (best) out.push({ kind: 'story', id: 'shop_enter', door: best, pos: { x: best.x, y: 0.15, z: best.z }, label: `<kbd>E</kbd>Entrer — <b>${best.name === 'HALL' ? 'Hall d’immeuble' : best.name}</b>` });
+      }
     } else if (g.zone === 'school') {
       const S = Z.school;
       out.push({ kind: 'story', id: 'school_exit', pos: { ...S.exit, y: 0 }, label: '<kbd>E</kbd>Sortir du lycée' });
@@ -496,6 +514,10 @@ export class Story {
         const seat = this.#lessonSeat();
         out.push({ kind: 'story', id: 'lesson', pos: { x: seat.x, y: 0, z: seat.z }, label: `<kbd>E</kbd>S’asseoir — cours de <b>${this.social.lesson().subject}</b>` });
       }
+    } else if (Z[g.zone]?.shop) {
+      const S = Z[g.zone];
+      out.push({ kind: 'story', id: 'shop_exit', pos: { ...S.exit, y: 0 }, label: '<kbd>E</kbd>Sortir' });
+      for (const it of S.interact) out.push({ kind: 'story', id: it.id, pos: it.pos, label: it.label });
     } else if (g.zone === 'home') {
       const Hm = Z.home;
       out.push({ kind: 'story', id: 'home_exit', pos: { ...Hm.exit, y: 0 }, label: '<kbd>E</kbd>Sortir' });
@@ -540,6 +562,42 @@ export class Story {
         this.#say('Noa', 'Salut, papa. Pas aujourd’hui, les souvenirs.', 3);
         return g.missionEvents(g.missions.handle({ type: 'interact', target: 'locker' }));
       case 'lesson': return this.#lesson();
+      case 'shop_enter': {
+        const d = it.door;
+        g.shopReturn = d;
+        g.audio.door();
+        return g.transition(() => g.enterZone(d.kind), () => g.hud.toast(d.name === 'HALL' ? 'Hall d’immeuble' : d.name, '#ffcd20'));
+      }
+      case 'shop_exit': {
+        g.audio.door();
+        const d = g.shopReturn || { x: 0, z: 24, nx: 0, nz: 1 };
+        return g.transition(() => g.enterZone('city', { x: d.x + d.nx * 0.4, y: 0.15, z: d.z + d.nz * 0.4, yaw: Math.atan2(d.nx, d.nz) }));
+      }
+      case 'cafe_order': return this.#buy(15, () => {
+        g.hero.hp = g.hero.stats.maxHp;
+        g.hero.energy = g.hero.stats.maxEnergy;
+        g.hero.playAnim('interact', 0.8);
+        g.hud.toast('Chocolat chaud ☕ — santé et énergie au maximum', '#ffcd20');
+      });
+      case 'store_buy': return this.#buy(45, () => {
+        g.inventory.grant([{ kind: 'item', id: 'medkit', qty: 1 }]);
+        g.hud.toast('+1 kit de soins', '#6fcf97');
+      });
+      case 'boutique_shop':
+        g.menus.shopSection = 'skins';
+        return g.menus.show('shop');
+      case 'arcade_play': return this.#buy(10, () => {
+        const score = Math.round(1500 + Math.random() * 8500);
+        const xp = Math.round(score / 100);
+        g.hero.playAnim('interact', 1.2);
+        g.audio.levelUp?.();
+        g.hud.toast(`Neon Racers : ${score} points ! +${xp} XP`, '#b06cff');
+        g.grantXp(xp);
+      });
+      case 'lobby_rest':
+        g.hero.hp = g.hero.stats.maxHp;
+        g.hero.playAnim('interact', 0.8);
+        return g.hud.toast('Tu reprends ton souffle — santé restaurée', '#ffcd20');
       case 'cpe': return this.#cpeTalk();
       case 'bed': return this.#sleep();
       case 'fridge':
@@ -920,6 +978,36 @@ export class Story {
       { wait: 3, do: () => this.#say('Noa', 'Une journée normale. Je peux faire ça. … Je crois.', 3) },
     ]);
     this.#placeFriends();
+  }
+
+  // Achat en crédits : effet réel, refus si le porte-monnaie est trop léger.
+  #buy(price, effect) {
+    const g = this.game;
+    if (g.inventory.credits < price) {
+      g.audio.denied?.();
+      return g.hud.toast(`Pas assez de crédits (${price} requis)`, '#ff6a6a');
+    }
+    g.inventory.credits -= price;
+    effect();
+    g.save?.('shop');
+  }
+
+  // Personnel et clients dans un commerce (selon la qualité).
+  #populateShop(Z) {
+    const g = this.game;
+    const n = g.settings.quality === 'low' ? 3 : g.settings.quality === 'medium' ? 5 : 8;
+    let id = 0;
+    const mk = (p, extra = {}) => this.students.push(new Npc(g, { id: 'shop' + id, seed: 2000 + id++ * 37 + Z.kind.length * 101, x: p.x, y: 0, z: p.z, yaw: p.yaw ?? 0, ...extra }));
+    for (const p of Z.staff) mk(p);
+    const seats = [...Z.seats].sort(() => Math.random() - 0.5).slice(0, Math.ceil(n * 0.6));
+    for (const p of seats) mk(p, { pose: 'sit', chat: true });
+    for (const p of Z.stands.slice(0, n)) mk(p, { chat: true });
+    Z.walks.forEach((r, i) => {
+      for (let k = 0; k < (n > 4 ? 2 : 1); k++) {
+        const route = [...r.slice(k), ...r.slice(0, k)];
+        mk({ x: route[0][0], z: route[0][1] }, { route, wait: i + k * 2 });
+      }
+    });
   }
 
   #lesson() {

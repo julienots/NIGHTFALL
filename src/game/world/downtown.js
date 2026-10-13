@@ -858,7 +858,7 @@ export function buildDowntown(scene, col, quality) {
   const drawCalls = mergeStatic(root);
 
   return {
-    root, targets, enemySpawns, crates, magnetSpots, spawn, lampLights, nightHooks, rain,
+    root, targets, enemySpawns, crates, magnetSpots, spawn, lampLights, nightHooks, rain, shopDoors: kit.shopDoors,
     // Voiture détachée (objet soulevable) : construite à l'origine, sans collision.
     makeCar: (opts = {}) => car(0, 0, 0, { ...opts, dynamic: true, parent: opts.parent || scene }), schoolSpawn, street, setBarricades, toppleMonument, drawCalls, smokeSources, setNight, setPower,
     update(dt, t, cam, player) {
