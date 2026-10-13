@@ -20,7 +20,7 @@ const HINTS = {
   flight: `<span class="kbd">V</span>décoller / se poser · <span class="kbd">ZQSD</span>voler vers où tu regardes · <span class="kbd">Maj</span>boost<br>
     <span class="kbd">Espace</span>monter · <span class="kbd">Ctrl/C</span>descendre · <span class="kbd">Clic G</span>piqué · <span class="kbd">X</span> en vol : tempête de métal`,
   umbra: `<span class="kbd">T</span>Forme Abysse (jauge ≥ 50 %) · <span class="kbd">Clic G</span>griffes · <span class="kbd">Clic D</span>tentacules (attirent)<br>
-    <span class="kbd">F</span>rugissement · <span class="kbd">Espace</span>bond géant · la jauge se remplit en frappant`,
+    <span class="kbd">F</span>rugissement · <span class="kbd">Espace</span>bond géant · <span class="kbd">X</span>grappin (murs, toits) · régénération · la jauge se remplit en frappant`,
 };
 
 const DELCOURT = 'M. Delcourt';

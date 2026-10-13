@@ -560,7 +560,7 @@ export class Game {
     this.touch?.update({
       menu: menuOpen, cinematic: this.story.inCinematic || this.social.active || !!this.trans, choosing: !!this.hud.dl?.choices, rings: this.hero.powers.rings, flight: this.hero.powers.flight,
       flying: this.hero.flying, canInteract: this.nearInteract,
-      magnet: this.hero.powers.magnet && this.hero.form === 'human', holding: this.magnet.holding,
+      magnet: (this.hero.powers.magnet && this.hero.form === 'human') || this.hero.form === 'umbra', holding: this.magnet.holding,
       umbra: this.hero.powers.umbra, canTransform: this.hero.form === 'umbra' || this.hero.abyss >= 50,
     });
     this.#adaptResolution(realDt);

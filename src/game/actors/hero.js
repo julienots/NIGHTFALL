@@ -27,6 +27,8 @@ export const UMBRA = {
   heavy: { anim: 'lash', dur: 0.75, hit: 0.45, range: 11, arc: 1.1, mult: 1.6, knock: 9, poise: 60, lunge: 0, heavy: true, pull: true },
   power: { anim: 'roar', dur: 1.1, hit: 0.3, aoe: 7.5, centered: true, mult: 1.4, knock: 15, poise: 140, energy: 25, cooldown: 6, heavy: true, roar: true },
   drain: 4.2, // jauge perdue par seconde transformé
+  regen: 3, // santé régénérée par seconde transformé
+  grapple: 45, // portée du grappin de tentacule (m)
   min: 50, // jauge minimale pour se transformer
 };
 
@@ -187,6 +189,10 @@ export class Hero {
   }
 
   #revert(instant = false) {
+    if (this.grapple) {
+      this.grapple = null;
+      this.#tendril(null);
+    }
     if (this.form !== 'umbra') return;
     this.#swapModel(false);
     this.game.audio.revert();
@@ -557,6 +563,8 @@ export class Hero {
     // Jauge d'Abysse : se vide pendant la transformation, retour humain à zéro.
     if (U) {
       this.abyss -= UMBRA.drain * dt;
+      // La substance régénère Noa tant qu'il est transformé.
+      if (!this.dead) this.hp = Math.min(this.stats.maxHp, this.hp + UMBRA.regen * dt);
       if (this.abyss <= 0) {
         this.abyss = 0;
         this.#revert();
@@ -567,6 +575,13 @@ export class Hero {
     const mag = this.game.magnet;
     if (input.was('magnet') && R && this.powers.magnet && !U && mag && (!this.action || this.action.lockMove === false)) mag.press();
     const holding = mag?.holding;
+    // Forme Abysse : grappin de tentacule vers un mur ou un toit (X / RT).
+    if (U && input.was('magnet') && !this.grapple && (!this.action || this.action.kind === 'attack')) this.#startGrapple(camYaw);
+    if (this.grapple) {
+      this.#updateGrapple(dt);
+      this.#animate(dt);
+      return;
+    }
 
     if (input.was('fly')) this.#toggleFlight();
     if (input.was('jump')) this.jumpBuffer = 0.15;
@@ -771,6 +786,72 @@ export class Hero {
       }
     }
     this.#animate(dt);
+  }
+
+  // Lance une tentacule dans la direction de la caméra (légèrement vers le haut) ;
+  // si elle accroche une façade à moins de 45 m, Noa est tracté puis bondit.
+  #startGrapple(camYaw) {
+    const col = this.game.col;
+    const o = this.pos.clone().add(new THREE.Vector3(0, 1.4, 0));
+    const fwd = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));
+    for (const up of [0.55, 0.25, 0.9]) {
+      const d = fwd.clone().add(new THREE.Vector3(0, up, 0)).normalize();
+      const t = col.raycast(o, d.clone().multiplyScalar(UMBRA.grapple), 1);
+      if (t < 0.98 && t * UMBRA.grapple > 3) {
+        const target = o.clone().addScaledVector(d, t * UMBRA.grapple - 0.8);
+        this.grapple = { target, t: 0, dir: d };
+        this.abyss = Math.max(0, this.abyss - 4);
+        this.yaw = Math.atan2(d.x, d.z);
+        this.grounded = false;
+        this.game.audio.magnetThrow();
+        this.game.fx.ink(target, 0.7);
+        return true;
+      }
+    }
+    this.game.hud.toast('Rien à agripper dans cette direction', '#9a7aff');
+    return false;
+  }
+
+  #updateGrapple(dt) {
+    const gr = this.grapple;
+    gr.t += dt;
+    const to = gr.target.clone().sub(this.pos).sub(new THREE.Vector3(0, 1.0, 0));
+    const d = to.length();
+    const step = Math.min(d, 42 * dt * Math.min(1, gr.t * 6 + 0.3));
+    if (d > 0.01) {
+      const mv = to.multiplyScalar(step / d);
+      this.game.col.moveCylinder(this.pos, RADIUS, HEIGHT, mv.x, mv.z);
+      this.pos.y += mv.y;
+    }
+    this.vel.set(0, 0, 0);
+    this.#tendril(gr.target);
+    if (d < 0.9 || gr.t > 1.6) {
+      // Arrivée : bond pour se hisser sur le toit / continuer.
+      this.grapple = null;
+      this.vy = 11;
+      this.grounded = false;
+      this.#tendril(null);
+      this.game.fx.ink(this.pos.clone().add(new THREE.Vector3(0, 1, 0)), 0.6);
+    }
+  }
+
+  // Tentacule visible de la main droite jusqu'au point d'accroche.
+  #tendril(target) {
+    if (!this.tendrilMesh) {
+      const geo = new THREE.CylinderGeometry(0.035, 0.06, 1, 7, 1, true).translate(0, 0.5, 0);
+      this.tendrilMesh = new THREE.Mesh(geo, this.umbraModel.mats.skin);
+      this.game.scene.add(this.tendrilMesh);
+    }
+    const m = this.tendrilMesh;
+    m.visible = !!target;
+    if (!target) return;
+    const from = new THREE.Vector3();
+    (this.umbraModel.joints.handR || this.umbraModel.joints.elR).getWorldPosition(from);
+    const dir = target.clone().sub(from);
+    const len = dir.length();
+    m.position.copy(from);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.divideScalar(len || 1));
+    m.scale.set(1, len, 1);
   }
 
   #physics(dt, vx, vz) {
