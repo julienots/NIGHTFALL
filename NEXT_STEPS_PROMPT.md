@@ -17,7 +17,14 @@ via Capacitor 7. Code, commentaires et textes en jeu **en français**. Lis d'abo
   (incrémente `versionCode` / `versionName` dans `android/app/build.gradle`), copie l'APK dans
   `exports/` et envoie-le à l'utilisateur.
 
-## État actuel (v1.4)
+## État actuel (v1.5)
+v1.5 : personnages refaits (`actors/bodyParts.js`, version allégée `lite` pour les passants),
+Forme Abysse vernie + grappin (`hero.js` `#startGrapple`) + régénération, ambiance moins
+sombre, Mode libre avec horloge continue (`Game.#tickClock`, `data/presets.js` 'free'),
+bâtiments visitables (`world/shops.js`, portes `kit.shopDoors`), foule plus vivante.
+Tests : `tests/free.mjs` en plus de smoke / touch / bully.
+
+### v1.4
 Tout ce qui était listé en v1.3 est en place (monde ouvert, intérieurs, jour/nuit, social,
 magnétisme, Forme Abysse, histoire jusqu'au chapitre 2). Ajouté en v1.4 :
 - **Dialogues tactiles réparés** : la couche tactile (`.touch-ui`, plein écran) passait

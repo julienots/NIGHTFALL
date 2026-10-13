@@ -50,7 +50,20 @@ physique, cafétéria) et la maison de Noa (salon, cuisine, chambre).
    CPE), médiation au CDI. Utiliser ses pouvoirs est une tentation qui a un prix (vidéo,
    rumeurs, confiance d'Inès, pas de bonus de courage). Jordan peut devenir un allié.
 
-L'écran titre propose **Chapitres** pour démarrer directement au chapitre 1 ou 2.
+L'écran titre propose **Chapitres** pour démarrer directement au chapitre 1 ou 2, ou le
+**Mode libre** (v1.5) : tous les pouvoirs, la ville en plein jour, une horloge qui tourne
+(1 h de jeu = 1 min, cycle jour/nuit continu, créatures la nuit), missions secondaires
+ouvertes, sans histoire imposée.
+
+## Ville vivante (v1.5)
+- **57 portes praticables** (commerces et halls d'immeuble) menant à 5 intérieurs : café
+  (chocolat chaud = santé et énergie), supérette (kit de soins), boutique de mode (boutique
+  du jeu), salle d'arcade (« Neon Racers » : XP selon le score), hall d'immeuble (repos).
+  Personnel et clients à l'intérieur ; on ressort devant la porte d'entrée.
+- Foule plus dense, passants qui saluent Noa, téléphonent, discutent en groupe, joggeurs ;
+  la Forme Abysse leur fait peur.
+- Personnages refaits : tête sculptée, visage détaillé, chevelures modelées, mains à cinq
+  doigts, baskets. Les passants utilisent une version allégée (≈ 5 000 triangles).
 
 ## Pouvoirs
 - **Anneaux** (design original) : 10 anneaux portés sur les avant-bras (ils y restent
@@ -62,7 +75,10 @@ L'écran titre propose **Chapitres** pour démarrer directement au chapitre 1 ou
 - **Forme Abysse** (T, jauge ≥ 50 %) : la substance recouvre Noa (silhouette plus massive,
   yeux cyan, gueule crénelée, tentacules dorsales). Griffes, frappe au sol, tentacules qui
   **attirent** les ennemis, rugissement de zone, bond géant, dégâts subis réduits de moitié,
-  se soigne en frappant. La jauge se remplit en combat et se vide transformé.
+  se soigne en frappant et se régénère. **Grappin de tentacule** (X / RT) : accroche une
+  façade ou un toit jusqu'à 45 m et y tracte Noa. Look « vernis » noir, yeux cyan, crocs,
+  cristal Aegis dans la poitrine, veines qui pulsent. La jauge se remplit en combat et se
+  vide transformé.
 
 ## Relations
 Inès (romance), Camille (romance), Malik, Théo (et Jordan, après « Casier 117 ») : affinité 0–100, scènes à choix qui se
