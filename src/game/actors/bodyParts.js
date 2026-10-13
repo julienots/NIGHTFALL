@@ -4,7 +4,14 @@
 import * as THREE from 'three';
 
 const cache = new Map();
+// Niveau de détail courant (1 = Noa et amis, < 1 = passants allégés).
+let D = 1;
+export function setDetail(d) {
+  D = d;
+}
+const n = (v, min = 3) => Math.max(min, Math.round(v * D));
 const cached = (key, make) => {
+  key = D + '|' + key;
   if (!cache.has(key)) cache.set(key, make());
   return cache.get(key);
 };
@@ -14,10 +21,10 @@ const cached = (key, make) => {
 export function lathe(key, profile, { seg = 14, sx = 1, sz = 1, smooth = 3 } = {}) {
   return cached('lathe:' + key, () => {
     const curve = new THREE.CatmullRomCurve3(profile.map(([r, y]) => new THREE.Vector3(r, y, 0)));
-    const pts = curve.getPoints(profile.length * smooth).map((p) => new THREE.Vector2(Math.max(0, p.x), p.y));
+    const pts = curve.getPoints(profile.length * (D < 1 ? 1 : smooth)).map((p) => new THREE.Vector2(Math.max(0, p.x), p.y));
     // LatheGeometry attend un profil de bas en haut pour des normales sortantes.
     pts.reverse();
-    const g = new THREE.LatheGeometry(pts, seg);
+    const g = new THREE.LatheGeometry(pts, n(seg, 6));
     if (sx !== 1 || sz !== 1) g.scale(sx, 1, sz);
     g.computeVertexNormals();
     return g;
@@ -27,7 +34,7 @@ export function lathe(key, profile, { seg = 14, sx = 1, sz = 1, smooth = 3 } = {
 // Tête : sphère déformée (crâne arrondi à l'arrière, mâchoire et menton).
 export function headGeometry(r = 0.12, jaw = 0.3) {
   return cached(`head:${r}:${jaw}`, () => {
-    const g = new THREE.SphereGeometry(r, 36, 28);
+    const g = new THREE.SphereGeometry(r, n(36, 10), n(28, 8));
     const p = g.attributes.position;
     const v = new THREE.Vector3();
     for (let i = 0; i < p.count; i++) {
@@ -52,7 +59,7 @@ export function headGeometry(r = 0.12, jaw = 0.3) {
 // Ellipsoïde lisse (paume, nez, œil, semelle…).
 export function blob(rx, ry, rz, seg = 12) {
   return cached(`blob:${rx}:${ry}:${rz}:${seg}`, () => {
-    const g = new THREE.SphereGeometry(1, seg, Math.max(6, Math.round(seg * 0.75)));
+    const g = new THREE.SphereGeometry(1, n(seg, 6), n(Math.max(6, seg * 0.75), 4));
     g.scale(rx, ry, rz);
     return g;
   });
@@ -67,7 +74,8 @@ export function lock(len, r, bend = 0.4, twist = 0, seg = 7) {
       new THREE.Vector3(twist * len * 0.3, len * 0.55, bend * len * 0.2),
       new THREE.Vector3(twist * len, len * (1 - bend * 0.35), bend * len),
     );
-    const radial = 6;
+    const radial = n(6, 4);
+    seg = n(seg, 3);
     const g = new THREE.TubeGeometry(curve, seg, r, radial, false);
     const p = g.attributes.position;
     const c = new THREE.Vector3();
@@ -104,7 +112,7 @@ export function soleGeometry(w = 0.075, len = 0.26, h = 0.032) {
     s.bezierCurveTo(w * 0.2, front + len * 0.04, -w * 0.5, front + len * 0.03, -w * 0.8, front - len * 0.1);
     s.bezierCurveTo(-w * 1.0, front - len * 0.3, -w * 0.8, back + len * 0.35, -w * 0.88, back + len * 0.15);
     s.bezierCurveTo(-w * 0.9, back, -w * 0.4, back, 0, back);
-    const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2, curveSegments: 10 });
+    const g = new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: D >= 1, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2, curveSegments: n(10, 4) });
     // Forme dessinée dans le plan XY (y = longueur) : on la couche au sol.
     g.rotateX(Math.PI / 2);
     g.computeVertexNormals();
@@ -115,7 +123,7 @@ export function soleGeometry(w = 0.075, len = 0.26, h = 0.032) {
 // Dessus de basket : ellipsoïde allongée, tronquée sous la cheville.
 export function shoeUpper(w = 0.07, len = 0.13, h = 0.065) {
   return cached(`upper:${w}:${len}:${h}`, () => {
-    const g = new THREE.SphereGeometry(1, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.62);
+    const g = new THREE.SphereGeometry(1, n(18, 8), n(12, 5), 0, Math.PI * 2, 0, Math.PI * 0.62);
     g.scale(w, h, len);
     // Bout un peu relevé et pointe arrondie vers l'avant.
     const p = g.attributes.position;
@@ -144,7 +152,7 @@ export function arc(r, tube, angle, seg = 10) {
 // (angles polaires en radians depuis le sommet).
 export function hairShell(key, h, r = 0.128) {
   return cached('hair:' + key, () => {
-    const g = new THREE.SphereGeometry(r, 40, 30);
+    const g = new THREE.SphereGeometry(r, n(40, 14), n(30, 10));
     const p = g.attributes.position;
     const v = new THREE.Vector3();
     for (let i = 0; i < p.count; i++) {

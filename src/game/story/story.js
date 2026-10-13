@@ -381,7 +381,7 @@ export class Story {
     const g = this.game;
     if (!this.npcs.length) {
       const q = g.settings.quality;
-      const per = q === 'low' ? 1 : q === 'medium' ? 2 : 3;
+      const per = q === 'low' ? 2 : q === 'medium' ? 3 : 4;
       const routes = [
         [[9.6, 30], [9.6, 12], [30, 9.4]], [[-9.6, 28], [-9.6, 50]], [[34, 9.4], [55, 9.4]], [[-33, 9.4], [-55, 9.4]],
         [[9.6, -28], [9.6, -50]], [[-9.6, -17], [-9.6, -50]], [[18, 28.5], [28.5, 28.5]], [[-12, 9.4], [-28, 9.4]],
@@ -411,7 +411,7 @@ export class Story {
       // Groupes qui discutent (points de rendez-vous non utilisés par les amis).
       const H = g.districts.hangouts || {};
       const spots = [...(H.schoolyard || []).slice(2), ...(H.park || []).slice(2), ...(H.cafe || []).slice(2)];
-      const groups = q === 'low' ? 3 : q === 'medium' ? 6 : spots.length;
+      const groups = q === 'low' ? 5 : q === 'medium' ? 9 : spots.length;
       spots.slice(0, groups).forEach(([cx, cz], gi) => {
         const size = 2 + ((gi + per) % 2);
         for (let k = 0; k < size; k++) {

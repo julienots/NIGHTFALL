@@ -5,10 +5,10 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const ATTRS = ['position', 'normal', 'uv'];
 
-function prepare(geo, matrix) {
+function prepare(geo, matrix, keepColor = false) {
   const g = geo.index ? geo.toNonIndexed() : geo.clone();
   g.applyMatrix4(matrix);
-  for (const name of Object.keys(g.attributes)) if (!ATTRS.includes(name)) g.deleteAttribute(name);
+  for (const name of Object.keys(g.attributes)) if (!ATTRS.includes(name) && !(name === 'color' && keepColor)) g.deleteAttribute(name);
   if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((g.attributes.position.count) * 2), 2));
   return g;
 }
@@ -18,7 +18,7 @@ function mergeInto(parent, list) {
   for (const { mesh, matrix } of list) {
     const k = mesh.material.uuid + (mesh.castShadow ? 's' : '');
     if (!buckets.has(k)) buckets.set(k, { mat: mesh.material, cast: mesh.castShadow, recv: mesh.receiveShadow, geos: [] });
-    buckets.get(k).geos.push(prepare(mesh.geometry, matrix));
+    buckets.get(k).geos.push(prepare(mesh.geometry, matrix, !!mesh.material.vertexColors));
     mesh.parent.remove(mesh);
   }
   for (const b of buckets.values()) {

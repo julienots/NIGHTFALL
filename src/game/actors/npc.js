@@ -29,7 +29,8 @@ export class Npc {
     this.name = def.name || null;
     this.talk = def.talk || null;
     const palette = def.palette ? PALETTES[def.palette] : randomPalette(def.seed ?? Math.floor(Math.random() * 1e6));
-    this.model = new HeroModel(palette, { backpack: !!palette.bag, rim: '#ffd9a8' });
+    // Passants anonymes : modèle allégé ; personnages nommés : modèle complet.
+    this.model = new HeroModel(palette, { backpack: !!palette.bag, rim: '#ffd9a8', lite: !def.palette });
     this.pos = new THREE.Vector3(def.x, def.y ?? 0.15, def.z);
     this.pose = def.pose || null; // pose permanente (assis…)
     this.yaw = def.yaw ?? 0;
@@ -144,7 +145,7 @@ export class Npc {
       if (this.animT >= this.animDur) this.anim = null;
     } else if (this.chat && this.mode === 'idle' && Math.random() < dt * 0.35) {
       this.play(Math.random() < 0.8 ? 'talk' : 'wave', 1.6 + Math.random() * 1.4);
-    }
+    } else if (!this.name && (this.mode === 'walk' || this.mode === 'idle')) this.#life(dt);
     // Fuite : disparaît une fois hors de vue.
     if (this.mode === 'flee') {
       this.goneT += dt;
@@ -159,6 +160,27 @@ export class Npc {
     });
     this.model.root.position.copy(this.pos);
     this.model.root.rotation.y = this.yaw;
+  }
+
+  // Petite vie des passants : saluer Noa quand il passe, regarder son téléphone.
+  #life(dt) {
+    this.greetCd = (this.greetCd ?? Math.random() * 10) - dt;
+    const hero = this.game.hero;
+    const d = Math.hypot(hero.pos.x - this.pos.x, hero.pos.z - this.pos.z);
+    if (hero.form === 'umbra' && d < 7 && !this.anim) {
+      // La Forme Abysse fait peur : sursaut, puis on presse le pas.
+      this.play('scared', 0.8);
+      this.speed = Math.max(this.speed, 2.6);
+    } else if (this.greetCd <= 0 && d < 3.2 && !hero.flying && hero.form === 'human') {
+      this.greetCd = 25 + Math.random() * 20;
+      this.faceTo(hero.pos);
+      this.play('wave', 1.4);
+      if (this.mode === 'walk') this.wait = Math.max(this.wait, 1.4);
+    } else if (this.mode === 'walk' && this.wait <= 0 && Math.random() < dt * 0.02) {
+      // Pause téléphone au milieu du trottoir.
+      this.wait = 3 + Math.random() * 3;
+      this.play('phone', this.wait);
+    }
   }
 
   dispose() {

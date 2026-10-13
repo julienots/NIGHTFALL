@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { toon, addRim } from '../fx/toon.js';
 import { bakeJoints } from '../core/bake.js';
-import { lathe, headGeometry, blob, lock, finger, soleGeometry, shoeUpper, eyeWhite, arc, hairShell } from './bodyParts.js';
+import { lathe, headGeometry, blob, lock, finger, soleGeometry, shoeUpper, eyeWhite, arc, hairShell, setDetail } from './bodyParts.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => t * t * (3 - 2 * t);
@@ -221,7 +221,10 @@ export const PALETTES = {
 };
 
 export class HeroModel {
-  constructor(palette = PALETTES.noa, { backpack = true, rim = '#9fd8ff' } = {}) {
+  // lite : version allégée pour les passants (moins de polygones, couleurs dans
+  // les sommets → un seul appel de dessin par articulation).
+  constructor(palette = PALETTES.noa, { backpack = true, rim = '#9fd8ff', lite = false } = {}) {
+    this.lite = lite;
     this.root = new THREE.Group();
     this.tilt = new THREE.Group();
     this.tilt.position.y = HIP_Y;
@@ -260,12 +263,37 @@ export class HeroModel {
       this.mats.skin = this.mats.hoodie = this.mats.pants = this.mats.shoe = this.mats.hair = gloss('#110b1a');
       this.mats.hoodie2 = gloss('#06040b');
     }
+    setDetail(lite ? 0.45 : 1);
     this.#build(backpack && palette.bag);
+    setDetail(1);
+    if (lite) this.#vertexColors();
     this.root.traverse((o) => {
       if (o.isMesh) o.castShadow = true;
     });
     // Fusion des pièces fixes de chaque articulation (≈ 3x moins d'appels de dessin).
     bakeJoints(this.root, new Set([this.phone, this.mouth, this.ponytail, this.bagFlap, ...(this.brows || [])].filter(Boolean)));
+  }
+
+  // Remplace les matériaux unis par un matériau commun à couleurs de sommets.
+  #vertexColors() {
+    const keep = new Set([this.mats.phone, this.mats.vein]);
+    const shared = (HeroModel.liteMat ||= (() => {
+      const m = toon('#ffffff', { rim: '#ffd9a8', rimStrength: 0.55, shared: false });
+      m.vertexColors = true;
+      return m;
+    })());
+    const c = new THREE.Color();
+    this.root.traverse((o) => {
+      if (!o.isMesh || keep.has(o.material) || o === this.phone) return;
+      c.copy(o.material.color);
+      const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      const n = g.attributes.position.count;
+      const col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      o.geometry = g;
+      o.material = shared;
+    });
   }
 
   #pivot(name, parent, x, y, z) {
@@ -364,7 +392,7 @@ export class HeroModel {
       this.#mesh(lathe('collar', [[0.05, 0.01], [0.056, -0.03], [0.06, -0.05]]), M.shoe, an);
       this.#mesh(shoeUpper(0.068, 0.135, 0.07), M.shoe, an, 0, -0.052, 0.045);
       this.#mesh(soleGeometry(0.066, 0.26, 0.026), M.sole, an, 0, -0.056, 0);
-      if (!U) {
+      if (!U && !this.lite) {
         // Bout renforcé et lacets
         this.#mesh(blob(0.05, 0.026, 0.04), M.sole, an, 0, -0.05, 0.15);
         for (let i = 0; i < 3; i++) this.#mesh(new THREE.BoxGeometry(0.05, 0.006, 0.01), M.white, an, 0, -0.0 - i * 0.012, 0.055 + i * 0.026, -0.5 - i * 0.12);
@@ -380,6 +408,12 @@ export class HeroModel {
     g.scale.setScalar(k);
     const inward = -sx; // vers le corps
     this.#mesh(blob(0.022, 0.04, 0.036), M.skin, g, 0, -0.032, 0);
+    if (this.lite) {
+      // Passant : moufle (doigts joints) + pouce.
+      this.#mesh(blob(0.018, 0.035, 0.034), M.skin, g, inward * 0.006, -0.07, 0, 0, 0, inward * 0.3);
+      this.#mesh(blob(0.01, 0.022, 0.01), M.skin, g, inward * 0.012, -0.04, 0.034, -0.6, 0, 0);
+      return g;
+    }
     const lens = [0.036, 0.046, 0.049, 0.044];
     [-0.024, -0.008, 0.008, 0.024].forEach((z, i) => {
       const f = this.#mesh(finger(lens[3 - i], 0.0095), M.skin, g, inward * 0.004, -0.064, z);
@@ -401,9 +435,11 @@ export class HeroModel {
       this.#mesh(eyeWhite(0.021), M.white, eye);
       this.#mesh(blob(0.0125, 0.0135, 0.006, 10), M.iris, eye, 0, -0.001, 0.0085);
       this.#mesh(blob(0.0062, 0.0068, 0.004, 8), M.pupil, eye, 0, -0.001, 0.0118);
-      this.#mesh(blob(0.003, 0.003, 0.002, 6), M.white, eye, sx * -0.004, 0.004, 0.0138);
-      // Cils (trait sombre au-dessus de l'œil)
-      this.#mesh(arc(0.026, 0.0035, 2.0), M.pupil, eye, 0, -0.008, 0.002, 0, 0, Math.PI / 2 - 1.0);
+      if (!this.lite) {
+        this.#mesh(blob(0.003, 0.003, 0.002, 6), M.white, eye, sx * -0.004, 0.004, 0.0138);
+        // Cils (trait sombre au-dessus de l'œil)
+        this.#mesh(arc(0.026, 0.0035, 2.0), M.pupil, eye, 0, -0.008, 0.002, 0, 0, Math.PI / 2 - 1.0);
+      }
       // Sourcil (groupe orientable pour les expressions)
       const brow = new THREE.Group();
       brow.position.set(sx * 0.044, 0.048, 0.104);
