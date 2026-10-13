@@ -17,7 +17,8 @@ export function randomPalette(seed) {
   return {
     skin: pick(SKINS), hair: pick(HAIRS), hoodie: top, hoodie2: '#' + c.getHexString(), pants: pick(PANTS),
     shoe: pick(['#f2efe6', '#1d1d24', '#c9563f']), sole: '#e8e4ff', bag: r() < 0.3 ? pick(TOPS) : null,
-    hairStyle: r() < 0.45 ? 'ponytail' : 'messy',
+    hairStyle: pick(['ponytail', 'messy', 'short', 'short', 'bob']),
+    eye: pick(['#6b4423', '#3a2a1a', '#3f7a9a', '#4f7a3a', '#7a5a2a']),
   };
 }
 

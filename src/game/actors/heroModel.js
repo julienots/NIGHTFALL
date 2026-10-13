@@ -4,8 +4,9 @@
 // Un groupe « tilt » au niveau du bassin permet d'incliner tout le corps
 // (vol à plat, virages, atterrissage).
 import * as THREE from 'three';
-import { toon } from '../fx/toon.js';
+import { toon, addRim } from '../fx/toon.js';
 import { bakeJoints } from '../core/bake.js';
+import { lathe, headGeometry, blob, lock, finger, soleGeometry, shoeUpper, eyeWhite, arc, hairShell } from './bodyParts.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => t * t * (3 - 2 * t);
@@ -230,9 +231,12 @@ export class HeroModel {
     this.current = {};
     this.palette = palette;
     this.umbra = palette.variant === 'umbra';
-    const R = this.umbra ? { rim: '#7a5cff', rimStrength: 1.1, shared: false } : { rim, rimStrength: 0.6, shared: false };
+    // Matériaux propres à chaque personnage (l'équipement recolore ceux de Noa).
+    const R = this.umbra ? { rim: '#7a5cff', rimStrength: 1.1, shared: false } : { rim, rimStrength: 0.55, shared: false };
+    const shade = (c, f) => '#' + new THREE.Color(c).multiplyScalar(f).getHexString();
     this.mats = {
       skin: toon(palette.skin, R),
+      skin2: toon(shade(palette.skin, 0.82), R),
       hair: toon(palette.hair, R),
       hoodie: toon(palette.hoodie, R),
       hoodie2: toon(palette.hoodie2, R),
@@ -240,14 +244,22 @@ export class HeroModel {
       shoe: toon(palette.shoe, R),
       sole: toon(palette.sole, R),
       bag: toon(palette.bag || '#555', R),
-      white: toon('#ffffff', { shared: false }),
-      pupil: toon('#1d0f3a', { shared: false }),
-      mouth: toon('#7a2f3a', { shared: false }),
+      white: toon('#fbf8ff', {}),
+      iris: toon(palette.eye || '#6b4423', {}),
+      pupil: toon('#1d0f3a', {}),
+      mouth: toon('#8a3440', {}),
+      lip: toon(shade(palette.skin, 0.78), {}),
       phone: toon('#1d0f3a', { emissive: '#7fe3ff', emissiveIntensity: 0, shared: false }),
       vein: toon('#5fe3ff', { emissive: '#5fe3ff', emissiveIntensity: 1.8, shared: false }),
       tooth: toon('#f4f0ff', { rim: '#ffffff', shared: false }),
       maw: toon('#2a0820', { shared: false }),
     };
+    if (this.umbra) {
+      // Substance de l'Abysse : noir liquide et brillant (vernis), liseré violet.
+      const gloss = (c) => addRim(new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.32, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.12, sheen: 0.6, sheenColor: new THREE.Color('#5a3aa8') }), '#8a6cff', 2.2, 1.0);
+      this.mats.skin = this.mats.hoodie = this.mats.pants = this.mats.shoe = this.mats.hair = gloss('#110b1a');
+      this.mats.hoodie2 = gloss('#06040b');
+    }
     this.#build(backpack && palette.bag);
     this.root.traverse((o) => {
       if (o.isMesh) o.castShadow = true;
@@ -275,90 +287,64 @@ export class HeroModel {
   #build(withBag) {
     const M = this.mats;
     const P = this.palette;
+    const U = this.umbra;
+    const k = U ? 1.28 : 1; // carrure de la Forme Abysse
     const hips = this.#pivot('hips', this.tilt, 0, 0, 0);
-    // Bassin (jean) + bas du sweat
-    this.#mesh(new THREE.CapsuleGeometry(0.15, 0.1, 4, 12), M.pants, hips, 0, 0.02, 0, 0, 0, Math.PI / 2).scale.set(1, 1.05, 0.9);
+    // Bassin : jean galbé + ceinture
+    this.#mesh(lathe('pelvis', [[0.05, 0.1], [0.14, 0.08], [0.165, 0.02], [0.16, -0.05], [0.12, -0.1], [0.02, -0.12]], { sz: 0.8 }), M.pants, hips);
+    if (!U) this.#mesh(new THREE.TorusGeometry(0.162, 0.012, 6, 24), M.hoodie2, hips, 0, 0.075, 0, Math.PI / 2).scale.set(1, 0.8, 1);
     const spine = this.#pivot('spine', hips, 0, 0.1, 0);
-    // Sweat à capuche : buste un peu ample, poche kangourou, cordons
-    const torso = this.#mesh(new THREE.CapsuleGeometry(0.19, 0.3, 6, 16), M.hoodie, spine, 0, 0.27, 0);
-    torso.scale.set(1.18, 1, 0.82);
-    this.#mesh(new THREE.TorusGeometry(0.2, 0.05, 8, 20), M.hoodie2, spine, 0, 0.06, 0, Math.PI / 2).scale.set(1.12, 0.8, 1);
-    if (!this.umbra) {
-      const pocket = this.#mesh(new THREE.BoxGeometry(0.24, 0.1, 0.03), M.hoodie2, spine, 0, 0.17, 0.155);
-      pocket.rotation.x = -0.1;
-      // Capuche repliée dans le dos + cordons
-      const hood = this.#mesh(new THREE.TorusGeometry(0.13, 0.065, 8, 18), M.hoodie2, spine, 0, 0.53, -0.04, Math.PI / 2 - 0.4);
-      hood.scale.set(1.1, 1, 1);
-      for (const sx of [-1, 1]) this.#mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.16, 4), M.white, spine, sx * 0.05, 0.42, 0.15, 0.15);
-    } else torso.scale.set(1.5, 1.08, 1.0);
+    // Buste : sweat ample (ou torse en V de la Forme Abysse)
+    const torsoProfile = U
+      ? [[0.07, 0.57], [0.16, 0.54], [0.235, 0.47], [0.245, 0.37], [0.205, 0.23], [0.16, 0.11], [0.15, 0.01], [0.12, -0.05], [0.02, -0.06]]
+      : [[0.06, 0.55], [0.125, 0.525], [0.178, 0.47], [0.2, 0.4], [0.198, 0.3], [0.182, 0.18], [0.172, 0.07], [0.176, -0.01], [0.12, -0.06], [0.02, -0.07]];
+    this.#mesh(lathe(U ? 'torsoU' : 'torso', torsoProfile, { sx: U ? 1.2 : 1.15, sz: U ? 0.78 : 0.74, seg: 18 }), M.hoodie, spine);
+    if (!U) {
+      // Bord-côte, poche kangourou, capuche repliée, cordons
+      this.#mesh(new THREE.TorusGeometry(0.175, 0.022, 6, 24), M.hoodie2, spine, 0, 0.0, 0, Math.PI / 2).scale.set(1.15, 0.74, 1);
+      this.#mesh(blob(0.115, 0.05, 0.022), M.hoodie2, spine, 0, 0.13, 0.122, -0.12);
+      const hood = this.#mesh(new THREE.TorusGeometry(0.105, 0.048, 8, 20), M.hoodie2, spine, 0, 0.5, -0.07, Math.PI / 2 - 0.55);
+      hood.scale.set(1.25, 1, 1);
+      for (const sx of [-1, 1]) {
+        this.#mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.15, 5), M.white, spine, sx * 0.045, 0.4, 0.15, 0.12);
+        this.#mesh(blob(0.01, 0.014, 0.01, 6), M.white, spine, sx * 0.045, 0.32, 0.158);
+      }
+    }
     // Sac à dos
     if (withBag) {
-      const bag = this.#mesh(new THREE.CapsuleGeometry(0.14, 0.16, 4, 12), M.bag, spine, 0, 0.3, -0.22);
-      bag.scale.set(1.2, 1, 0.7);
-      this.bagFlap = this.#mesh(new THREE.BoxGeometry(0.2, 0.1, 0.05), M.hoodie2, spine, 0, 0.22, -0.31);
-      for (const sx of [-1, 1]) this.#mesh(new THREE.TorusGeometry(0.11, 0.015, 6, 12, Math.PI), M.bag, spine, sx * 0.12, 0.38, -0.05, 0, Math.PI / 2, 0);
+      const bag = this.#mesh(lathe('bag', [[0.02, 0.17], [0.11, 0.15], [0.135, 0.06], [0.135, -0.08], [0.11, -0.15], [0.02, -0.16]], { sx: 1.25, sz: 0.62 }), M.bag, spine, 0, 0.3, -0.2);
+      this.bagFlap = this.#mesh(blob(0.1, 0.06, 0.03), M.hoodie2, spine, 0, 0.24, -0.29);
+      for (const sx of [-1, 1]) this.#mesh(new THREE.TorusGeometry(0.11, 0.014, 6, 12, Math.PI), M.bag, spine, sx * 0.12, 0.38, -0.05, 0, Math.PI / 2, 0);
       this.backpack = bag;
     }
 
-    // Tête cartoon (grosse) : visage, yeux, cheveux
+    // Cou + tête
     const head = this.#pivot('head', spine, 0, 0.56, 0.01);
-    this.#mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.1, 10), M.skin, head, 0, 0.0, 0);
+    this.#mesh(lathe('neck', [[0.042, 0.1], [0.046, 0.03], [0.052, -0.04], [0.06, -0.06]]), M.skin, head, 0, 0, 0);
     const face = new THREE.Group();
-    face.position.y = 0.17;
-    face.scale.setScalar(1.3);
+    face.position.y = 0.16;
+    face.scale.setScalar(U ? 1.12 : 1.16);
     head.add(face);
     this.face = face;
-    const skull = this.#mesh(new THREE.SphereGeometry(0.12, 24, 18), M.skin, face);
-    skull.scale.set(0.95, 1.05, 1.0);
-    if (!this.umbra) {
-      for (const sx of [-1, 1]) {
-        // Oreilles
-        this.#mesh(new THREE.SphereGeometry(0.03, 10, 8), M.skin, face, sx * 0.115, 0, 0).scale.set(0.6, 1, 1);
-        // Yeux : blanc + pupille + éclat
-        const eye = this.#mesh(new THREE.SphereGeometry(0.026, 12, 10), M.white, face, sx * 0.045, 0.02, 0.105);
-        eye.scale.set(0.9, 1.15, 0.5);
-        this.#mesh(new THREE.SphereGeometry(0.014, 10, 8), M.pupil, face, sx * 0.045, 0.018, 0.118);
-        // Sourcils
-        const brow = this.#mesh(new THREE.BoxGeometry(0.04, 0.008, 0.01), M.hair, face, sx * 0.047, 0.058, 0.112, 0, 0, sx * -0.12);
-        (this.brows ||= []).push(brow);
-      }
-      this.#mesh(new THREE.SphereGeometry(0.012, 8, 6), M.skin, face, 0, -0.012, 0.122);
-      this.mouth = this.#mesh(new THREE.TorusGeometry(0.02, 0.005, 6, 12, Math.PI), M.mouth, face, 0, -0.045, 0.112, 0, 0, Math.PI);
-    } else this.#umbraFace(face);
-    // Cheveux
-    const hairCap = this.#mesh(new THREE.SphereGeometry(0.128, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), M.hair, face, 0, 0.012, -0.008);
-    hairCap.rotation.x = -0.25;
-    if (P.hairStyle === 'messy') {
-      for (const [x, y, z, r, rx, rz] of [[0.04, 0.11, 0.07, 0.05, 0.5, -0.4], [-0.05, 0.12, 0.05, 0.05, 0.4, 0.5], [0.0, 0.13, -0.02, 0.055, 0, 0], [0.08, 0.08, 0.0, 0.04, 0, -0.8], [-0.08, 0.08, -0.02, 0.04, 0, 0.8], [0.0, 0.07, 0.1, 0.04, 1.2, 0]]) {
-        this.#mesh(new THREE.ConeGeometry(r, 0.11, 6), M.hair, face, x, y, z, rx, 0, rz);
-      }
-    } else if (P.hairStyle === 'short') {
-      // Coupe courte : calotte un peu plus épaisse + petite mèche.
-      this.#mesh(new THREE.SphereGeometry(0.132, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.42), M.hair, face, 0, 0.03, 0.0);
-      this.#mesh(new THREE.ConeGeometry(0.04, 0.08, 6), M.hair, face, 0.03, 0.12, 0.08, 1.1, 0, -0.3);
-    } else if (P.hairStyle === 'bob') {
-      // Carré : volume sur les côtés jusqu'au menton, frange.
-      const bob = this.#mesh(new THREE.SphereGeometry(0.145, 18, 12, Math.PI * 0.78, Math.PI * 1.44, 0, Math.PI * 0.62), M.hair, face, 0, 0.0, -0.015);
-      this.#mesh(new THREE.SphereGeometry(0.135, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.3), M.hair, face, 0, 0.02, 0);
-      bob.scale.set(1.05, 1.0, 1.0);
-      this.#mesh(new THREE.BoxGeometry(0.17, 0.04, 0.05), M.hair, face, 0, 0.085, 0.095, 0.3);
-    } else if (P.hairStyle !== 'none') {
-      // Queue de cheval
-      this.#mesh(new THREE.SphereGeometry(0.05, 10, 8), M.hair, face, 0, 0.06, -0.12);
-      const tail = this.#mesh(new THREE.CapsuleGeometry(0.035, 0.14, 4, 8), M.hair, face, 0, -0.04, -0.15, 0.35);
-      this.ponytail = tail;
-    }
+    this.#mesh(headGeometry(0.12, U ? 0.18 : 0.3), M.skin, face);
+    if (!U) this.#humanFace(face);
+    else this.#umbraFace(face);
+    if (!U) this.#hair(face, P.hairStyle);
 
-    // Bras : manches de sweat + mains
+    // Bras : manches galbées, poignets, mains à cinq doigts
+    const arm = U
+      ? { up: [[0.0001, 0.08], [0.08, 0.07], [0.105, 0.02], [0.1, -0.08], [0.085, -0.2], [0.075, -0.3], [0.072, -0.32]], fore: [[0.075, 0.03], [0.08, -0.04], [0.072, -0.13], [0.06, -0.2], [0.0001, -0.23]] }
+      : { up: [[0.0001, 0.07], [0.062, 0.06], [0.08, 0.02], [0.075, -0.06], [0.066, -0.16], [0.06, -0.26], [0.058, -0.31]], fore: [[0.058, 0.03], [0.058, -0.02], [0.054, -0.1], [0.05, -0.17], [0.052, -0.2], [0.0001, -0.215]] };
     for (const [side, sx] of [['R', -1], ['L', 1]]) {
       const sh = this.#pivot('sh' + side, spine, sx * 0.24, 0.43, 0);
-      this.#mesh(new THREE.SphereGeometry(0.075, 12, 8), M.hoodie, sh);
-      this.#mesh(new THREE.CapsuleGeometry(0.06, 0.2, 4, 10), M.hoodie, sh, 0, -0.15, 0);
+      this.#mesh(lathe(U ? 'armUpU' : 'armUp', arm.up), M.hoodie, sh);
       const el = this.#pivot('el' + side, sh, 0, -0.3, 0);
-      this.#mesh(new THREE.CapsuleGeometry(0.055, 0.17, 4, 10), M.hoodie, el, 0, -0.11, 0);
-      this.#mesh(new THREE.TorusGeometry(0.052, 0.018, 6, 14), M.hoodie2, el, 0, -0.22, 0, Math.PI / 2);
-      const hand = this.#mesh(new THREE.SphereGeometry(0.052, 12, 10), M.skin, el, 0, -0.28, 0.01);
-      hand.scale.set(1, 1.1, 1.1);
+      this.#mesh(lathe(U ? 'armForeU' : 'armFore', arm.fore), M.hoodie, el);
+      if (!U) {
+        this.#mesh(new THREE.TorusGeometry(0.047, 0.014, 6, 16), M.hoodie2, el, 0, -0.2, 0, Math.PI / 2);
+        this.#mesh(lathe('wrist', [[0.03, -0.19], [0.029, -0.235], [0.0001, -0.245]]), M.skin, el);
+      }
+      const hand = this.#hand(el, sx, U ? 1.2 : 1);
       this.joints['fist' + side] = hand;
       if (side === 'R') {
         // Téléphone (visible pendant l'animation « phone »)
@@ -367,71 +353,185 @@ export class HeroModel {
       }
     }
 
-    // Jambes : jean + baskets
+    // Jambes : jean galbé (genou, mollet, ourlet) + baskets
     for (const [side, sx] of [['R', -1], ['L', 1]]) {
       const hip = this.#pivot('hip' + side, hips, sx * 0.09, -0.02, 0);
-      this.#mesh(new THREE.CapsuleGeometry(0.075, 0.28, 4, 10), M.pants, hip, 0, -0.2, 0);
+      this.#mesh(lathe(U ? 'thighU' : 'thigh', [[0.0001, 0.06], [0.07 * k, 0.04], [0.088 * k, -0.02], [0.083 * k, -0.15], [0.072 * k, -0.3], [0.065 * k, -0.4], [0.064 * k, -0.44]]), M.pants, hip);
       const kn = this.#pivot('kn' + side, hip, 0, -0.41, 0);
-      this.#mesh(new THREE.CapsuleGeometry(0.065, 0.28, 4, 10), M.pants, kn, 0, -0.18, 0);
+      this.#mesh(lathe(U ? 'calfU' : 'calf', [[0.064 * k, 0.03], [0.064 * k, -0.02], [0.067 * k, -0.12], [0.057 * k, -0.26], [0.054 * k, -0.33], [0.062 * k, -0.37], [0.0001, -0.39]]), M.pants, kn);
       // Cheville : le pied déroule du talon à la pointe.
       const an = this.#pivot('an' + side, kn, 0, -0.4, 0);
-      const shoe = this.#mesh(new THREE.SphereGeometry(0.075, 14, 10), M.shoe, an, 0, -0.03, 0.05);
-      shoe.scale.set(1.1, 0.7, 1.7);
-      this.#mesh(new THREE.BoxGeometry(0.15, 0.03, 0.25), M.sole, an, 0, -0.075, 0.05);
+      this.#mesh(lathe('collar', [[0.05, 0.01], [0.056, -0.03], [0.06, -0.05]]), M.shoe, an);
+      this.#mesh(shoeUpper(0.068, 0.135, 0.07), M.shoe, an, 0, -0.052, 0.045);
+      this.#mesh(soleGeometry(0.066, 0.26, 0.026), M.sole, an, 0, -0.056, 0);
+      if (!U) {
+        // Bout renforcé et lacets
+        this.#mesh(blob(0.05, 0.026, 0.04), M.sole, an, 0, -0.05, 0.15);
+        for (let i = 0; i < 3; i++) this.#mesh(new THREE.BoxGeometry(0.05, 0.006, 0.01), M.white, an, 0, -0.0 - i * 0.012, 0.055 + i * 0.026, -0.5 - i * 0.12);
+      }
     }
-    if (this.umbra) this.#umbraBody(spine);
+    if (U) this.#umbraBody(spine);
   }
 
-  // Tête de la forme Abysse : yeux en fentes lumineuses, gueule crénelée.
+  // Main : paume, quatre doigts légèrement repliés vers l'intérieur, pouce en avant.
+  #hand(el, sx, k = 1) {
+    const M = this.mats;
+    const g = this.#pivot('hand' + (sx < 0 ? 'R' : 'L'), el, 0, -0.245, 0.005);
+    g.scale.setScalar(k);
+    const inward = -sx; // vers le corps
+    this.#mesh(blob(0.022, 0.04, 0.036), M.skin, g, 0, -0.032, 0);
+    const lens = [0.036, 0.046, 0.049, 0.044];
+    [-0.024, -0.008, 0.008, 0.024].forEach((z, i) => {
+      const f = this.#mesh(finger(lens[3 - i], 0.0095), M.skin, g, inward * 0.004, -0.064, z);
+      f.rotation.set(0, 0, inward * 0.32);
+    });
+    const th = this.#mesh(finger(0.034, 0.011), M.skin, g, inward * 0.012, -0.022, 0.034);
+    th.rotation.set(-0.7, 0, inward * 0.45);
+    return g;
+  }
+
+  // Visage : yeux en amande (iris, pupille, reflet), cils, sourcils, nez, bouche, oreilles.
+  #humanFace(face) {
+    const M = this.mats;
+    for (const sx of [-1, 1]) {
+      const eye = new THREE.Group();
+      eye.position.set(sx * 0.043, 0.014, 0.097);
+      eye.rotation.y = sx * 0.28;
+      face.add(eye);
+      this.#mesh(eyeWhite(0.021), M.white, eye);
+      this.#mesh(blob(0.0125, 0.0135, 0.006, 10), M.iris, eye, 0, -0.001, 0.0085);
+      this.#mesh(blob(0.0062, 0.0068, 0.004, 8), M.pupil, eye, 0, -0.001, 0.0118);
+      this.#mesh(blob(0.003, 0.003, 0.002, 6), M.white, eye, sx * -0.004, 0.004, 0.0138);
+      // Cils (trait sombre au-dessus de l'œil)
+      this.#mesh(arc(0.026, 0.0035, 2.0), M.pupil, eye, 0, -0.008, 0.002, 0, 0, Math.PI / 2 - 1.0);
+      // Sourcil (groupe orientable pour les expressions)
+      const brow = new THREE.Group();
+      brow.position.set(sx * 0.044, 0.048, 0.104);
+      brow.rotation.y = sx * 0.25;
+      face.add(brow);
+      this.#mesh(arc(0.032, 0.0055, 1.5), M.hair, brow, 0, -0.026, 0, 0, 0, Math.PI / 2 - 0.75);
+      (this.brows ||= []).push(brow);
+      // Oreilles
+      this.#mesh(blob(0.012, 0.026, 0.02, 10), M.skin, face, sx * 0.108, -0.004, -0.006, 0, sx * -0.3, 0);
+      this.#mesh(arc(0.014, 0.004, Math.PI * 1.4), M.skin2, face, sx * 0.116, -0.002, -0.004, 0, sx * Math.PI / 2, -0.3);
+    }
+    // Nez : arête + bout arrondi
+    this.#mesh(blob(0.011, 0.024, 0.012), M.skin, face, 0, -0.008, 0.115, -0.25);
+    this.#mesh(blob(0.014, 0.011, 0.012), M.skin, face, 0, -0.026, 0.121);
+    // Bouche : lèvre supérieure (sourire, sert aux expressions) + lèvre inférieure
+    this.mouth = this.#mesh(arc(0.017, 0.0045, Math.PI), M.mouth, face, 0, -0.049, 0.106, 0, 0, Math.PI);
+    this.#mesh(blob(0.012, 0.0045, 0.006), M.lip, face, 0, -0.068, 0.102);
+  }
+
+  // Cheveux : chevelure sculptée selon la coupe + quelques mèches de style.
+  #hair(face, style) {
+    if (style === 'none') return;
+    const M = this.mats;
+    const HAIR = {
+      messy: { front: 1.12, side: 1.5, back: 2.05, jag: 0.22, tufts: 9, lump: 0.1, flare: 0.06 },
+      short: { front: 1.02, side: 1.42, back: 1.95, jag: 0.06, tufts: 12, lump: 0.05 },
+      bob: { front: 1.12, side: 2.35, back: 2.3, jag: 0.07, tufts: 14, lump: 0.05, flare: 0.12 },
+      ponytail: { front: 0.98, side: 1.45, back: 1.85, jag: 0.04, tufts: 10, lump: 0.025 },
+    };
+    const key = HAIR[style] ? style : 'ponytail';
+    this.#mesh(hairShell(key, HAIR[key]), M.hair, face, 0, 0.004, -0.004);
+    const Y = new THREE.Vector3(0, 1, 0);
+    const add = (x, y, z, dir, len, r, bend, parent = face) => {
+      const m = this.#mesh(lock(len, r, bend), M.hair, parent, x, y, z);
+      m.quaternion.setFromUnitVectors(Y, new THREE.Vector3(...dir).normalize());
+      return m;
+    };
+    if (style === 'messy') {
+      // Épis sur le sommet, couchés vers l'arrière.
+      for (let i = 0; i < 5; i++) add((i - 2) * 0.03, 0.115, -0.02 - Math.abs(i - 2) * 0.01, [(i - 2) * 0.25, 0.7, -1], 0.07, 0.022, 0.5);
+      add(0.02, 0.11, 0.06, [0.3, 0.5, 1], 0.06, 0.02, -0.6);
+    } else if (style === 'ponytail') {
+      const tail = new THREE.Group();
+      tail.position.set(0, 0.05, -0.122);
+      face.add(tail);
+      this.#mesh(blob(0.022, 0.022, 0.022, 8), M.hoodie2, tail);
+      for (let i = 0; i < 3; i++) {
+        const m = this.#mesh(lock(0.22 - i * 0.03, 0.036 - i * 0.005, 0.3, (i - 1) * 0.2), M.hair, tail, (i - 1) * 0.008, 0, -0.006);
+        m.rotation.x = Math.PI - 0.2;
+      }
+      this.ponytail = tail;
+    }
+  }
+
+  // Tête de la forme Abysse : yeux lumineux effilés, crête, gueule crénelée.
   #umbraFace(face) {
     const M = this.mats;
     for (const sx of [-1, 1]) {
-      const eye = this.#mesh(new THREE.SphereGeometry(0.03, 10, 8), M.vein, face, sx * 0.05, 0.03, 0.1, 0, sx * 0.3, sx * -0.5);
-      eye.scale.set(1.9, 0.55, 0.5);
+      // Orbite sombre + œil effilé lumineux, incliné vers le centre.
+      this.#mesh(blob(0.042, 0.024, 0.016), M.maw, face, sx * 0.045, 0.026, 0.098, 0, sx * 0.3, sx * 0.38);
+      this.#mesh(blob(0.034, 0.012, 0.012), M.vein, face, sx * 0.046, 0.027, 0.108, 0, sx * 0.3, sx * 0.38);
     }
-    // Arête du crâne (crête) + cornes courtes
-    this.#mesh(new THREE.ConeGeometry(0.03, 0.12, 5), M.hoodie2, face, 0, 0.13, -0.02, -0.4);
-    for (const sx of [-1, 1]) this.#mesh(new THREE.ConeGeometry(0.022, 0.1, 5), M.hoodie2, face, sx * 0.08, 0.1, -0.03, -0.5, 0, sx * -0.6);
-    // Gueule : ouverture sombre + rangée de crocs (s'ouvre au rugissement).
+    // Crête et cornes effilées
+    const Y = new THREE.Vector3(0, 1, 0);
+    for (const [x, y, z, dx, dy, dz, len] of [[0, 0.11, -0.02, 0, 0.6, -1, 0.14], [-0.06, 0.09, -0.03, -0.6, 0.6, -0.8, 0.11], [0.06, 0.09, -0.03, 0.6, 0.6, -0.8, 0.11]]) {
+      const m = this.#mesh(lock(len, 0.022, 0.4), M.hoodie2, face, x, y, z);
+      m.quaternion.setFromUnitVectors(Y, new THREE.Vector3(dx, dy, dz).normalize());
+    }
+    // Gueule : ouverture sombre + deux rangées de crocs (s'ouvre au rugissement).
     const maw = new THREE.Group();
-    maw.position.set(0, -0.045, 0.098);
+    maw.position.set(0, -0.05, 0.096);
     face.add(maw);
-    const hole = this.#mesh(new THREE.SphereGeometry(0.06, 14, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), M.maw, maw, 0, 0.012, 0);
-    hole.scale.set(1.25, 0.55, 0.35);
-    for (let i = -3; i <= 3; i++) {
-      this.#mesh(new THREE.ConeGeometry(0.008, 0.026, 4), M.tooth, maw, i * 0.016, 0.0, 0.012, Math.PI);
-      this.#mesh(new THREE.ConeGeometry(0.007, 0.02, 4), M.tooth, maw, i * 0.016 + 0.008, -0.03 * (1 - Math.abs(i) / 5), 0.01);
+    const hole = this.#mesh(new THREE.SphereGeometry(0.068, 16, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), M.maw, maw, 0, 0.012, 0);
+    hole.scale.set(1.3, 0.55, 0.35);
+    for (let i = -4; i <= 4; i++) {
+      const c = 1 - Math.abs(i) / 6;
+      this.#mesh(new THREE.ConeGeometry(0.0075, 0.03 * c + 0.008, 5), M.tooth, maw, i * 0.0145, 0.0, 0.014 - Math.abs(i) * 0.002, Math.PI);
+      this.#mesh(new THREE.ConeGeometry(0.0065, 0.024 * c + 0.006, 5), M.tooth, maw, i * 0.0145 + 0.007, -0.032 * c, 0.012 - Math.abs(i) * 0.002);
     }
     this.maw = maw;
   }
 
   // Corps de la forme Abysse : épaules à pointes, veines cyan, griffes,
-  // tentacules dorsales animées.
+  // tentacules dorsales effilées et animées.
   #umbraBody(spine) {
     const M = this.mats;
+    const Y = new THREE.Vector3(0, 1, 0);
     for (const sx of [-1, 1]) {
-      this.#mesh(new THREE.ConeGeometry(0.05, 0.16, 5), M.hoodie2, this.joints['sh' + (sx < 0 ? 'R' : 'L')], sx * 0.04, 0.08, -0.02, 0, 0, sx * -0.9);
+      const sh = this.joints['sh' + (sx < 0 ? 'R' : 'L')];
+      for (const [y, a, len] of [[0.08, -0.9, 0.14], [0.03, -1.3, 0.1]]) {
+        const m = this.#mesh(lock(len, 0.03, 0.3), M.hoodie2, sh, sx * 0.04, y, -0.02);
+        m.quaternion.setFromUnitVectors(Y, new THREE.Vector3(sx * Math.sin(-a), Math.cos(a), -0.3).normalize());
+      }
       // Veines lumineuses sur le buste et les bras
-      this.#mesh(new THREE.TorusGeometry(0.2, 0.008, 4, 16, Math.PI * 0.8), M.vein, spine, sx * 0.02, 0.3, 0.02, 0, sx * 0.25, sx > 0 ? 1.2 : 2.0);
+      this.#mesh(new THREE.TorusGeometry(0.21, 0.007, 4, 18, Math.PI * 0.8), M.vein, spine, sx * 0.02, 0.3, 0.03, 0, sx * 0.25, sx > 0 ? 1.2 : 2.0);
+      this.#mesh(new THREE.TorusGeometry(0.16, 0.006, 4, 16, Math.PI * 0.6), M.vein, spine, sx * 0.03, 0.12, 0.04, 0, sx * 0.3, sx > 0 ? 1.0 : 2.2);
       const el = this.joints['el' + (sx < 0 ? 'R' : 'L')];
-      this.#mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.2, 4), M.vein, el, sx * -0.03, -0.12, 0.045, 0.1);
-      // Griffes : trois lames par main
-      for (let k = -1; k <= 1; k++) this.#mesh(new THREE.ConeGeometry(0.012, 0.12, 4), M.tooth, el, k * 0.025, -0.36, 0.035, Math.PI - 0.25);
+      this.#mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.2, 4), M.vein, el, sx * -0.04, -0.1, 0.06, 0.1);
+      // Griffes : trois lames recourbées par main
+      const hand = this.joints['hand' + (sx < 0 ? 'R' : 'L')];
+      for (let i = -1; i <= 1; i++) {
+        const c = this.#mesh(lock(0.09, 0.011, 0.5), M.tooth, hand, sx * -0.004, -0.07, i * 0.02);
+        c.quaternion.setFromUnitVectors(Y, new THREE.Vector3(0, -1, 0.35).normalize());
+      }
     }
-    this.#mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.28, 4), M.vein, spine, 0, 0.28, 0.16, 0.1);
-    // Tentacules : chaînes de 4 segments qui ondulent dans le dos.
+    this.#mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.3, 4), M.vein, spine, 0, 0.22, 0.19, 0.1);
+    // Éclat de cristal Aegis incrusté dans la poitrine (lumineux).
+    const shard = this.#mesh(new THREE.OctahedronGeometry(0.05, 0), M.vein, spine, 0, 0.36, 0.19);
+    shard.scale.set(0.8, 1.5, 0.45);
+    // Veines des jambes
+    for (const sx of [-1, 1]) {
+      this.#mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.34, 4), M.vein, this.joints['hip' + (sx < 0 ? 'R' : 'L')], sx * 0.05, -0.2, 0.08, 0.15);
+      this.#mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.3, 4), M.vein, this.joints['kn' + (sx < 0 ? 'R' : 'L')], sx * -0.04, -0.17, 0.07, -0.1);
+    }
+    // Tentacules : chaînes de 4 segments effilés qui ondulent dans le dos.
     this.tendrils = [];
     for (const [x, y, a] of [[-0.1, 0.45, -0.6], [0.1, 0.45, 0.6], [-0.07, 0.25, -1.1], [0.07, 0.25, 1.1]]) {
       let parent = this.#pivot('tnd' + this.tendrils.length, spine, x, y, -0.15);
       parent.rotation.set(-0.9, 0, a * 0.5);
       const chain = [parent];
       for (let i = 0; i < 4; i++) {
-        const r = 0.035 * (1 - i * 0.2);
-        this.#mesh(new THREE.CapsuleGeometry(r, 0.14, 3, 6), M.skin, parent, 0, 0.08, 0);
+        const r0 = 0.04 * (1 - i * 0.2);
+        const r1 = 0.04 * (1 - (i + 1) * 0.2);
+        this.#mesh(lathe(`tnd${i}`, [[r0, 0], [r0 * 1.05, 0.06], [(r0 + r1) / 2, 0.12], [Math.max(0.006, r1), 0.18]]), M.skin, parent);
         if (i < 3) {
           parent = this.#pivot('tnd' + this.tendrils.length + '_' + i, parent, 0, 0.17, 0);
           chain.push(parent);
-        } else this.#mesh(new THREE.ConeGeometry(r, 0.12, 5), M.vein, parent, 0, 0.2, 0);
+        } else this.#mesh(lock(0.14, Math.max(0.01, r1), 0.3), M.vein, parent, 0, 0.17, 0);
       }
       this.tendrils.push({ chain, a, seed: Math.random() * 6 });
     }
@@ -680,6 +780,8 @@ export class HeroModel {
       const open = s.anim === 'roar' || s.anim === 'transform' ? 1 : s.anim ? 0.5 : 0.15 + Math.sin(t * 2) * 0.05;
       this.maw.scale.y += (1 + open * 1.4 - this.maw.scale.y) * Math.min(1, dt * 12);
     }
+    // Veines de l'Abysse qui pulsent (plus vite en combat).
+    if (this.umbra) this.mats.vein.emissiveIntensity = 1.7 + Math.sin(t * (s.anim ? 9 : 3)) * 0.7;
     if (this.ponytail) this.ponytail.rotation.x = 0.35 + Math.min(1, sp) * 0.5 + Math.sin(t * 8) * 0.1 * Math.min(1, sp);
     this.setPhone(s.anim === 'phone');
   }

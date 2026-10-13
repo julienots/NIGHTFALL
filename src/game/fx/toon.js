@@ -6,7 +6,7 @@ let ramp = null;
 // Rampe d'ombrage : ombre colorée, ton moyen, pleine lumière.
 function gradientMap() {
   if (ramp) return ramp;
-  const data = new Uint8Array([90, 170, 255]);
+  const data = new Uint8Array([125, 195, 255]); // ombres plus douces et plus claires
   ramp = new THREE.DataTexture(data, data.length, 1, THREE.RedFormat);
   ramp.minFilter = ramp.magFilter = THREE.NearestFilter;
   ramp.needsUpdate = true;
