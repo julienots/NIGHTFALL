@@ -287,14 +287,16 @@ export class Game {
     const k = Math.max(0, kIn);
     const day = Math.max(0, -kIn);
     const c = (a, b, dayCol) => new THREE.Color(a).lerp(new THREE.Color(b), k).lerp(new THREE.Color(dayCol), day);
-    this.hemi.color.copy(c('#ffe0c8', '#d6d0ff', '#ffffff'));
-    this.hemi.groundColor.copy(c('#7a5a6a', '#6a4a5a', '#8a8070'));
-    this.hemi.intensity = 1.5 - k * 0.15 + day * 0.25;
-    this.moon.color.copy(c('#ffc08a', '#e8f0ff', '#fff6e6'));
-    this.moon.intensity = 2.0 - k * 0.4 + day * 0.5;
-    this.scene.fog.color.copy(c('#e8a0a8', '#4a2f7a', '#bcd6ff'));
-    this.scene.fog.density = 0.0035 + k * 0.002 - day * 0.001;
-    this.scene.background.copy(c('#e8a0a8', '#1a0d36', '#a8cdff'));
+    this.hemi.color.copy(c('#ffe0c8', '#c8d0ff', '#ffffff'));
+    this.hemi.groundColor.copy(c('#7a6a6a', '#5a5a78', '#9a9080'));
+    // Nuits moins sombres : lumière d'ambiance plus forte, brouillard bleu nuit.
+    this.hemi.intensity = 1.55 + k * 0.1 + day * 0.35;
+    this.moon.color.copy(c('#ffc08a', '#dfe8ff', '#fff4e0'));
+    this.moon.intensity = 2.0 - k * 0.3 + day * 0.9;
+    this.scene.fog.color.copy(c('#e8a8a0', '#3c4278', '#c4dcff'));
+    this.scene.fog.density = 0.0032 + k * 0.0012 - day * 0.0012;
+    this.scene.background.copy(c('#e8a0a8', '#1f2350', '#9cc8ff'));
+    this.renderer.toneMappingExposure = 1.0 + day * 0.12 + k * 0.08;
     this.audio.setRain?.(k > 0.5 && this.zone === 'city');
   }
 
@@ -305,6 +307,8 @@ export class Game {
   setPhase(phase, instant = true) {
     const prev = this.clock.phase;
     this.clock.phase = phase;
+    // Mode libre : une phase imposée (dormir…) recale l'horloge au début de la phase.
+    if (this.freeRoam && Game.phaseOfHour(this.clock.hour ?? 9) !== phase) this.clock.hour = { morning: 7, afternoon: 13, evening: 18.5, night: 21.5 }[phase];
     if (instant) this.setNight(Game.PHASE_SKY[phase]);
     else this.story.nightTween = { from: this.night ?? 0, to: Game.PHASE_SKY[phase], t: 0, dur: 3 };
     // La nuit, les créatures sortent ; le jour, elles se terrent.
@@ -325,7 +329,52 @@ export class Game {
   }
 
   clockLabel() {
+    if (this.freeRoam) {
+      const h = this.clock.hour ?? 9;
+      const mm = String(Math.floor((h % 1) * 60)).padStart(2, '0');
+      return `Jour ${this.clock.day} · ${Math.floor(h)}:${mm}`;
+    }
     return `Jour ${this.clock.day} · ${Game.PHASES[this.clock.phase]}`;
+  }
+
+  // ---------- Cycle jour / nuit continu (mode libre) ----------
+  // Une heure de jeu = HOUR_S secondes réelles (journée complète ≈ 24 min).
+  static HOUR_S = 60;
+  static SKY_KEYS = [[0, 1], [5, 1], [6.5, 0], [8, -1], [17.5, -1], [19.3, 0], [20.8, 1], [24, 1]];
+  static phaseOfHour(h) {
+    return h >= 6 && h < 12 ? 'morning' : h >= 12 && h < 18 ? 'afternoon' : h >= 18 && h < 21 ? 'evening' : 'night';
+  }
+  static skyOfHour(h) {
+    const K = Game.SKY_KEYS;
+    for (let i = 0; i < K.length - 1; i++) {
+      if (h <= K[i + 1][0]) {
+        const t = (h - K[i][0]) / (K[i + 1][0] - K[i][0]);
+        const e = t * t * (3 - 2 * t);
+        return K[i][1] + (K[i + 1][1] - K[i][1]) * e;
+      }
+    }
+    return 1;
+  }
+
+  get freeRoam() {
+    return !!this.story?.flags.has('freeRoam');
+  }
+
+  #tickClock(dt) {
+    if (!this.freeRoam || this.story.inCinematic) return;
+    const c = this.clock;
+    c.hour = (c.hour ?? 9) + dt / Game.HOUR_S;
+    if (c.hour >= 24) {
+      c.hour -= 24;
+      c.day++;
+    }
+    const ph = Game.phaseOfHour(c.hour);
+    if (ph !== c.phase) this.setPhase(ph);
+    this.skyT = (this.skyT || 0) - dt;
+    if (this.skyT <= 0 && !this.story.nightTween) {
+      this.skyT = 0.5;
+      this.setNight(Game.skyOfHour(c.hour));
+    }
   }
 
   // Passe à la phase suivante (dormir / attendre). night → matin du jour suivant.
@@ -604,6 +653,7 @@ export class Game {
 
     this.story.update(dt);
     this.social.update(dt);
+    this.#tickClock(dt);
     this.#updateTransition(dt);
     if (this.story.inCinematic && !this.social.active && (input.was('interact') || (input.usingPad && input.was('jump')))) this.story.skip();
     hero.update(dt, input, this.camYaw, this.camPitch);

@@ -123,6 +123,11 @@ export class Story {
     if (m04?.status === 'active' && m04.step === 2) this.#spawnUmbraTest(4 - m04.progress);
     this.#placeFriends();
     if (isNew === false && g.saveData && !g.saveData.social && this.lifeMode()) g.hud.toast(g.clockLabel());
+    // Mode libre : pas de séquence imposée, juste un titre.
+    if (this.flags.has('freeRoam') && !this.flags.has('freeIntro')) {
+      this.flags.add('freeIntro');
+      g.hud.chapter('MODE LIBRE', 'Vesper', 'Explore la ville, entre dans les boutiques, protège les habitants. La nuit, les créatures sortent.', 5);
+    }
     // Départ du chapitre 2 (sélection de chapitre) : réveil dans la chambre.
     if (this.flags.has('skipIntro') && this.lifeMode() && g.zone === 'home' && !this.missions.stepReached('d01_double_life', 1)) {
       this.flags.delete('skipIntro');

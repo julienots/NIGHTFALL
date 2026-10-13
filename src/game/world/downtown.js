@@ -32,9 +32,9 @@ export function buildDowntown(scene, col, quality) {
     map: asphalt.map,
   });
   const sidewalkMat = M({ map: sidewalkTexture() });
-  const concreteMat = M({ color: '#8f8bc4' });
-  const darkMetal = M({ color: '#3a2f6b' });
-  const roofMat = M({ color: '#4a3f7a' });
+  const concreteMat = M({ color: '#aeaab9' });
+  const darkMetal = M({ color: '#454056' });
+  const roofMat = M({ color: '#5a5568' });
   const barrierMat = M({ color: '#f2efe6' });
   const stripeMat = M({ color: '#ff8a3d' });
 
@@ -617,9 +617,10 @@ export function buildDowntown(scene, col, quality) {
           float h = clamp(vDir.y, -0.1, 1.0);
           // Dégradé cartoon en bandes : indigo > violet > rose à l'horizon
           float k = floor(pow(max(h, 0.0), 0.45) * 7.0) / 7.0;
-          vec3 top = vec3(0.07, 0.04, 0.2);
-          vec3 mid = vec3(0.22, 0.1, 0.42);
-          vec3 hor = vec3(0.85, 0.36, 0.6);
+          // Nuit : bleu profond, horizon éclairé par la ville (moins sombre).
+          vec3 top = vec3(0.07, 0.1, 0.26);
+          vec3 mid = vec3(0.16, 0.2, 0.46);
+          vec3 hor = vec3(0.55, 0.42, 0.72);
           vec3 col = k < 0.3 ? mix(hor, mid, k / 0.3) : mix(mid, top, (k - 0.3) / 0.7);
           // Crépuscule (avant le Nightfall) : bleu, rose et orange chauds.
           vec3 dTop = vec3(0.24, 0.32, 0.68), dMid = vec3(0.85, 0.48, 0.66), dHor = vec3(1.0, 0.68, 0.42);

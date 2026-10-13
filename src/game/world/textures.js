@@ -136,13 +136,13 @@ export function asphaltTextures() {
   const S = 512;
   const [c, x] = canvas(S, S);
   const [r, rx] = canvas(S, S);
-  x.fillStyle = '#3b3561';
+  x.fillStyle = '#4a4b5e';
   x.fillRect(0, 0, S, S);
   rx.fillStyle = '#d0d0d0';
   rx.fillRect(0, 0, S, S);
   // Taches plus claires (usure) en formes rondes
   for (let i = 0; i < 40; i++) {
-    x.fillStyle = `rgba(120,110,190,${0.08 + rand() * 0.08})`;
+    x.fillStyle = `rgba(150,148,170,${0.08 + rand() * 0.08})`;
     x.beginPath();
     x.ellipse(rand() * S, rand() * S, 10 + rand() * 40, 6 + rand() * 20, rand() * 3, 0, Math.PI * 2);
     x.fill();
@@ -153,7 +153,7 @@ export function asphaltTextures() {
     const py = rand() * S;
     const a = 18 + rand() * 30;
     const b = a * (0.4 + rand() * 0.3);
-    x.fillStyle = '#5a5fa8';
+    x.fillStyle = '#5c6684';
     x.beginPath();
     x.ellipse(px, py, a, b, 0, 0, Math.PI * 2);
     x.fill();
@@ -168,7 +168,7 @@ export function asphaltTextures() {
     rx.fill();
   }
   // Fissures épaisses arrondies
-  x.strokeStyle = '#231d45';
+  x.strokeStyle = '#2e2e3e';
   x.lineCap = x.lineJoin = 'round';
   for (let i = 0; i < 10; i++) {
     x.lineWidth = 2 + rand() * 2;
@@ -193,9 +193,9 @@ export function sidewalkTexture() {
   const rand = mulberry32(11);
   const S = 256;
   const [c, x] = canvas(S, S);
-  x.fillStyle = '#4b4880';
+  x.fillStyle = '#6b6878';
   x.fillRect(0, 0, S, S);
-  const tiles = ['#7a76b8', '#8480c2', '#706cae'];
+  const tiles = ['#a9a5b6', '#b3afbf', '#9f9bae'];
   for (let i = 0; i < 4; i++) {
     for (let j = 0; j < 4; j++) {
       x.fillStyle = tiles[Math.floor(rand() * tiles.length)];

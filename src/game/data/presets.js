@@ -38,6 +38,26 @@ export function chapterPreset(ch) {
       storyFlags: ['skipIntro'],
     };
   }
+  // Mode libre : tous les pouvoirs, la ville en plein jour, horloge qui tourne ;
+  // l'histoire principale est passée, les missions secondaires restent ouvertes.
+  if (ch === 'free') {
+    return {
+      ...base,
+      hero: { x: 0, y: 0.15, z: 24, yaw: Math.PI, hp: 999, energy: 100, abyss: 100 },
+      inventory: {
+        credits: 1500, shards: 30,
+        items: [item('amber_knuckles', 1), item('street_jacket', 2), item('eclipse_gauntlets', 3), item('hoodie_midnight', 4)],
+        stacks: { medkit: 5, gift_flowers: 2, gift_choco: 2, gift_starmap: 1, gift_game: 1 },
+        equipped: { weapon: 3, armor: 2, skin: null },
+        nextUid: 5,
+      },
+      progression: { level: 10, xp: 0, skillPoints: 6 },
+      missions: missionsUntil('d01_double_life'),
+      opened: ['crate_tactical_1', 'boss_cache'],
+      clock: { day: 1, phase: 'morning', hour: 9 },
+      storyFlags: ['freeRoam'],
+    };
+  }
   // Chapitre 2 : le lendemain matin, dans la chambre de Noa.
   return {
     ...base,
