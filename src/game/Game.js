@@ -1230,7 +1230,7 @@ export class Game {
     this.grantXp(def.xp);
     this.missionEvents(this.missions.handle({ type: 'kill', group: e.spawn.group, enemyType: e.type }));
     // Seules les créatures « de quartier » réapparaissent (pas celles des missions).
-    if (['alley', 'avenue', 'corvin', 'north', 'park', 'port', 'industrial', 'suburb', 'stadium'].includes(e.spawn.group) && this.clock.phase === 'night') this.respawnQueue.push({ spawn: e.spawn, t: 75 });
+    if (['alley', 'avenue', 'corvin', 'north', 'park', 'port', 'industrial', 'suburb', 'stadium', 'marina'].includes(e.spawn.group) && this.clock.phase === 'night') this.respawnQueue.push({ spawn: e.spawn, t: 75 });
     if (e === this.boss) this.boss = null;
   }
 

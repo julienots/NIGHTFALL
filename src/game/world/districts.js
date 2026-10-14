@@ -241,7 +241,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     lawn: M({ map: T.grass, color: '#e8ffe0', polygonOffset: true, polygonOffsetFactor: -1 }),
     path: M({ color: '#d9b88f', polygonOffset: true, polygonOffsetFactor: -2 }),
     dirt: M({ color: '#a8805a', polygonOffset: true, polygonOffsetFactor: -2 }),
-    sand: M({ color: '#ecd29a', polygonOffset: true, polygonOffsetFactor: -2 }),
+    sand: M({ color: '#d8b984', polygonOffset: true, polygonOffsetFactor: -2 }),
     asphalt: M({ color: '#4d4e60', polygonOffset: true, polygonOffsetFactor: -1 }),
     lines: M({ color: '#f4efe0', polygonOffset: true, polygonOffsetFactor: -3 }),
     track: M({ color: '#c4573f', polygonOffset: true, polygonOffsetFactor: -1 }),
@@ -280,7 +280,8 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     ubase: () => geo('ubase', () => new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)),
     trunk: () => geo('trunk', () => new THREE.CylinderGeometry(0.6, 1, 1, 6).translate(0, 0.5, 0)),
     pole: () => geo('pole', () => new THREE.CylinderGeometry(0.07, 0.11, 1, 6).translate(0, 0.5, 0)),
-    ball: () => geo('ball', () => new THREE.IcosahedronGeometry(1, 1)),
+    // Feuillages et boules : plus arrondis en qualité élevée.
+    ball: () => geo('ball', () => new THREE.IcosahedronGeometry(1, quality === 'high' ? 2 : 1)),
     ball0: () => geo('ball0', () => new THREE.IcosahedronGeometry(1, 0)),
     cyl: () => geo('cyl', () => new THREE.CylinderGeometry(1, 1, 1, 10).translate(0, 0.5, 0)),
     crown: () => geo('crown', () => mergeGeometries([[0, 0.08, 0, 1.02], [0.62, -0.25, 0.22, 0.7], [-0.58, -0.18, -0.28, 0.74]]
@@ -1919,15 +1920,107 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     const g = d.group;
     flat(g, 208, -208, 300, 300, 0.02, MAT.grass, 8);
     const free = [hill(d, 272, -120, 45, 0.45, '#4f8f5a'), hill(d, 285, 75, 50, 0.5, '#4a8a62'), hill(d, 262, 190, 40, 0.42, '#5a9a5a'), hill(d, 300, 270, 55, 0.5, '#4f8f5a')];
-    d.paths.push(...ribbon(g, [[208, 0], [230, 1], [250, -3], [272, 2], [290, 0]], 4.5, 0.05, MAT.dirt));
-    for (const z of [-2.6, 2.6]) cbox(g, 289, 0, z, 0.3, 1.2, 0.3, MAT.woodDark);
-    cbox(g, 289, 0.9, 0, 0.15, 0.4, 6, mat('#ff8a3d'), { colY0: 0, colH: 1.3 });
-    sign(g, 'ROUTE FERMÉE', '#ffffff', '#d8453f', 288.9, 1.9, 0, -Math.PI / 2, 4, 1);
-    const ok = (x, z) => free.every((f) => f(x, z)) && !d.nearPath(x, z, 4);
+    // Avenue de la Marina : prolonge l'avenue centrale jusqu'au nouveau quartier.
+    flat(g, 208, -7, 300, 7, 0.03, MAT.asphalt, 6);
+    for (const z0 of [7, -10]) slab(d, 208, z0, 300, z0 + 3, MAT.paveCold);
+    d.paths.push([208, 0], [230, 0], [250, 0], [270, 0], [290, 0]);
+    for (let x = 214; x < 300; x += 6) flat(g, x, -0.25, x + 3.3, 0.25, 0.05, MAT.lines, 1);
+    for (let x = 218; x < 300; x += 24) for (const z of [8.5, -8.5]) postLamp(d, x, S, z, { light: !low && x % 48 === 26, cold: true });
+    sign(g, 'VESPER-EST · MARINA →', '#ffffff', '#2f6f8a', 230, 2.4, 10.3, Math.PI, 6, 1.1);
+    const ok = (x, z) => free.every((f) => f(x, z)) && !d.nearPath(x, z, 4) && Math.abs(z) > 13;
     scatterTrees(d, Math.round(220 * Q), 213, -205, 296, 296, ok, 'round', 1.2, 2.0, 0);
     scatterTrees(d, Math.round(60 * Q), 213, -205, 296, 296, ok, 'pine', 1.1, 1.6, 0);
     d.finish();
   }
+  // =====================================================================
+  // 9. VESPER-EST · MARINA (x 300..470, z -150..150) — v1.7
+  // Avenue, îlots d'immeubles avec commerces visitables, place à fontaine,
+  // promenade en planches, plage, ponton et mer.
+  // =====================================================================
+  {
+    const d = district('marina', [300, -150, 470, 150]);
+    const g = d.group;
+    const kit = d.useKit();
+    flat(g, 300, -150, 470, 150, 0.01, MAT.grass, 8);
+    // Avenue principale (z = 0) et deux rues transversales (x = 340, x = 395)
+    flat(g, 300, -7, 432, 7, 0.03, MAT.asphalt, 6);
+    for (const x of [340, 395]) flat(g, x - 6, -140, x + 6, 140, 0.03, MAT.asphalt, 6);
+    for (let x = 304; x < 430; x += 6) flat(g, x, -0.25, x + 3.3, 0.25, 0.05, MAT.lines, 1);
+    for (const x of [340, 395]) for (let z = -136; z < 136; z += 6) if (Math.abs(z) > 9) flat(g, x - 0.25, z, x + 0.25, z + 3.3, 0.05, MAT.lines, 1);
+    // Passages piétons
+    for (const x of [340, 395]) for (const z of [-8.5, 8.5]) for (let k = -5; k <= 5; k += 1.2) flat(g, x + k - 0.35, z - 1.2, x + k + 0.35, z + 1.2, 0.05, MAT.lines, 1);
+    // Îlots : trottoirs + immeubles (les vitrines deviennent des portes praticables)
+    const blocks = [
+      [303, 10, 334, 60], [346, 10, 389, 60], [401, 10, 428, 60],
+      [303, -60, 334, -10], [346, -60, 389, -10], [401, -60, 428, -10],
+      [303, 66, 334, 138], [346, 66, 389, 138], [303, -138, 334, -66], [346, -138, 389, -66],
+    ];
+    const styles = ['stucco', 'brick', 'artdeco', 'stucco', 'brick', 'office'];
+    blocks.forEach(([x0, z0, x1, z1], i) => {
+      slab(d, x0, z0, x1, z1, i % 2 ? MAT.paveWarm : MAT.paveCold);
+      if (low && i > 7) return;
+      const h = 10 + ((i * 7) % 4) * 5;
+      const style = styles[i % styles.length];
+      // Façade côté avenue (z proche de 0) : rez-de-chaussée commerçant.
+      const near = z0 > 0 ? [x0 + 2, z0 + 2, x1 - 2, Math.min(z1 - 2, z0 + 20)] : [x0 + 2, Math.max(z0 + 2, z1 - 20), x1 - 2, z1 - 2];
+      kit.building(near[0], near[1], near[2], near[3], h, style === 'office' ? 'glass' : style, { style, seed: i % 2 });
+      for (const [x, z] of [[x0 + 1.2, z0 + 1.2], [x1 - 1.2, z0 + 1.2], [x0 + 1.2, z1 - 1.2], [x1 - 1.2, z1 - 1.2]]) postLamp(d, x, S, z, { light: !low && i % 3 === 0 && x === x0 + 1.2 && z === z0 + 1.2 });
+      d.paths.push([(x0 + x1) / 2, z0 + 0.8], [(x0 + x1) / 2, z1 - 0.8]);
+    });
+    // Place de la Marina : fontaine, bancs, arbres
+    slab(d, 401, 66, 428, 138, MAT.plaza);
+    const fx = 414.5;
+    const fz = 100;
+    cbox(g, fx, S, fz, 7, 0.7, 7, MAT.stone, { cast: true });
+    flat(g, fx - 3.2, fz - 3.2, fx + 3.2, fz + 3.2, S + 0.66, MAT.water, 2);
+    cbox(g, fx, S + 0.7, fz, 1.2, 2.2, 1.2, MAT.stone, { collide: false, cast: true });
+    d.I('fountainTop', G.ball, mat('#9fd8ff', { emissive: '#5fb7ff', emissiveIntensity: 0.6 })).add(fx, S + 3.1, fz, 0, 0.9, 0.5, 0.9);
+    for (const [x, z, yaw] of [[407, 92, Math.PI / 2], [422, 92, -Math.PI / 2], [407, 108, Math.PI / 2], [422, 108, -Math.PI / 2]]) bench(d, x, z, yaw);
+    for (const [x, z] of [[404, 70], [425, 70], [404, 134], [425, 134], [404, 118], [425, 82]]) tree(d, 'round', x, S, z, 1.2);
+    sign(g, 'PLACE DE LA MARINA', '#ffffff', '#2f6f8a', 414.5, 3.2, 66.4, Math.PI, 7, 1.2);
+    // Parc côté sud
+    slab(d, 401, -138, 428, -66, MAT.lawn);
+    for (let i = 0; i < 10; i++) tree(d, i % 3 ? 'round' : 'pine', 404 + (i % 3) * 10, S, -132 + Math.floor(i / 3) * 18, 1 + (i % 2) * 0.3);
+    // Promenade en planches + plage + mer (x 432..470)
+    box(g, 432, 0, -150, 440, S + 0.1, 150, MAT.wood, { tile: 2 });
+    flat(g, 440, -150, 458, 150, 0.02, MAT.sand, 6);
+    flat(g, 458, -150, 520, 150, -0.6, MAT.water, 12);
+    col.addBox({ x: 459, y: 0, z: -150 }, { x: 461, y: 200, z: 150 }, 'water');
+    for (let z = -146; z <= 146; z += low ? 6 : 3) d.I('rpost', G.ubase, MAT.white).add(432.2, S + 0.1, z, 0, 0.07, 1.0, 0.07);
+    // Ponton qui s'avance dans la mer (on peut y marcher)
+    box(g, 455, 0, -3, 500, S + 0.35, 3, MAT.woodDark, { tile: 2 });
+    col.addBox({ x: 461, y: 0, z: -3 }, { x: 500, y: S + 0.35, z: 3 }, 'pier');
+    for (let x = 458; x <= 498; x += 5) for (const z of [-3, 3]) cbox(g, x, -1.2, z, 0.35, 2.4, 0.35, MAT.woodDark, { collide: false });
+    // Phare au bout du ponton
+    cbox(g, 497, S + 0.35, 0, 2.4, 9, 2.4, mat('#f4f0e8'), { cast: true });
+    for (let k = 0; k < 3; k++) cbox(g, 497, S + 1.6 + k * 2.6, 0, 2.5, 0.9, 2.5, mat('#e8453f'), { collide: false });
+    d.I('lightHead', G.ball, mat('#fff4c0', { emissive: '#ffd27a', emissiveIntensity: 1.6 })).add(497, S + 10, 0, 0, 1.2, 1.0, 1.2);
+    // Parasols et transats sur la plage
+    for (let i = 0; i < Math.round(14 * Q + 4); i++) {
+      const z = -140 + i * 20 + (i % 2) * 6;
+      const x = 446 + (i % 3) * 3.5;
+      cbox(g, x, 0, z, 0.08, 2.4, 0.08, MAT.white, { collide: false });
+      d.I('parasol', () => geo('parasol', () => new THREE.ConeGeometry(1.6, 0.7, 10)), mat(['#ff6fa8', '#ffcd20', '#5fb7c9', '#6fcf97'][i % 4])).add(x, 2.6, z);
+      cbox(g, x + 1.2, 0.2, z, 0.7, 0.2, 1.8, mat('#f4f0e8'), { collide: false });
+    }
+    // Kiosque à glaces
+    box(g, 434, S, 20, 438, 2.6, 26, mat('#ff9cf0'), { cast: true });
+    gableRoof(g, 436, 23, 2.6, 6.6, 4.6, 1.2, mat('#ff9cf0'), mat('#ffffff'), false);
+    sign(g, 'GLACES', '#ffffff', '#ff6fa8', 433.9, 2.0, 23, -Math.PI / 2, 3, 0.7);
+    // Vie du quartier : promeneurs (jour) et créatures (nuit)
+    npcRoutes.push(
+      [[303, 8.4], [430, 8.4]], [[430, -8.4], [303, -8.4]], [[436, -140], [436, 140]], [[436, 120], [436, -120]],
+      [[347.5, 12], [347.5, 136], [332.5, 136], [332.5, 12]], [[402.5, -12], [402.5, -136], [387.5, -136]],
+      [[406, 72], [424, 72], [424, 132], [406, 132]], [[448, -100], [452, 0], [446, 100]],
+    );
+    enemySpawns.push(
+      { after: 'p03_rings', type: 'stalker', x: 365, z: 0, group: 'marina', patrol: [[365, 0], [410, 0], [395, 60]] },
+      { after: 'p03_rings', type: 'crawler', x: 414, z: 120, group: 'marina', patrol: [[414, 120], [414, 75]] },
+      { after: 'p03_rings', type: 'brute', x: 448, z: -60, group: 'marina', patrol: [[448, -60], [448, 40]] },
+    );
+    d.finish();
+  }
+
   // --- Sud : champs, ferme, moulin, épouvantail ---
   let windmill = null;
   {
