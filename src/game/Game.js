@@ -36,6 +36,8 @@ import { Story } from './story/story.js';
 import { Magnetism, STORM } from './systems/magnetism.js';
 import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { Menus } from './ui/menus.js';
+import { Police } from './systems/police.js';
+import { Fighter } from './actors/fighter.js';
 import './ui/game.css';
 
 const BASE_STATS = { maxHp: 120, maxEnergy: 100, damage: 8, defense: 0, energyGain: 0, powerDamage: 0 };
@@ -227,6 +229,8 @@ export class Game {
       this.social.next();
     }, true);
     this.menus = new Menus(this);
+    this.police = new Police(this);
+    this.allies = []; // héros alliés (mode créatif)
     this.applySettings();
     addEventListener('resize', () => this.#resize());
     this.#resize();
@@ -559,6 +563,38 @@ export class Game {
     if (d.scale !== prev) this.#resize();
   }
 
+  // ---------- Cibles ----------
+  // Ce que Noa vise automatiquement : créatures, et policiers s'il est recherché.
+  aimTargets() {
+    if (!this.police?.officers.length) return this.enemies;
+    return [...this.enemies, ...this.police.officers.filter((o) => o.alive)];
+  }
+
+  // Ce que ses coups peuvent toucher : en plus, les passants (en ville).
+  hittables() {
+    const list = this.aimTargets();
+    // (pendant le prologue et le tutoriel, Noa ne s'en prend pas aux passants)
+    if (this.zone !== 'city' || !this.story || this.story.stage() !== 'free') return list;
+    return [...list, ...this.story.npcs.filter((n) => n.alive && n.mode !== 'gone' && n.model.root.visible)];
+  }
+
+  // Panique : les passants proches d'une violence s'enfuient.
+  panic(pos, r = 15) {
+    for (const n of this.story?.npcs || []) {
+      if (n.alive && n.mode !== 'gone' && Math.hypot(n.pos.x - pos.x, n.pos.z - pos.z) < r) n.flee(pos);
+    }
+  }
+
+  // Fait apparaître un héros allié près de Noa.
+  spawnAlly(heroId) {
+    const h = this.hero.pos;
+    const a = Math.random() * Math.PI * 2;
+    const f = new Fighter(this, { kind: 'hero', heroId, x: h.x + Math.sin(a) * 3, z: h.z + Math.cos(a) * 3 });
+    this.allies.push(f);
+    this.fx.ring(f.pos, { color: f.def.color, from: 0.3, to: 4, life: 0.5 });
+    return f;
+  }
+
   // ---------- Statistiques ----------
   recomputeStats() {
     const lv = this.progression.levelStats();
@@ -678,6 +714,11 @@ export class Game {
     this.heroNoise = hero.action?.kind === 'power' ? 2 : hero.action?.kind === 'attack' ? 1.2 : input.is('sprint') && moving > 7 ? 1 : moving > 3 ? 0.35 : 0;
 
     for (const e of this.enemies) e.update(dt);
+    this.police.update(dt);
+    for (const a of this.allies) {
+      a.update(dt, this.allies);
+      a.model.root.visible = this.zone === 'city';
+    }
     this.#separateEnemies();
     for (const c of this.crates) {
       c.root.visible = hero.powers.rings && !this.crateHidden(c);

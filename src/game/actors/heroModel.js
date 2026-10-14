@@ -218,6 +218,14 @@ export const ATTACK_ANIMS = {
 
 // Palettes : héros + passants.
 export const PALETTES = {
+  // Police de Vesper : uniforme bleu nuit, casquette, insigne doré.
+  police: { skin: '#d9a07a', hair: '#2b1d16', hoodie: '#24407a', hoodie2: '#162a52', pants: '#1d2440', shoe: '#1d1d24', sole: '#1d1d24', bag: null, hairStyle: 'short', cap: '#162a52', emblem: '#ffcd20' },
+  policeB: { skin: '#7a4f32', hair: '#1a1210', hoodie: '#24407a', hoodie2: '#162a52', pants: '#1d2440', shoe: '#1d1d24', sole: '#1d1d24', bag: null, hairStyle: 'bob', cap: '#162a52', emblem: '#ffcd20' },
+  // Héros de Vesper (créations originales) : combinaison, masque, cape, emblème.
+  volt: { skin: '#e8b48a', hair: '#e8d6a0', hoodie: '#ffcd20', hoodie2: '#1d1d24', pants: '#1d1d24', shoe: '#ffcd20', sole: '#1d1d24', bag: null, hairStyle: 'messy', mask: '#1d1d24', emblem: '#7fe3ff' },
+  brasier: { skin: '#a8714a', hair: '#1a1210', hoodie: '#e8553f', hoodie2: '#ffcd20', pants: '#5a1a14', shoe: '#2b1d16', sole: '#ffb347', bag: null, hairStyle: 'short', mask: '#2b1d16', cape: '#ffb347', emblem: '#ffcd20' },
+  rempart: { skin: '#f2c6a0', hair: '#c9563f', hoodie: '#3f6fd1', hoodie2: '#dfe6f5', pants: '#1d2b5a', shoe: '#dfe6f5', sole: '#1d2b5a', bag: null, hairStyle: 'bob', cape: '#1d2b5a', emblem: '#ffffff' },
+  spectre: { skin: '#c98b5e', hair: '#1a1210', hoodie: '#2b2f3a', hoodie2: '#7a5cff', pants: '#1d1d24', shoe: '#1d1d24', sole: '#7a5cff', bag: null, hairStyle: 'ponytail', mask: '#7a5cff', cape: '#3a1d6e', emblem: '#b48cff' },
   noa: { skin: '#e8b48a', hair: '#2b1d16', hoodie: '#2f8f9f', hoodie2: '#246f7c', pants: '#3a5ba8', shoe: '#f2efe6', sole: '#e8553f', bag: '#ff9a3d', hairStyle: 'messy' },
   ines: { skin: '#a8714a', hair: '#1a1210', hoodie: '#f2b84b', hoodie2: '#d99a2e', pants: '#2b2b4a', shoe: '#f2efe6', sole: '#7b4ad6', bag: null, hairStyle: 'ponytail' },
   malik: { skin: '#7a4f32', hair: '#1a1210', hoodie: '#e8553f', hoodie2: '#b93e2c', pants: '#2b2b4a', shoe: '#1d1d24', sole: '#f2efe6', bag: '#3a3a4a', hairStyle: 'short' },
@@ -282,7 +290,7 @@ export class HeroModel {
       if (o.isMesh) o.castShadow = true;
     });
     // Fusion des pièces fixes de chaque articulation (≈ 3x moins d'appels de dessin).
-    bakeJoints(this.root, new Set([this.phone, this.mouth, this.ponytail, this.bagFlap, ...(this.brows || [])].filter(Boolean)));
+    bakeJoints(this.root, new Set([this.phone, this.mouth, this.ponytail, this.bagFlap, this.cape, ...(this.brows || [])].filter(Boolean)));
   }
 
   // Infection par la substance de l'Abysse : un shader recouvre peu à peu le
@@ -417,6 +425,7 @@ export class HeroModel {
     if (!U) this.#humanFace(face);
     else this.#umbraFace(face);
     if (!U) this.#hair(face, P.hairStyle);
+    if (!U) this.#accessories(spine, face, P);
 
     // Bras : manches galbées, poignets, mains à cinq doigts
     const arm = U
@@ -516,6 +525,34 @@ export class HeroModel {
     // Bouche : lèvre supérieure (sourire, sert aux expressions) + lèvre inférieure
     this.mouth = this.#mesh(arc(0.017, 0.0045, Math.PI), M.mouth, face, 0, -0.049, 0.106, 0, 0, Math.PI);
     this.#mesh(blob(0.012, 0.0045, 0.006), M.lip, face, 0, -0.068, 0.102);
+  }
+
+  // Casquette (police), masque, cape et emblème lumineux (héros).
+  #accessories(spine, face, P) {
+    const M = this.mats;
+    if (P.cap) {
+      const cm = toon(P.cap, { rim: '#9fd8ff', rimStrength: 0.5, shared: false });
+      this.#mesh(new THREE.CylinderGeometry(0.128, 0.134, 0.07, 18), cm, face, 0, 0.1, -0.005);
+      this.#mesh(new THREE.SphereGeometry(0.128, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2), cm, face, 0, 0.135, -0.005).scale.y = 0.45;
+      this.#mesh(blob(0.08, 0.008, 0.06), cm, face, 0, 0.07, 0.115, -0.15);
+      this.#mesh(blob(0.016, 0.018, 0.006), toon('#ffcd20', { emissive: '#ffcd20', emissiveIntensity: 0.4 }), face, 0, 0.11, 0.128);
+    }
+    if (P.mask) {
+      const mm = toon(P.mask, { shared: false });
+      this.#mesh(blob(0.112, 0.03, 0.06), mm, face, 0, 0.016, 0.07);
+    }
+    if (P.cape) {
+      const cp = toon(P.cape, { rim: '#ffffff', rimStrength: 0.4, shared: false, side: THREE.DoubleSide });
+      const g = new THREE.CylinderGeometry(0.2, 0.36, 1.05, 16, 4, true, Math.PI * 0.6, Math.PI * 0.8);
+      g.translate(0, -0.52, 0);
+      this.cape = this.#mesh(g, cp, spine, 0, 0.52, -0.02);
+      this.cape.scale.set(1.1, 1, 0.75);
+    }
+    if (P.emblem) {
+      const em = toon(P.emblem, { emissive: P.emblem, emissiveIntensity: 1.2, shared: false });
+      const e = this.#mesh(new THREE.OctahedronGeometry(0.045, 0), em, spine, P.cap ? 0.09 : 0, P.cap ? 0.42 : 0.36, 0.15);
+      e.scale.set(1, P.cap ? 1 : 1.3, 0.35);
+    }
   }
 
   // Cheveux : chevelure sculptée selon la coupe + quelques mèches de style.
@@ -917,6 +954,8 @@ export class HeroModel {
     }
     // Veines de l'Abysse qui pulsent (plus vite en combat).
     if (this.umbra) this.mats.vein.emissiveIntensity = 1.7 + Math.sin(t * (s.anim ? 9 : 3)) * 0.7;
+    // Cape : flotte vers l'arrière avec la vitesse.
+    if (this.cape) this.cape.rotation.x = -0.08 - Math.min(1.4, sp) * 0.55 - Math.sin(t * 7) * 0.05 * Math.min(1, sp + 0.2);
     if (this.ponytail) this.ponytail.rotation.x = 0.35 + Math.min(1, sp) * 0.5 + Math.sin(t * 8) * 0.1 * Math.min(1, sp);
     this.setPhone(s.anim === 'phone');
   }

@@ -45,8 +45,37 @@ export class Npc {
     this.goneT = 0;
     this.radius = 0.35;
     this.chat = !!def.chat; // membre d'un groupe qui discute : gestes de temps en temps
+    // Les passants anonymes peuvent être frappés (K.O. cartoon, sans gore).
+    this.hp = 40;
+    this.alive = true;
+    this.koT = 0;
+    this.knock = new THREE.Vector3();
+    this.def = { height: 1.75, name: 'Passant' };
     this.wait = def.wait ?? this.wait;
     game.scene.add(this.model.root);
+  }
+
+  // Coup reçu de Noa : recul, sursaut, K.O. sous 40 PV. Signale le délit à la police.
+  takeHit({ damage, dir, knock = 3 }) {
+    if (!this.alive || this.name) return false;
+    const g = this.game;
+    this.hp -= damage;
+    this.knock.copy(dir).multiplyScalar(Math.min(14, 3 + knock * 0.8));
+    g.fx.hitSpark({ x: this.pos.x - dir.x * 0.3, y: this.pos.y + 1.2, z: this.pos.z - dir.z * 0.3 }, '#ffffff', damage > 30);
+    g.audio.hit(this.pos, damage > 30);
+    if (this.hp <= 0) {
+      this.alive = false;
+      this.koT = 0;
+      this.mode = 'ko';
+      g.fx.starBurst({ x: this.pos.x, y: this.pos.y + 1.4, z: this.pos.z }, '#fff27a', 1.4);
+      g.police?.crime(2, this.pos);
+    } else {
+      this.play('scared', 0.5);
+      this.flee(g.hero.pos);
+      g.police?.crime(1, this.pos);
+    }
+    g.panic?.(this.pos, 18);
+    return true;
   }
 
   play(anim, dur) {
@@ -61,8 +90,9 @@ export class Npc {
 
   // Panique : court loin du point donné puis disparaît.
   flee(from) {
-    if (this.mode === 'flee' || this.mode === 'gone') return;
+    if (this.mode === 'flee' || this.mode === 'gone' || this.mode === 'ko') return;
     this.mode = 'flee';
+    this.goneT = 0;
     const away = new THREE.Vector3(this.pos.x - from.x, 0, this.pos.z - from.z).normalize();
     this.fleeTo = this.pos.clone().addScaledVector(away, 60);
     this.speed = 6.5 + Math.random() * 1.5;
@@ -91,6 +121,21 @@ export class Npc {
     if (this.mode === 'gone') {
       this.model.root.visible = false;
       return;
+    }
+    if (this.mode === 'ko') {
+      // Au sol quelques secondes, puis disparaît (évacué).
+      this.koT += dt;
+      this.knock.multiplyScalar(Math.exp(-5 * dt));
+      this.game.col.moveCylinder(this.pos, this.radius, 1.7, this.knock.x * dt, this.knock.z * dt);
+      this.model.animate({ dt, speed: 0, phase: this.phase, airborne: false, vy: 0, dead: true, deadP: Math.min(1, this.koT * 1.5) });
+      this.model.root.position.copy(this.pos);
+      this.model.root.rotation.y = this.yaw;
+      if (this.koT > 8) this.mode = 'gone';
+      return;
+    }
+    if (this.knock.lengthSq() > 0.01) {
+      this.knock.multiplyScalar(Math.exp(-6 * dt));
+      this.game.col.moveCylinder(this.pos, this.radius, 1.7, this.knock.x * dt, this.knock.z * dt);
     }
     // Les passants éloignés ne sont ni animés ni dessinés (économie d'appels de dessin).
     const far = this.pos.distanceTo(this.game.hero.pos) > (this.game.npcFar || 70);

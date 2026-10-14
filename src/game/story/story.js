@@ -426,6 +426,9 @@ export class Story {
       if (day) {
         npc.mode = npc.route.length ? 'walk' : 'idle';
         npc.goneT = 0;
+        npc.alive = true;
+        npc.hp = 40;
+        npc.koT = 0;
         if (!npc.jogger && npc.route.length) npc.speed = 1.3 + Math.random() * 0.4;
         npc.model.root.visible = true;
       } else if (npc.mode !== 'flee') npc.mode = 'gone';

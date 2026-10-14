@@ -214,7 +214,8 @@ export class Hero {
 
   // ---------- Combat ----------
   #pickAim(maxDist, inputDir) {
-    const { enemies, lockTarget } = this.game;
+    const { lockTarget } = this.game;
+    const enemies = this.game.aimTargets ? this.game.aimTargets() : this.game.enemies;
     if (lockTarget && lockTarget.alive) return lockTarget;
     let best = null;
     let bestScore = Infinity;
@@ -310,7 +311,7 @@ export class Hero {
     if (def === MOVES.power) {
       // Rafale : jusqu'à 5 cibles devant, les anneaux volent vers elles.
       const f = this.facing();
-      const list = this.game.enemies
+      const list = this.game.aimTargets()
         .filter((e) => e.alive && e.pos.distanceTo(this.pos) < def.range)
         .filter((e) => e.pos.clone().sub(this.pos).setY(0).normalize().dot(f) > 0.3 || e === this.game.lockTarget)
         .sort((a, b) => a.pos.distanceTo(this.pos) - b.pos.distanceTo(this.pos))
@@ -324,7 +325,7 @@ export class Hero {
     }
     const f = this.facing();
     const center = def.aoe ? this.pos.clone().addScaledVector(f, def === MOVES.dive || def.centered ? 0 : 1.2) : this.pos;
-    for (const e of this.game.enemies) {
+    for (const e of this.game.hittables()) {
       if (!e.alive) continue;
       if (Math.abs(e.pos.y - this.pos.y) > 2.6) continue;
       let ok;
