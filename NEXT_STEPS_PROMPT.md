@@ -17,7 +17,13 @@ via Capacitor 7. Code, commentaires et textes en jeu **en français**. Lis d'abo
   (incrémente `versionCode` / `versionName` dans `android/app/build.gradle`), copie l'APK dans
   `exports/` et envoie-le à l'utilisateur.
 
-## État actuel (v1.5)
+## État actuel (v1.7)
+v1.7 : Mode Créatif (`systems/creative.js`, menu `crea` dans `ui/menus.js`, preset 'crea'),
+police et niveau de recherche (`systems/police.js`), combattants IA policiers/héros
+(`actors/fighter.js`), passants frappables (`actors/npc.js` takeHit), quartier Marina
+(`world/districts.js` section 9). Tests : `tests/creative.mjs`.
+
+### v1.5
 v1.5 : personnages refaits (`actors/bodyParts.js`, version allégée `lite` pour les passants),
 Forme Abysse vernie + grappin (`hero.js` `#startGrapple`) + régénération, ambiance moins
 sombre, Mode libre avec horloge continue (`Game.#tickClock`, `data/presets.js` 'free'),

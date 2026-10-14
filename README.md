@@ -55,6 +55,22 @@ L'écran titre propose **Chapitres** pour démarrer directement au chapitre 1 ou
 (1 h de jeu = 1 min, cycle jour/nuit continu, créatures la nuit), missions secondaires
 ouvertes, sans histoire imposée.
 
+## Mode Créatif, police et héros (v1.7)
+- **Mode Créatif** (écran titre › Chapitres) : tous les pouvoirs, niveau 20, crédits
+  illimités. **B** (ou 🛠) ouvre le menu de création : créatures (Stalker, Crawler, Brute,
+  Colosse, vague), **héros alliés** (Volt, Brasier, Rempart, Spectre), police (1 à 5 ★),
+  foule, heure, invincible, énergie/Abysse illimitées, police désactivée.
+  **Pouvoirs créatifs** exclusifs (**U** / ✪ lancer, **O** / ⟳ changer) : Singularité (trou
+  noir), Chaîne d'éclairs, Gel, Téléportation, Météore.
+- **Passants** : on peut les frapper (K.O. cartoon, ils s'enfuient, les autres paniquent).
+- **Police** : niveau de recherche 0–5 ★ ; les agents arrivent hors champ, poursuivent,
+  interpellent (matraque) et tirent au taser à partir de 3 ★. On s'échappe en se cachant
+  (toits, vol, intérieur d'un commerce) : les étoiles retombent une à une.
+- **Héros alliés** (IA) : choisissent la créature la plus menaçante, esquivent, enchaînent
+  coups et pouvoir spécial, escortent Noa et reviennent en renfort s'ils sont distancés.
+- **Vesper-Est / Marina** : la carte s'agrandit à l'est (avenue, immeubles et commerces,
+  place, parc, plage, ponton, phare).
+
 ## Ville vivante (v1.5)
 - **57 portes praticables** (commerces et halls d'immeuble) menant à 5 intérieurs : café
   (chocolat chaud = santé et énergie), supérette (kit de soins), boutique de mode (boutique
