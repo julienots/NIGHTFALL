@@ -124,7 +124,10 @@ export class Story {
     this.#placeFriends();
     if (isNew === false && g.saveData && !g.saveData.social && this.lifeMode()) g.hud.toast(g.clockLabel());
     // Mode libre : pas de séquence imposée, juste un titre.
-    if (this.flags.has('freeRoam') && !this.flags.has('freeIntro')) {
+    if (this.flags.has('creative') && !this.flags.has('freeIntro')) {
+      this.flags.add('freeIntro');
+      g.hud.chapter('MODE CRÉATIF', 'Vesper', 'Tous les pouvoirs. B : menu de création (créatures, héros, police, heure). U / O : pouvoirs créatifs.', 6);
+    } else if (this.flags.has('freeRoam') && !this.flags.has('freeIntro')) {
       this.flags.add('freeIntro');
       g.hud.chapter('MODE LIBRE', 'Vesper', 'Explore la ville, entre dans les boutiques, protège les habitants. La nuit, les créatures sortent.', 5);
     }
@@ -1079,6 +1082,7 @@ export class Story {
     const p = this.powers();
     let html = p.flight ? HINTS.flight : p.rings ? HINTS.rings : HINTS.prologue;
     if (p.umbra) html += '<br>' + HINTS.umbra;
+    if (this.flags.has('creative')) html += '<br><span class="kbd">B</span>menu créatif · <span class="kbd">U</span>pouvoir créatif · <span class="kbd">O</span>changer de pouvoir';
     this.game.hud.setHint(html);
     if (show) {
       this.game.hud.showHint(true);

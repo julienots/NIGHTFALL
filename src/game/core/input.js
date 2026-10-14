@@ -22,6 +22,10 @@ const KEYMAP = {
   KeyX: 'magnet',
   KeyT: 'transform',
   KeyL: 'relations',
+  // Mode Créatif : menu, pouvoir créatif, pouvoir suivant
+  KeyB: 'crea',
+  KeyU: 'creaPower',
+  KeyO: 'creaNext',
 };
 
 // Boutons manette (mapping « standard »).

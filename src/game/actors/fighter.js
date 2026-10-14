@@ -266,8 +266,11 @@ export class Fighter {
       const tx = hero.pos.x + side.x - Math.sin(hero.yaw) * 1.5;
       const tz = hero.pos.z + side.z - Math.cos(hero.yaw) * 1.5;
       const d = Math.hypot(tx - this.pos.x, tz - this.pos.z);
-      if (d > 60) {
-        this.pos.set(tx, hero.pos.y, tz); // trop loin : il « arrive en renfort »
+      // Trop loin ou coincé derrière un obstacle : il « arrive en renfort ».
+      this.lostT = d > 7 && this.stuckT > 0 ? (this.lostT || 0) + dt : 0;
+      if (d > 30 || this.lostT > 1.5) {
+        this.lostT = 0;
+        this.pos.set(tx, hero.pos.y, tz);
         g.fx.ring(this.pos, { color: H.color, from: 0.3, to: 3, life: 0.4 });
       }
       if (d < 1) this.#face(hero.pos.x + Math.sin(hero.yaw) * 10, hero.pos.z + Math.cos(hero.yaw) * 10, dt, 4);

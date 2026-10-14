@@ -7,6 +7,8 @@ import { BRANCHES, SKILLS, RESPEC_COST } from '../data/skills.js';
 import { SHOP, SHOP_SECTIONS } from '../data/shop.js';
 import { buy, canBuy } from '../systems/shop.js';
 import { CHARACTERS, GIFTS } from '../data/characters.js';
+import { CREA_POWERS } from '../systems/creative.js';
+import { HEROES } from '../actors/fighter.js';
 
 // Aide « Commandes manette » (même correspondance que PADMAP dans core/input.js).
 const PAD_HELP = [
@@ -38,7 +40,7 @@ export class Menus {
     this.sel = null;
     this.el = {};
     this.shopSection = 'featured';
-    for (const name of ['inventory', 'journal', 'pause', 'reward', 'death', 'skills', 'shop', 'relations']) {
+    for (const name of ['inventory', 'journal', 'pause', 'reward', 'death', 'skills', 'shop', 'relations', 'crea']) {
       const d = document.createElement('div');
       d.className = `menu ${name === 'inventory' ? 'inv' : name}`;
       document.body.appendChild(d);
@@ -145,6 +147,7 @@ export class Menus {
       inventory: () => this.#inventory(), journal: () => this.#journal(), pause: () => this.#pause(),
       reward: () => this.#reward(), death: () => this.#death(), skills: () => this.#skills(), shop: () => this.#shop(),
       relations: () => this.#relations(),
+      crea: () => this.#crea(),
     }[this.open];
     r?.();
   }
@@ -261,6 +264,67 @@ export class Menus {
   }
 
   // ---------- Journal ----------
+  // ---------- Mode Créatif ----------
+  #crea() {
+    const g = this.game;
+    const C = g.creative;
+    const b = (op, label, on = false, extra = '') => `<button class="btn ${on ? 'primary' : ''}" data-act="crea" data-op="${op}" ${extra}>${label}</button>`;
+    const h = g.clock.hour ?? 9;
+    this.el.crea.innerHTML = `<div class="body crea-body"><div class="head"><h2>MODE CRÉATIF</h2><button class="btn" data-act="close">Fermer [B]</button></div>
+      <h3>Créatures</h3><div class="crea-row">
+        ${b('m:stalker', '👁 Stalker')}${b('m:crawler', '🕷 Crawler')}${b('m:brute', '🦍 Brute')}${b('m:colossus', '🗿 Colosse')}${b('m:wave', '🌊 Vague (6)')}${b('clearM', '✖ Tout effacer')}
+      </div>
+      <h3>Héros alliés <small>(${g.allies.length} en jeu)</small></h3><div class="crea-row">
+        ${Object.entries(HEROES).map(([id, H]) => b('h:' + id, `<span style="color:${H.color}">●</span> ${H.name}`, false, `title="${H.desc}"`)).join('')}${b('clearH', '✖ Renvoyer')}
+      </div>
+      <h3>Ville</h3><div class="crea-row">
+        ${b('crowd', '👥 Foule (+8 passants)')}${[1, 3, 5].map((n) => b('w:' + n, `🚓 Police ${'★'.repeat(n)}`)).join('')}${b('w:0', '✋ Lever l’alerte')}
+      </div>
+      <h3>Heure <small>(${Math.floor(h)} h)</small></h3><div class="crea-row">
+        ${[[7, '🌅 Matin'], [13, '☀ Midi'], [19.2, '🌇 Crépuscule'], [22.5, '🌙 Nuit']].map(([v, l]) => b('t:' + v, l)).join('')}
+      </div>
+      <h3>Réglages</h3><div class="crea-row">
+        ${b('inv', `🛡 Invincible : ${C.invincible ? 'OUI' : 'non'}`, C.invincible)}${b('inf', `⚡ Énergie / Abysse illimitées : ${C.infinite ? 'OUI' : 'non'}`, C.infinite)}${b('pol', `🚫 Police désactivée : ${C.noPolice ? 'OUI' : 'non'}`, C.noPolice)}
+      </div>
+      <h3>Pouvoir créatif <small>(U pour lancer, O pour changer · bouton ✪)</small></h3><div class="crea-row">
+        ${CREA_POWERS.map((p, i) => b('p:' + i, `<span style="color:${p.color}">${p.icon}</span> ${p.name}`, C.power === i, `title="${p.desc}"`)).join('')}
+      </div>
+      <p class="cost">${C.current.desc}</p></div>`;
+  }
+
+  #creaOp(op) {
+    const g = this.game;
+    const C = g.creative;
+    if (!C) return;
+    const [k, v] = op.split(':');
+    if (k === 'm') {
+      if (v === 'wave') for (const t of ['stalker', 'stalker', 'crawler', 'crawler', 'stalker', 'brute']) C.spawnMonster(t);
+      else C.spawnMonster(v);
+      return this.hide();
+    }
+    if (k === 'h') {
+      g.spawnAlly(v);
+      g.hud.toast(`${HEROES[v].name} arrive en renfort !`, HEROES[v].color);
+      return this.hide();
+    }
+    if (k === 'w') return g.police.setStars(Number(v));
+    if (k === 't') {
+      g.clock.hour = Number(v);
+      g.skyT = 0;
+      return;
+    }
+    if (k === 'p') return C.select(Number(v));
+    if (op === 'clearM') C.clearMonsters();
+    if (op === 'clearH') C.clearAllies();
+    if (op === 'crowd') C.spawnCrowd(8);
+    if (op === 'inv') C.invincible = !C.invincible;
+    if (op === 'inf') C.infinite = !C.infinite;
+    if (op === 'pol') {
+      C.noPolice = !C.noPolice;
+      if (C.noPolice) g.police.reset();
+    }
+  }
+
   // ---------- Relations ----------
   #relations() {
     const g = this.game;
@@ -399,6 +463,7 @@ export class Menus {
     const uid = t.dataset.uid ? Number(t.dataset.uid) : null;
     switch (t.dataset.act) {
       case 'close': return this.hide();
+      case 'crea': this.#creaOp(t.dataset.op); break;
       case 'equip': inv.equip(uid); g.onEquipmentChanged(); break;
       case 'unequip': inv.unequip(t.dataset.slot); g.onEquipmentChanged(); break;
       case 'fav': inv.toggleFav(uid); break;

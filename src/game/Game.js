@@ -37,6 +37,7 @@ import { Magnetism, STORM } from './systems/magnetism.js';
 import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { Menus } from './ui/menus.js';
 import { Police } from './systems/police.js';
+import { Creative } from './systems/creative.js';
 import { Fighter } from './actors/fighter.js';
 import './ui/game.css';
 
@@ -239,6 +240,7 @@ export class Game {
     this.world.street.traffic.hero = this.hero;
     this.world.street.traffic.onHonk = (pos) => this.audio.honk(pos);
     this.story = new Story(this);
+    if (this.story.flags.has('creative')) this.creative = new Creative(this);
     this.story.init(!d);
     this.audio.resume();
     this.audio.startAmbience();
@@ -659,7 +661,7 @@ export class Game {
       menu: menuOpen, cinematic: this.story.inCinematic || this.social.active || !!this.trans, choosing: !!this.hud.dl?.choices, rings: this.hero.powers.rings, flight: this.hero.powers.flight,
       flying: this.hero.flying, canInteract: this.nearInteract,
       magnet: (this.hero.powers.magnet && this.hero.form === 'human') || this.hero.form === 'umbra', holding: this.magnet.holding,
-      umbra: this.hero.powers.umbra, canTransform: this.hero.form === 'umbra' || this.hero.abyss >= 50,
+      umbra: this.hero.powers.umbra, canTransform: this.hero.form === 'umbra' || this.hero.abyss >= 50, crea: !!this.creative,
     });
     this.#adaptResolution(realDt);
     this.composer.render();
@@ -684,6 +686,7 @@ export class Game {
     else if (p.has('journal') && (!m.isOpen || m.open === 'journal' || m.open === 'inventory')) m.toggle('journal');
     else if (p.has('skills') && this.hero.powers.rings && (!m.isOpen || ['journal', 'inventory', 'skills'].includes(m.open))) m.toggle('skills', { atRefuge: this.nearRefuge() });
     else if (p.has('relations') && (!m.isOpen || ['journal', 'inventory', 'skills', 'relations'].includes(m.open))) m.toggle('relations');
+    else if (p.has('crea') && this.creative && (!m.isOpen || m.open === 'crea')) m.toggle('crea');
     else if ((p.has('interact') || (this.input.usingPad && p.has('jump'))) && m.open === 'reward') m.hide();
     // Manette : B ferme le menu ouvert (sauf l'écran de mort).
     else if (this.input.usingPad && p.has('dodge') && m.isOpen && m.open !== 'death') m.hide();
@@ -715,6 +718,11 @@ export class Game {
 
     for (const e of this.enemies) e.update(dt);
     this.police.update(dt);
+    if (this.creative) {
+      this.creative.update(dt);
+      if (input.was('creaPower')) this.creative.use();
+      if (input.was('creaNext')) this.creative.next();
+    }
     for (const a of this.allies) {
       a.update(dt, this.allies);
       a.model.root.visible = this.zone === 'city';

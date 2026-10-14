@@ -17,6 +17,7 @@ const BUTTONS = [
   ['interact', 'interact', 'E', 'b-interact', false, null],
   ['magnet', 'magnet', '🧲', 'b-magnet', false, 'magnet'],
   ['transform', 'transform', '◉', 'b-umbra', false, 'umbra'],
+  ['creaPower', 'creaPower', '✪', 'b-crea', false, 'crea'],
 ];
 const TOP = [
   ['pause', 'pause', '☰'],
@@ -26,6 +27,8 @@ const TOP = [
   ['lock', 'lock', '◇'],
   ['heal', 'heal', '✚'],
   ['relations', 'relations', '❤'],
+  ['crea', 'crea', '🛠'],
+  ['creaNext', 'creaNext', '⟳'],
 ];
 
 export class TouchControls {
@@ -135,9 +138,10 @@ export class TouchControls {
     this.el.classList.toggle('cine', !!state.cinematic);
     this.el.classList.toggle('choosing', !!state.choosing);
     for (const [id, , , , , cond] of BUTTONS) {
-      const show = !cond || (cond === 'rings' && state.rings) || (cond === 'flight' && state.flight) || (cond === 'magnet' && state.magnet) || (cond === 'umbra' && state.umbra);
+      const show = !cond || (cond === 'rings' && state.rings) || (cond === 'flight' && state.flight) || (cond === 'magnet' && state.magnet) || (cond === 'umbra' && state.umbra) || (cond === 'crea' && state.crea);
       this.el.querySelector(`[data-id="${id}"]`).style.display = show ? '' : 'none';
     }
+    for (const id of ['crea', 'creaNext']) this.el.querySelector(`[data-id="${id}"]`).style.display = state.crea ? '' : 'none';
     // En vol : « saut » = monter, « roulade » = descendre.
     this.el.querySelector('.b-jump').textContent = state.flying ? '▲' : '⤒';
     this.el.querySelector('.b-dodge').textContent = state.flying ? '▼' : '⤓';

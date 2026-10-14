@@ -58,6 +58,23 @@ export function chapterPreset(ch) {
       storyFlags: ['freeRoam'],
     };
   }
+  // Mode Créatif : comme le mode libre, avec tous les pouvoirs au maximum, des
+  // crédits illimités et le menu de création (B).
+  if (ch === 'crea') {
+    const free = chapterPreset('free');
+    return {
+      ...free,
+      inventory: {
+        ...free.inventory,
+        credits: 99999, shards: 999,
+        items: [...free.inventory.items, item('void_phalanx', 5), item('nightfall_shell', 6), item('hoodie_abyss', 7)],
+        equipped: { weapon: 5, armor: 6, skin: null },
+        nextUid: 8,
+      },
+      progression: { level: 20, xp: 0, skillPoints: 20 },
+      storyFlags: ['freeRoam', 'creative'],
+    };
+  }
   // Chapitre 2 : le lendemain matin, dans la chambre de Noa.
   return {
     ...base,

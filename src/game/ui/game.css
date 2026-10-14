@@ -339,3 +339,11 @@ body.touch .hud .clock { top: 62px; font-size: 11px; }
 .hud .wanted i { font-style: normal; color: #3a3448; -webkit-text-stroke: 2px var(--ink-dark); }
 .hud .wanted i.lit { color: #ffcd20; animation: ready .8s ease-in-out infinite; text-shadow: 0 0 10px #ff6a6a; }
 body.touch .hud .wanted { top: 110px; right: 12px; font-size: 22px; }
+
+/* ---------- Mode Créatif ---------- */
+.menu.crea .body { max-width: 980px; margin: 0 auto; overflow-y: auto; max-height: 100vh; padding-bottom: 30px; }
+.menu.crea h3 { margin: 16px 0 6px; font: 1.1em var(--display); letter-spacing: .06em; color: #ffcd20; }
+.menu.crea h3 small { color: var(--dim); font-family: var(--body); letter-spacing: 0; }
+.crea-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.crea-row .btn { font-size: .95em; }
+.b-crea { right: 196px; bottom: 182px; width: 56px; height: 56px; background: #ff9cf0; font-size: 26px; }
