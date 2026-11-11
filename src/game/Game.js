@@ -575,6 +575,11 @@ export class Game {
     this.social.update(dt);
     this.#updateTransition(dt);
     if (this.story.inCinematic && !this.social.active && input.was('interact')) this.story.skip();
+    // Filet de sécurité : le héros ne reste jamais figé hors cinématique / dialogue / fondu.
+    if (hero.cinematic && !this.story.inCinematic && !this.social.active && !this.trans) {
+      this.cineStuckT = (this.cineStuckT || 0) + dt;
+      if (this.cineStuckT > 0.5) hero.cinematic = false;
+    } else this.cineStuckT = 0;
     hero.update(dt, input, this.camYaw, this.camPitch);
     this.magnet.update(dt);
     this.audio.wind(hero.flying ? Math.min(1, Math.hypot(hero.vel.x, hero.vel.z, hero.vy) / 34) : 0);

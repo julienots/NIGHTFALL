@@ -485,7 +485,11 @@ const fightGroup = async (group, maxIter, label) => {
       const e = alive.sort((a, b) => a.pos.distanceTo(g.hero.pos) - b.pos.distanceTo(g.hero.pos))[0];
       const dx = e.pos.x - g.hero.pos.x, dz = e.pos.z - g.hero.pos.z, d = Math.hypot(dx, dz);
       g.camYaw = Math.atan2(dx, dz);
-      if (d > 2.4 + e.radius) { g.input.down.add('up'); g.simulate(0.15); g.input.down.delete('up'); }
+      // Bloqué contre un obstacle (monument renversé…) : on contourne par le côté.
+      const moved = g.__botLast ? Math.hypot(g.hero.pos.x - g.__botLast.x, g.hero.pos.z - g.__botLast.z) : 1;
+      g.__botLast = { x: g.hero.pos.x, z: g.hero.pos.z };
+      if (d > 2.4 + e.radius && d < 14 && g.hero.energy >= 30 && g.hero.powerCd <= 0 && g.hero.powers.rings) { g.input.pressed.add('power'); g.simulate(0.2); }
+      else if (d > 2.4 + e.radius) { const k = moved < 0.05 ? ['up', 'left'] : ['up']; k.forEach((a) => g.input.down.add(a)); g.simulate(moved < 0.05 ? 0.4 : 0.15); k.forEach((a) => g.input.down.delete(a)); }
       else if (g.hero.energy >= 30 && g.hero.powerCd <= 0) { g.input.pressed.add('power'); g.simulate(0.2); }
       else { g.input.pressed.add(Math.random() < 0.3 ? 'heavy' : 'light'); g.simulate(0.15); }
       return alive.length;
@@ -711,6 +715,9 @@ const ws = await G(() => {
   for (const e of g.enemies) if (e.alive && e.pos.distanceTo(g.hero.pos) < 60) { e.alive = false; e.model.root.visible = false; }
   g.hero.placeAt({ x: 3, y: 0.15, z: 24 }, Math.PI);
   g.hero.action = null; g.hero.energy = g.hero.stats.maxEnergy; g.hero.hp = g.hero.stats.maxHp;
+  delete g.hero.takeDamage; // restaure la vraie fonction (remplacée pour le combat du Colosse)
+  if (g.magnet.holding) g.magnet.drop();
+  g.hero.flying = false; g.hero.suspended = false; g.hero.pose = null; g.lockTarget = null;
   if (g.hero.form === 'umbra') { g.hero.abyss = 0.1; g.simulate(0.6); }
   g.simulate(0.3);
   const h = g.hero.pos;
@@ -735,15 +742,19 @@ const ws = await G(() => {
   const src = h.clone().set(from.x, from.y, from.z);
   g.projectiles.fire(w, src, h.clone().setY(h.y + 1.1).sub(src));
   let reflected = false;
+  let minD = 99;
+  const st0 = { y: h.y, fly: g.hero.flying, hold: !!g.magnet.holding, en: g.input.enabled, menu: g.menus.open, n: g.projectiles.list.length };
   for (let i = 0; i < 120 && g.projectiles.list.length && !reflected; i++) {
     const p = g.projectiles.list[0];
     if (p && p.mesh.position.distanceTo(h) < 3.2) g.input.down.add('shield');
     g.simulate(1 / 60);
+    if (g.projectiles.list[0]) minD = Math.min(minD, g.projectiles.list[0].mesh.position.distanceTo(h));
     reflected = g.projectiles.list.some((q) => q.friendly);
   }
+  st0.minD = +minD.toFixed(2); st0.sh = g.hero.shielding;
   g.input.down.delete('shield');
   for (let i = 0; i < 120; i++) g.simulate(1 / 60);
-  const out = { fired, reflected, wispHp: w.hp, wispMax: w.maxHp, heroHit: g.hero.hp < hp0, form: g.hero.form, end: g.projectiles.lastEnd };
+  const out = { fired, reflected, wispHp: w.hp, wispMax: w.maxHp, heroHit: g.hero.hp < hp0, form: g.hero.form, end: g.projectiles.lastEnd, st0, cine: g.hero.cinematic, social: g.social.active, story: g.story.inCinematic, trans: !!g.trans, dead: g.hero.dead };
   w.alive = false; w.model.root.visible = false;
   const el = g.spawnEnemy({ type: 'stalker', x: h.x + 30, z: h.z + 30, group: 'test', elite: 'armored' });
   out.elite = { name: el.name, hp: el.maxHp, base: el.def.hp };

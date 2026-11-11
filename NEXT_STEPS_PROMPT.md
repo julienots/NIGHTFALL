@@ -53,6 +53,8 @@ Refonte graphique complète, voir la section « Refonte v1.4 » du README :
   `systems/rifts.js` (failles instables, 3 vagues), `systems/combo.js` (rang de style).
 - Correctifs : séquence du réveil (chapitre 2) qui bloquait la porte de la maison pendant
   13 s (séquences « free »), traction des tentacules, favicon (404), test des Crawlers.
+- Tests de la v1.4 : `npm test` 17/17, `tests/smoke.mjs` **112/112** (histoire complète du
+  prologue au chapitre 2 + rechargement, failles, Veilleur, élites, carte), `tests/touch.mjs` 11/11.
 - APK non reconstruit dans cette session (pas de SDK Android dans le conteneur) :
   `versionCode 5` / `1.4-refonte` déjà renseignés dans `android/app/build.gradle`.
 
