@@ -22,6 +22,7 @@ const KEYMAP = {
   KeyX: 'magnet',
   KeyT: 'transform',
   KeyL: 'relations',
+  KeyM: 'map',
 };
 
 // Boutons manette (mapping « standard »).

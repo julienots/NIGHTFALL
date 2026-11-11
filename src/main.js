@@ -1,5 +1,8 @@
 import { StudioIntro, TIMELINE } from './intro/StudioIntro.js';
 import { SaveSystem } from './game/systems/save.js';
+import { startTitleBackground } from './title/titleBg.js';
+
+let stopTitleBg = null;
 
 const params = new URLSearchParams(location.search);
 const $ = (id) => document.getElementById(id);
@@ -19,6 +22,8 @@ async function exportMode() {
 }
 
 async function startGame(saveData) {
+  stopTitleBg?.();
+  stopTitleBg = null;
   hide('title');
   hide('boot');
   show('loading');
@@ -32,13 +37,21 @@ async function startGame(saveData) {
 
 function titleScreen() {
   show('title');
+  stopTitleBg = startTitleBackground($('title-bg'));
   const saves = new SaveSystem();
   const existing = saves.load();
   const menu = document.querySelector('.title-menu');
   const press = document.querySelector('#title .press');
-  const reveal = () => {
+  const reveal = (e) => {
+    if (press.classList.contains('hidden')) return; // déjà révélé
     press.classList.add('hidden');
     menu.classList.remove('hidden');
+    // Le toucher qui révèle le menu ne doit pas « cliquer » le bouton apparu dessous.
+    if (e?.type === 'pointerdown') {
+      menu.classList.add('arming');
+      setTimeout(() => menu.classList.remove('arming'), 450);
+    }
+    menu.querySelectorAll('.tbtn:not(.small)').forEach((b, i) => b.style.setProperty('--i', i));
     if (!existing) hide('btn-continue');
     else {
       const d = existing.data;

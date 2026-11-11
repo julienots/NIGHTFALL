@@ -10,7 +10,7 @@ const out = process.argv[2] || 'exports/screens';
 mkdirSync(out, { recursive: true });
 const server = await createServer({ server: { port: 5196, hmr: false, watch: null }, logLevel: 'error' });
 await server.listen();
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 page.setDefaultTimeout(120000);
 const errors = [];
@@ -34,7 +34,8 @@ async function startGame(button) {
     console.log(errors);
     throw e;
   });
-  await page.evaluate(() => window.__nightfall.stopLoop());
+  // Les failles dynamiques (événements aléatoires) sont testées à part, en fin de parcours.
+  await page.evaluate(() => { window.__nightfall.stopLoop(); window.__nightfall.rifts.enabled = false; });
 }
 
 await page.goto('http://localhost:5196/');
@@ -473,7 +474,7 @@ check('mission « L’écho d’Aegis » active', (await G(() => window.__nightf
 await G(() => { const g = window.__nightfall; g.hero.takeDamage = ((o) => (...a) => { const r = o(...a); if (g.hero.hp < 40) g.hero.hp = g.hero.stats.maxHp; return r; })(g.hero.takeDamage.bind(g.hero)); });
 await place(20, 0.15, 30, 0);
 await sim(2.5);
-const crawl = await G(() => window.__nightfall.enemies.filter((e) => e.type === 'crawler').map((e) => e.state));
+const crawl = await G(() => window.__nightfall.enemies.filter((e) => e.type === 'crawler' && e.spawn.group === 'crawlers').map((e) => e.state));
 check('embuscade : 3 Crawlers tombent des toits', crawl.length === 3, crawl.join(','));
 const fightGroup = async (group, maxIter, label) => {
   for (let i = 0; i < maxIter; i++) {
@@ -533,7 +534,8 @@ await shot('22_combat_colosse');
 const ph = await G(() => { const g = window.__nightfall; const b = g.boss; b.state = 'walk'; b.exposed = true; b.takeHit({ damage: Math.ceil((b.hp - b.def.hp * 0.3 + 10) / 2.5), dir: { x: 0, y: 0, z: 1 } }); return b.stage; });
 check('passage en phase 3 (rage + renforts)', ph === 3 && (await G(() => window.__nightfall.enemies.filter((e) => e.spawn.group === 'colossus_adds').length)) === 2);
 await G(() => { const g = window.__nightfall; const b = g.boss; b.state = 'stun'; b.stunFor = 30; b.exposed = true; b.hp = 50; g.hero.takeDamage = () => false; g.hero.hp = g.hero.stats.maxHp; });
-await fightGroup('colossus', 200);
+const colDone = await fightGroup('colossus', 200);
+if (!colDone) console.log('   diag Colosse :', JSON.stringify(await G(() => { const g = window.__nightfall; const b = g.enemies.find((e) => e.spawn?.group === 'colossus'); return b && { st: b.state, hp: b.hp, alive: b.alive, r: b.radius, d: b.pos.distanceTo(g.hero.pos), hero: g.hero.pos, boss: b.pos, act: g.hero.action?.kind, adds: g.enemies.filter((e) => e.alive && e.spawn.group === 'colossus_adds').map((e) => e.state + ':' + e.pos.distanceTo(g.hero.pos).toFixed(1)) }; })));
 await sim(6);
 check('Colosse vaincu', await G(() => window.__nightfall.missions.state.m03_colossus.step === 2));
 const cache = await G(() => window.__nightfall.crates.find((c) => c.id === 'boss_cache').root.visible);
@@ -683,6 +685,80 @@ check('menu Relations', await page.isVisible('.menu.relations.on'));
 await shot('33_relations');
 await press('relations', 0.1);
 await G(() => { const g = window.__nightfall; g.menus.hide(); });
+
+// ================= v1.4 : FAILLES, VEILLEUR, ÉLITES, COMBO =================
+const rf = await G(() => {
+  const g = window.__nightfall;
+  g.setPhase('night');
+  g.enterZone('city', { x: 3, y: 0.15, z: 24, yaw: Math.PI });
+  g.simulate(0.5);
+  for (const e of g.enemies) if (e.alive && e.pos.distanceTo(g.hero.pos) < 60) { e.alive = false; e.model.root.visible = false; }
+  g.rifts.enabled = true;
+  const r = g.rifts.spawnNear({ x: 3, z: 14 });
+  g.simulate(1.5);
+  const waves = [];
+  for (let n = 0; n < 40 && r.state !== 'closing'; n++) {
+    waves.push(r.wave);
+    for (const e of [...r.alive]) e.takeHit({ damage: 9999, dir: { x: 0, y: 0, z: 1 }, knock: 0, poise: 0, heavy: true, power: true });
+    g.simulate(2.5);
+  }
+  return { state: r.state, maxWave: Math.max(...waves), closed: g.rifts.closed };
+});
+check('faille instable : 3 vagues puis fermeture avec récompense', rf.state === 'closing' && rf.maxWave === 2 && rf.closed === 1, JSON.stringify(rf));
+const ws = await G(() => {
+  const g = window.__nightfall;
+  g.rifts.enabled = false;
+  for (const e of g.enemies) if (e.alive && e.pos.distanceTo(g.hero.pos) < 60) { e.alive = false; e.model.root.visible = false; }
+  g.hero.placeAt({ x: 3, y: 0.15, z: 24 }, Math.PI);
+  g.hero.action = null; g.hero.energy = g.hero.stats.maxEnergy; g.hero.hp = g.hero.stats.maxHp;
+  if (g.hero.form === 'umbra') { g.hero.abyss = 0.1; g.simulate(0.6); }
+  g.simulate(0.3);
+  const h = g.hero.pos;
+  // Ligne de tir dégagée (une voiture garée sert de couvert et arrête les orbes).
+  let wx = h.x, wz = h.z - 12;
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+    const x = h.x + Math.sin(a) * 11, z = h.z + Math.cos(a) * 11;
+    if ([0.6, 1.1, 1.6].every((y) => g.col.lineOfSight({ x, y: y + 0.4, z }, { x: h.x, y, z: h.z }))) { wx = x; wz = z; break; }
+  }
+  const w = g.spawnEnemy({ type: 'wisp', x: wx, z: wz, group: 'test', patrol: [[wx, wz]] });
+  w.alertTo(h);
+  let fired = 0;
+  const hp0 = g.hero.hp;
+  for (let i = 0; i < 300 && !fired; i++) { g.simulate(1 / 30); fired = g.projectiles.list.length; }
+  // Parade : bouclier levé juste avant l'impact → l'orbe est renvoyé.
+  // (En garde, Noa fait face à la caméra : on oriente la caméra vers le Veilleur.)
+  g.projectiles.clear();
+  w.stagger(4);
+  g.camYaw = Math.atan2(w.pos.x - h.x, w.pos.z - h.z);
+  g.hero.yaw = g.camYaw;
+  const from = { x: w.pos.x, y: w.pos.y + 1.4, z: w.pos.z };
+  const src = h.clone().set(from.x, from.y, from.z);
+  g.projectiles.fire(w, src, h.clone().setY(h.y + 1.1).sub(src));
+  let reflected = false;
+  for (let i = 0; i < 120 && g.projectiles.list.length && !reflected; i++) {
+    const p = g.projectiles.list[0];
+    if (p && p.mesh.position.distanceTo(h) < 3.2) g.input.down.add('shield');
+    g.simulate(1 / 60);
+    reflected = g.projectiles.list.some((q) => q.friendly);
+  }
+  g.input.down.delete('shield');
+  for (let i = 0; i < 120; i++) g.simulate(1 / 60);
+  const out = { fired, reflected, wispHp: w.hp, wispMax: w.maxHp, heroHit: g.hero.hp < hp0, form: g.hero.form, end: g.projectiles.lastEnd };
+  w.alive = false; w.model.root.visible = false;
+  const el = g.spawnEnemy({ type: 'stalker', x: h.x + 30, z: h.z + 30, group: 'test', elite: 'armored' });
+  out.elite = { name: el.name, hp: el.maxHp, base: el.def.hp };
+  el.alive = false; el.model.root.visible = false;
+  return out;
+});
+check('Veilleur : tire des orbes, la parade les renvoie', ws.fired > 0 && ws.reflected, JSON.stringify(ws));
+check('élite : nom, santé renforcée', ws.elite.name.includes('élite') && ws.elite.hp > ws.elite.base, JSON.stringify(ws.elite));
+const cb = await G(() => { const g = window.__nightfall; return { best: g.combo.best, mm: !!document.querySelector('.minimap canvas') }; });
+check('rang de style et minicarte présents', cb.best >= 2 && cb.mm, JSON.stringify(cb));
+await G(() => window.__nightfall.menus.show('worldmap'));
+await page.waitForTimeout(150);
+check('carte du monde (M)', await page.isVisible('.menu.worldmap.on'));
+await shot('34_carte');
+await G(() => window.__nightfall.menus.hide());
 
 // ================= SAUVEGARDE / RECHARGEMENT =================
 await sim(0.5);

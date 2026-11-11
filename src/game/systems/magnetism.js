@@ -291,7 +291,7 @@ export class Magnetism {
     const dir = new THREE.Vector3(e.pos.x - p.pos.x, 0, e.pos.z - p.pos.z);
     if (dir.lengthSq() < 1e-4) dir.set(p.vel.x, 0, p.vel.z);
     dir.normalize();
-    e.takeHit({ damage: dmg, dir, knock: 12, poise: 120, heavy: true, power: true });
+    e.takeHit({ damage: dmg, dir, knock: 12, poise: 120, heavy: true, power: true, kind: 'magnet' });
   }
 
   #impact(p) {

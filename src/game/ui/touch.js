@@ -26,6 +26,7 @@ const TOP = [
   ['lock', 'lock', '◇'],
   ['heal', 'heal', '✚'],
   ['relations', 'relations', '❤'],
+  ['map', 'map', '🗺'],
 ];
 
 export class TouchControls {

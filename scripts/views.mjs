@@ -7,7 +7,7 @@ const [out = 'exports/views', quality = 'medium', night = '1'] = process.argv.sl
 mkdirSync(out, { recursive: true });
 const server = await createServer({ server: { port: 5192 }, logLevel: 'error' });
 await server.listen();
-const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const b = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
 p.setDefaultTimeout(300000);
 const errs = [];

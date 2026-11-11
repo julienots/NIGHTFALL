@@ -636,6 +636,12 @@ export function buildDowntown(scene, col, quality) {
           vec3 cell = floor(vDir * 160.0);
           float st = step(0.996, hash(cell)) * smoothstep(0.15, 0.4, h);
           col += vec3(1.0, 0.95, 0.85) * st * (0.6 + 0.4 * sin(uTime * 2.0 + hash(cell + 3.0) * 30.0)) * uNight;
+          // Aurore abyssale : rubans ondulants violet / cyan au-dessus de la ville.
+          float az = atan(vDir.x, vDir.z);
+          float band = 0.34 + sin(az * 3.0 + uTime * 0.05) * 0.07;
+          float rib = exp(-pow((h - band) * 11.0, 2.0)) * (0.55 + 0.45 * sin(az * 21.0 + uTime * 0.35 + sin(az * 6.0 - uTime * 0.15) * 3.0));
+          vec3 aur = mix(vec3(0.25, 0.95, 1.0), vec3(0.8, 0.3, 1.0), 0.5 + 0.5 * sin(az * 2.0 + uTime * 0.08));
+          col += aur * rib * 0.28 * uNight * smoothstep(0.1, 0.25, h);
           gl_FragColor = vec4(col, 1.0);
         }`,
     }),

@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { toon } from '../fx/toon.js';
 import { bakeJoints } from '../core/bake.js';
+import { addOutline } from '../fx/outline.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const ease = (t) => t * t * (3 - 2 * t);
@@ -208,7 +209,7 @@ export const PALETTES = {
 };
 
 export class HeroModel {
-  constructor(palette = PALETTES.noa, { backpack = true, rim = '#9fd8ff' } = {}) {
+  constructor(palette = PALETTES.noa, { backpack = true, rim = '#9fd8ff', gear = false, outline = false } = {}) {
     this.root = new THREE.Group();
     this.tilt = new THREE.Group();
     this.tilt.position.y = HIP_Y;
@@ -237,11 +238,67 @@ export class HeroModel {
       maw: toon('#2a0820', { shared: false }),
     };
     this.#build(backpack && palette.bag);
+    if (gear) this.#buildGear();
     this.root.traverse((o) => {
       if (o.isMesh) o.castShadow = true;
     });
     // Fusion des pièces fixes de chaque articulation (≈ 3x moins d'appels de dessin).
     bakeJoints(this.root, new Set([this.phone, this.mouth, this.ponytail, this.bagFlap, ...(this.brows || [])].filter(Boolean)));
+    // Contour cartoon (héros et personnages importants seulement).
+    if (outline) addOutline(this.root, { color: this.umbra ? '#05020c' : '#12052e', thickness: this.umbra ? 0.016 : 0.011 });
+    this.gearOn = false;
+    if (this.gear) this.setGear(false);
+  }
+
+  // Tenue de justicier de nuit (identité secrète) : masque à lunettes
+  // lumineuses et longue écharpe magnétique qui flotte derrière Noa.
+  #buildGear() {
+    const face = this.face;
+    const spine = this.joints.spine;
+    const scarfM = toon('#e8335f', { rim: '#ffd0e0', rimStrength: 0.7, shared: false });
+    const scarf2 = toon('#a8173f', { rim: '#ffd0e0', rimStrength: 0.5, shared: false });
+    const maskM = toon('#1a0840', { rim: '#5fe3ff', rimStrength: 0.9, shared: false });
+    const lens = toon('#e8fdff', { emissive: '#5fe3ff', emissiveIntensity: 1.6, shared: false });
+    this.mats.lens = lens;
+    const mask = new THREE.Group();
+    mask.position.set(0, 0.022, 0);
+    face.add(mask);
+    this.#mesh(new THREE.CylinderGeometry(0.129, 0.127, 0.05, 22, 1, true, -1.45, 2.9), maskM, mask).material.side = THREE.DoubleSide;
+    // Lentilles en amande, légèrement inclinées (regard déterminé)
+    for (const sx of [-1, 1]) {
+      const l = this.#mesh(new THREE.SphereGeometry(0.024, 12, 8), lens, mask, sx * 0.046, 0.0, 0.122, 0, 0, sx * 0.35);
+      l.scale.set(1.35, 0.7, 0.35);
+      // Nœud du masque à l'arrière : deux petits rubans
+      this.#mesh(new THREE.BoxGeometry(0.02, 0.09, 0.008), maskM, mask, sx * 0.03, -0.04, -0.13, 0.4, 0, sx * 0.35);
+    }
+    // Écharpe : col épais + pan qui flotte (chaîne de 5 segments animés).
+    const neck = new THREE.Group();
+    neck.position.set(0, 0.52, 0);
+    spine.add(neck);
+    this.#mesh(new THREE.TorusGeometry(0.11, 0.045, 8, 20), scarfM, neck, 0, 0, 0, Math.PI / 2).scale.set(1.1, 1, 1);
+    this.#mesh(new THREE.SphereGeometry(0.05, 10, 8), scarf2, neck, 0.05, -0.02, -0.1);
+    let parent = this.#pivot('scarf0', neck, 0.05, -0.03, -0.12);
+    this.scarf = [parent];
+    for (let i = 0; i < 5; i++) {
+      const w = 0.1 - i * 0.008;
+      this.#mesh(new THREE.BoxGeometry(w, 0.17, 0.022), i % 2 ? scarf2 : scarfM, parent, 0, -0.085, 0);
+      if (i < 4) {
+        parent = this.#pivot('scarf' + (i + 1), parent, 0, -0.17, 0);
+        this.scarf.push(parent);
+      } else {
+        // Extrémité frangée
+        for (const fx of [-0.03, 0, 0.03]) this.#mesh(new THREE.BoxGeometry(0.018, 0.06, 0.02), scarfM, parent, fx, -0.19, 0);
+      }
+    }
+    this.gear = { mask, neck };
+    this.scarfPrev = 0;
+  }
+
+  setGear(on) {
+    if (!this.gear) return;
+    this.gearOn = on;
+    this.gear.mask.visible = on;
+    this.gear.neck.visible = on;
   }
 
   #pivot(name, parent, x, y, z) {
@@ -667,6 +724,27 @@ export class HeroModel {
     if (this.maw) {
       const open = s.anim === 'roar' || s.anim === 'transform' ? 1 : s.anim ? 0.5 : 0.15 + Math.sin(t * 2) * 0.05;
       this.maw.scale.y += (1 + open * 1.4 - this.maw.scale.y) * Math.min(1, dt * 12);
+    }
+    // Étirement / écrasement cartoon : impulsion à l'atterrissage, étirement en saut.
+    let sy = 1;
+    if (s.land > 0) sy = 1 - s.land * 0.16;
+    else if (s.airborne && !s.flight) sy = 1 + Math.min(0.08, Math.abs(s.vy || 0) * 0.008);
+    if (s.anim && /punch|jab|claw|smash/i.test(s.anim)) sy *= 1 - Math.sin(Math.min(1, s.animP) * Math.PI) * 0.04;
+    const base = this.umbra ? 1.22 : 1;
+    this.squash = (this.squash ?? 1) + (sy - (this.squash ?? 1)) * Math.min(1, dt * 18);
+    this.root.scale.set(base / Math.sqrt(this.squash), base * this.squash, base / Math.sqrt(this.squash));
+    if (this.scarf && this.gearOn) {
+      // L'écharpe se soulève avec la vitesse (et à l'horizontale en vol), ondule.
+      const fly = s.flight && s.flight.mode !== 'hover';
+      const lift = fly ? 1.45 : Math.min(1.2, sp * 0.75 + (s.airborne ? 0.5 : 0) + (s.dodge ? 0.6 : 0));
+      this.scarfLift = (this.scarfLift ?? 0) + (lift - (this.scarfLift ?? 0)) * Math.min(1, dt * 5);
+      const L = this.scarfLift;
+      const amp = 0.12 + L * 0.22;
+      const freq = 4 + L * 9;
+      this.scarf.forEach((j, i) => {
+        const wave = Math.sin(t * freq - i * 0.9) * amp * (0.4 + i * 0.25);
+        j.rotation.set(i === 0 ? 0.25 + L * 1.15 : wave * 0.6 + L * 0.12, 0, Math.cos(t * freq * 0.7 - i) * amp * 0.5);
+      });
     }
     if (this.ponytail) this.ponytail.rotation.x = 0.35 + Math.min(1, sp) * 0.5 + Math.sin(t * 8) * 0.1 * Math.min(1, sp);
     this.setPhone(s.anim === 'phone');

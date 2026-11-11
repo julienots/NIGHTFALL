@@ -44,12 +44,15 @@ class BaseModel {
 
   // Flash blanc à l'impact + intensité de la lueur.
   setFlash(f) {
-    for (const m of this.skinMats) m.emissiveIntensity = f * 0.7;
+    for (const m of this.skinMats) m.emissiveIntensity = f * 0.55;
+    // Écrasement cartoon à l'impact (le corps « encaisse » le coup).
+    const s = f * f;
+    this.body.scale.set(1 + s * 0.14, 1 - s * 0.12, 1 + s * 0.14);
   }
 
   // Dissolution à la mort.
   setDissolve(k) {
-    this.root.scale.setScalar(Math.max(0.001, 1 - k * 0.15));
+    this.root.scale.setScalar(Math.max(0.001, (this.baseScale || 1) * (1 - k * 0.15)));
     this.body.position.y = -k * 0.8;
     for (const m of this.allMats) {
       m.transparent = k > 0;
@@ -507,5 +510,105 @@ export class CrawlerModel extends BaseModel {
     this.joints.hips.position.y += (hipY - this.joints.hips.position.y) * Math.min(1, st.dt * 12);
     this.glow.emissiveIntensity = st.mode === 'windup' ? 4 + Math.sin(t * 40) * 1.5 : st.mode === 'lurk' ? 0.4 : st.alert ? 2 : 1.3;
     this.apply(P, st.dt, st.mode === 'lunge' || st.mode === 'windup' ? 20 : 12);
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Veilleur : spectre flottant à grand œil unique, cape en lambeaux, bras fins
+// et éclats de cristal en orbite. Attaque à distance (orbes abyssaux).
+export class WispModel extends BaseModel {
+  constructor() {
+    super();
+    const cloak = toon('#2a1a52', { rim: '#ff4dd2', rimStrength: 0.9, emissive: '#ffffff', emissiveIntensity: 0, shared: false });
+    const dark = toon('#140a2a', { rim: '#ff4dd2', rimStrength: 0.6, emissive: '#ffffff', emissiveIntensity: 0, shared: false });
+    const bone = toon('#e8dcff', { rim: '#ffb0f0', rimStrength: 0.6, emissive: '#ffffff', emissiveIntensity: 0, shared: false });
+    this.glow = toon('#ff4dd2', { emissive: '#ff4dd2', emissiveIntensity: 2, shared: false });
+    this.skinMats = [cloak, dark, bone];
+    this.allMats = [cloak, dark, bone, this.glow];
+    const core = this.pivot('core', this.body, 0, 1.7, 0);
+    // Cape : cône évasé + capuche
+    const robe = this.mesh(new THREE.ConeGeometry(0.5, 1.2, 10, 1, true), cloak, core, 0, -0.45, 0, Math.PI);
+    robe.material.side = THREE.DoubleSide;
+    this.mesh(new THREE.SphereGeometry(0.34, 16, 12), cloak, core, 0, 0.18, -0.02).scale.set(1, 1.1, 1);
+    // Masque en os + grand œil
+    const mask = this.mesh(new THREE.SphereGeometry(0.24, 16, 12), bone, core, 0, 0.16, 0.14);
+    mask.scale.set(1, 1.15, 0.6);
+    this.eye = this.mesh(new THREE.SphereGeometry(0.1, 14, 10), this.glow, core, 0, 0.18, 0.28);
+    this.eye.scale.set(1.25, 0.8, 0.5);
+    this.mesh(new THREE.SphereGeometry(0.04, 8, 6), dark, core, 0, 0.18, 0.33).scale.set(0.5, 1.4, 0.5);
+    // Cornes de la capuche
+    for (const sx of [-1, 1]) this.mesh(new THREE.ConeGeometry(0.05, 0.3, 6), dark, core, sx * 0.2, 0.45, -0.05, -0.3, 0, sx * -0.5);
+    // Lambeaux de cape (animés)
+    this.strips = [];
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const st = this.pivot('strip' + i, core, Math.sin(a) * 0.38, -1.0, Math.cos(a) * 0.38);
+      this.mesh(new THREE.BoxGeometry(0.16, 0.5, 0.02), cloak, st, 0, -0.25, 0, 0, a, 0);
+      this.strips.push(st);
+    }
+    // Bras fins à griffes
+    for (const [s, sx] of [['R', -1], ['L', 1]]) {
+      const sh = this.pivot('sh' + s, core, sx * 0.36, 0.0, 0.05);
+      this.mesh(new THREE.CapsuleGeometry(0.035, 0.45, 4, 6), dark, sh, 0, -0.25, 0);
+      const el = this.pivot('el' + s, sh, 0, -0.5, 0);
+      this.mesh(new THREE.CapsuleGeometry(0.03, 0.4, 4, 6), dark, el, 0, -0.2, 0);
+      for (let k = -1; k <= 1; k++) this.mesh(new THREE.ConeGeometry(0.018, 0.16, 4), bone, el, k * 0.03, -0.46, 0.02, Math.PI - 0.2);
+    }
+    // Orbe chargé entre les mains (visible pendant la visée)
+    this.orb = this.mesh(new THREE.SphereGeometry(0.16, 14, 10), this.glow, core, 0, -0.1, 0.55);
+    this.orb.visible = false;
+    // Éclats en orbite
+    this.shards = new THREE.Group();
+    core.add(this.shards);
+    for (let i = 0; i < 4; i++) {
+      const m = this.mesh(new THREE.OctahedronGeometry(0.08), this.glow, this.shards, Math.cos(i * 1.57) * 0.7, 0, Math.sin(i * 1.57) * 0.7);
+      m.scale.set(0.6, 1.4, 0.6);
+    }
+  }
+
+  animate(st) {
+    this.t += st.dt;
+    const t = this.t;
+    const P = {};
+    const set = (k, x, y = 0, z = 0) => (P[k] = [x, y, z]);
+    const sp = Math.min(2, st.speed);
+    const core = this.joints.core;
+    let y = 1.7 + Math.sin(t * 2.2) * 0.12;
+    let lean = -sp * 0.12;
+    set('shR', 0.3 + Math.sin(t * 1.6) * 0.15, 0, -0.35);
+    set('shL', 0.3 + Math.sin(t * 1.6 + 1) * 0.15, 0, 0.35);
+    set('elR', -0.6);
+    set('elL', -0.6);
+    this.orb.visible = false;
+    if (st.mode === 'windup') {
+      // Visée : bras tendus en avant, l'orbe grossit.
+      set('shR', -1.4, 0.3, -0.1);
+      set('shL', -1.4, -0.3, 0.1);
+      set('elR', -0.4);
+      set('elL', -0.4);
+      this.orb.visible = true;
+      this.orb.scale.setScalar(0.3 + st.p * 1.1 + Math.sin(t * 30) * 0.08);
+      lean = 0.15;
+    } else if (st.mode === 'swipe') {
+      set('shR', -1.8);
+      set('shL', -1.8);
+      set('elR', 0);
+      set('elL', 0);
+      lean = 0.35;
+    } else if (st.mode === 'stagger') {
+      lean = -0.5;
+      y += Math.sin(t * 30) * 0.05;
+    } else if (st.mode === 'dead') {
+      const d = Math.min(1, st.p * 1.5);
+      y = 1.7 - d * 1.4;
+      lean = -d * 1.2;
+    }
+    core.position.y += (y - core.position.y) * Math.min(1, st.dt * 8);
+    core.rotation.x += (lean - core.rotation.x) * Math.min(1, st.dt * 8);
+    this.strips.forEach((s, i) => s.rotation.set(Math.sin(t * 5 + i) * 0.35 - sp * 0.5, 0, Math.cos(t * 4 + i * 1.3) * 0.25));
+    for (let i = 0; i < 5; i++) P['strip' + i] = [this.strips[i].rotation.x, 0, this.strips[i].rotation.z];
+    this.shards.rotation.y = t * (st.mode === 'windup' ? 6 : 1.5);
+    this.glow.emissiveIntensity = st.mode === 'windup' ? 3 + Math.sin(t * 40) : st.alert ? 2.2 : 1.4;
+    this.apply(P, st.dt, st.mode === 'windup' ? 16 : 9);
   }
 }

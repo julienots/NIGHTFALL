@@ -28,7 +28,15 @@ export class Hud {
       <div class="dialog"><div class="dl-who"></div><div class="dl-text"></div><div class="dl-choices"></div><div class="dl-next">▼</div></div>
       <div class="fade"></div>
       <div class="chapter"><div class="c1"></div><div class="c2"></div><div class="c3"></div></div>
+      <div class="minimap"><canvas width="360" height="360"></canvas><div class="mm-ring"></div><div class="mm-n">N</div><div class="mm-zone"></div></div>
+      <div class="combo"><div class="cb-rank">D</div><div class="cb-n"><b>0</b> COUPS</div><div class="cb-bar"><i></i></div><div class="cb-word"></div></div>
+      <div class="hitmark"></div>
       <div class="vitals">
+        <div class="portrait"><svg viewBox="0 0 64 64"><defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fb8c9"/><stop offset="1" stop-color="#1d5a78"/></linearGradient></defs>
+          <circle cx="32" cy="32" r="30" fill="url(#pg)"/><path d="M14 64c2-12 9-17 18-17s16 5 18 17z" fill="#2f8f9f"/><circle cx="32" cy="30" r="13" fill="#e8b48a"/>
+          <path d="M18 27c0-10 7-15 14-15 9 0 15 6 14 15l-3-5-3 3-2-5-3 4-3-5-3 5-3-4-2 5z" fill="#2b1d16"/><rect class="mask" x="20" y="26" width="24" height="7" rx="3.5" fill="#1a0840"/>
+          <circle cx="27" cy="29.5" r="2.2" fill="#fff"/><circle cx="37" cy="29.5" r="2.2" fill="#fff"/><path d="M28 37q4 3 8 0" stroke="#7a2f3a" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+          <span class="plv">1</span></div>
         <div class="name">NOA <small class="lvl">NIV. 1</small></div>
         <div class="bar hp"><b></b><i></i><span class="bar-label hpv"></span></div>
         <div class="bar en"><i></i><span class="bar-label env"></span></div>
@@ -51,6 +59,8 @@ export class Hud {
       sub: q('.subtitle'), bars: q('.bars'), nums: q('.nums'), ret: q('.reticle'), marker: q('.marker'), markerTxt: q('.marker span'),
       pw: q('.slot.pw'), pwcd: q('.slot.pw .cd'), med: q('.med .qty'), wn: q('.wn'), vig: q('.vignette'), compass: q('.compass'),
       hint: q('.hint'), ab: q('.bar.ab > i'), abBar: q('.bar.ab'), mag: q('.slot.mag'), magcd: q('.slot.mag .cd'), umb: q('.slot.umb'),
+      mm: q('.minimap canvas'), mmZone: q('.mm-zone'), combo: q('.combo'), cbRank: q('.cb-rank'), cbN: q('.cb-n b'), cbBar: q('.cb-bar > i'), cbWord: q('.cb-word'),
+      hitmark: q('.hitmark'), plv: q('.plv'), portrait: q('.portrait'),
       clock: q('.clock'), dialog: q('.dialog'), dlWho: q('.dl-who'), dlText: q('.dl-text'), dlChoices: q('.dl-choices'), fade: q('.fade'),
     };
     // Choix de dialogue au clavier (1, 2, 3) ou au toucher / clic.
@@ -80,6 +90,10 @@ export class Hud {
     this.$.en.style.transform = `scaleX(${s.energy / s.maxEnergy})`;
     this.#setText('env', this.$.env, `${Math.floor(s.energy)}`);
     this.$.xp.style.transform = `scaleX(${s.xp / s.xpNext})`;
+    this.#setText('plv', this.$.plv, String(s.level));
+    this.$.portrait.style.setProperty('--hp', hpK.toFixed(3));
+    this.$.portrait.classList.toggle('masked', !!s.heroGear);
+    this.el.classList.toggle('lowhp', hpK < 0.3 && hpK > 0);
     this.#setText('lvl', this.$.lvl, `NIV. ${s.level}${s.skillPoints ? `  ·  ${s.skillPoints} PT` : ''}`);
     this.#setText('cr', this.$.cr, s.credits.toLocaleString('fr-FR'));
     this.#setText('sh', this.$.sh, String(s.shards));
@@ -222,6 +236,7 @@ export class Hud {
   #showBanner(t1, t2, t3) {
     const b = document.createElement('div');
     b.className = 'banner';
+    b.dataset.t1 = t1;
     b.innerHTML = `<div class="t1">${t1}</div><div class="t2">${t2}</div><div class="t3">${t3}</div>`;
     this.el.appendChild(b);
     setTimeout(() => b.remove(), 3700);
@@ -260,9 +275,50 @@ export class Hud {
     this.$.sub.classList.add('on');
   }
 
-  damageNumber(x, y, value, heavy) {
+  // Compteur de combo / rang de style (voir systems/combo.js).
+  combo(st) {
+    const on = !!st && st.hits >= 2;
+    this.$.combo.classList.toggle('on', on);
+    if (!on) return;
+    if (this.last.cbHits !== st.hits) {
+      this.last.cbHits = st.hits;
+      this.$.cbN.textContent = st.hits;
+      this.$.combo.classList.remove('bump');
+      void this.$.combo.offsetWidth;
+      this.$.combo.classList.add('bump');
+    }
+    if (this.last.cbRank !== st.rank) {
+      this.last.cbRank = st.rank;
+      this.$.cbRank.textContent = st.rank;
+      this.$.combo.dataset.rank = st.rank;
+      this.$.cbWord.textContent = st.word;
+      this.$.cbWord.classList.remove('pop');
+      void this.$.cbWord.offsetWidth;
+      this.$.cbWord.classList.add('pop');
+    }
+    this.$.cbBar.style.transform = `scaleX(${st.timer.toFixed(3)})`;
+  }
+
+  // Marqueur d'impact au centre de l'écran (confirmation visuelle des coups).
+  hitMarker(heavy, kill) {
+    const m = this.$.hitmark;
+    m.className = 'hitmark on' + (heavy ? ' heavy' : '') + (kill ? ' kill' : '');
+    clearTimeout(this.hmT);
+    this.hmT = setTimeout(() => (m.className = 'hitmark'), kill ? 380 : 180);
+  }
+
+  // Minicarte : dessinée par ui/minimap.js dans le canvas fourni.
+  get minimapCanvas() {
+    return this.$.mm;
+  }
+
+  minimapZone(text) {
+    this.#setText('mmz', this.$.mmZone, text || '');
+  }
+
+  damageNumber(x, y, value, heavy, crit = false) {
     const d = document.createElement('div');
-    d.className = 'dmg' + (heavy ? ' heavy' : '');
+    d.className = 'dmg' + (heavy ? ' heavy' : '') + (crit ? ' crit' : '');
     d.style.left = `${x + (Math.random() - 0.5) * 30}px`;
     d.style.top = `${y}px`;
     d.textContent = value;
@@ -284,7 +340,8 @@ export class Hud {
       }
       el.style.left = `${e.x}px`;
       el.style.top = `${e.y}px`;
-      el.querySelector('.nm').textContent = e.name;
+      el.querySelector('.nm').innerHTML = e.affix ? `${e.name}<span class="af">${e.affix}</span>` : e.name;
+      el.classList.toggle('elite', !!e.elite);
       el.querySelector('.bar > i').style.transform = `scaleX(${Math.max(0, e.hp)})`;
       const pz = el.querySelector('.poise');
       pz.style.display = e.poise == null ? 'none' : '';

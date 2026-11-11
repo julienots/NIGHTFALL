@@ -1,7 +1,7 @@
 # Consigne pour la session suivante (copier-coller dans un nouveau Claude Code)
 
 Tu reprends le développement de **NIGHTFALL: Rise of the Abyss** (studio SuperEssence),
-dépôt `julienots/nightfall`, branche `ccr-c181cca6-f5wlrm` (travaille sur cette branche,
+dépôt `julienots/nightfall`, branche `ccr-c35089d8-a3ztrq` (travaille sur cette branche,
 commit + push, pas de PR sans demande). Jeu 3D cartoon (Three.js 0.169 + Vite), APK Android
 via Capacitor 7. Code, commentaires et textes en jeu **en français**. Lis d'abord `README.md`.
 
@@ -39,22 +39,26 @@ Déjà en place (voir `src/game/`) :
   vie »), `data/missions.js`, sélection de chapitre sur l'écran titre (`data/presets.js`).
 - Les anneaux restent collés aux avant-bras pendant la course (`actors/rings.js`).
 
-## Résultat du dernier test complet (v1.3-beta)
-`tests/smoke.mjs` : tout passe du prologue au combat du Colosse, y compris le cours,
-Malik, le casier, Inès et le bus, le Nightfall, l'éveil, le magnétisme, la tempête de métal,
-le vol, le parking, la boutique et les compétences. Échecs à corriger en premier :
-- « embuscade : 3 Crawlers » : le test compte aussi les Crawlers nocturnes des nouveaux
-  quartiers (filtrer `spawn.group === 'crawlers'`).
-- « Colosse vaincu » échoue : la fin du combat (fightGroup('colossus') puis étape 2 de
-  m03) ne se déclenche plus. Vérifier `Colossus`, `onEnemyKilled`, et si `setPhase`/le
-  nettoyage des ennemis ou les nouveaux ennemis de quartier interfèrent. Tout ce qui suit
-  (cache du Colosse, mission « L'Ombre », chapitre 2, rendez-vous, rechargement) n'a donc
-  pas encore été validé par le test complet.
-- Test temps réel (boucle de rendu) : OK, sans erreur JavaScript.
+## v1.4 « Refonte » (fait)
+Refonte graphique complète, voir la section « Refonte v1.4 » du README :
+- UI : `src/title/titleBg.js` (titre animé), `src/game/ui/refonte.css` (thème néon abyssal,
+  chargé après `game.css`), `ui/minimap.js` (minicarte + carte du monde, touche M),
+  HUD (portrait, combo, marqueur d'impact, critiques) dans `ui/hud.js`.
+- Visuels : `fx/outline.js` (contours), tenue de nuit de Noa (`heroModel.js`, option `gear`),
+  `fx/trails.js` (traînées + images rémanentes), `fx/grade.js` (étalonnage),
+  `world/skyline.js` (néons + balises), aurore dans le ciel (`downtown.js`).
+- IA / logique : Veilleur (`enemy.js` `#wispAI`, `enemyModels.js` `WispModel`),
+  `systems/projectiles.js` (orbes, parade = renvoi), élites (`AFFIXES`), directeur
+  d'escouade (`Game.#squadDirector`, `onHeroAttack` → esquives), rage de la Brute,
+  `systems/rifts.js` (failles instables, 3 vagues), `systems/combo.js` (rang de style).
+- Correctifs : séquence du réveil (chapitre 2) qui bloquait la porte de la maison pendant
+  13 s (séquences « free »), traction des tentacules, favicon (404), test des Crawlers.
+- APK non reconstruit dans cette session (pas de SDK Android dans le conteneur) :
+  `versionCode 5` / `1.4-refonte` déjà renseignés dans `android/app/build.gradle`.
 
 ## À FAIRE (par priorité)
-1. **Valider l'intégration** : lancer `node tests/smoke.mjs exports/screens` (106
-   vérifications) et `tests/touch.mjs`, corriger chaque échec. Regarder les captures
+1. **Valider l'intégration** : lancer `node tests/smoke.mjs exports/screens` (≈115
+   vérifications ; `CHROME=/opt/pw-browsers/chromium` si le Chromium de Playwright manque) et `tests/touch.mjs`, corriger chaque échec. Regarder les captures
    (quartiers, intérieurs, cours, Forme Abysse) et corriger ce qui est moche ou bloquant
    (personnages coincés dans les murs, portes mal placées, quartiers vides).
 2. **Histoire de harcèlement au lycée** (demande explicite) : nouveau personnage harceleur

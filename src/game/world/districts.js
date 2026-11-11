@@ -697,6 +697,9 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     { after: 'p03_rings', type: 'stalker', x: -127.4, z: -35, group: 'park', patrol: ringPts(-134, -35, 6.6, 10) },
     { after: 'p03_rings', type: 'crawler', x: -152, z: -40, group: 'park', patrol: [[-152, -40], [-160, -24], [-150, -18]] },
     // Zone industrielle
+    // Veilleurs (attaque à distance) perchés dans les quartiers ouverts.
+    { after: 'p03_rings', type: 'wisp', x: -120, z: -60, group: 'park', patrol: [[-120, -60], [-140, -70], [-128, -48]] },
+    { after: 'p03_rings', type: 'wisp', x: -130, z: -128, group: 'industrial', patrol: [[-130, -128], [-118, -138]] },
     { after: 'p03_rings', type: 'stalker', x: -145, z: -90, group: 'industrial', patrol: [[-145, -90], [-100, -90], [-100, -95]] },
     { after: 'p03_rings', type: 'crawler', x: -112, z: -116, group: 'industrial', patrol: [[-112, -116], [-135, -116], [-135, -108]] },
     { after: 'p03_rings', type: 'brute', x: -125, z: -152, group: 'industrial', patrol: [[-125, -152], [-145, -152], [-145, -138]] },

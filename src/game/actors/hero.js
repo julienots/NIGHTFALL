@@ -45,9 +45,9 @@ const angleDiff = (a, b) => {
 export class Hero {
   constructor(game) {
     this.game = game;
-    this.model = new HeroModel();
+    this.model = new HeroModel(PALETTES.noa, { gear: true, outline: true });
     // Seconde silhouette : la forme Abysse (même squelette, autre modèle).
-    this.umbraModel = new HeroModel(PALETTES.umbra);
+    this.umbraModel = new HeroModel(PALETTES.umbra, { outline: true });
     this.umbraModel.root.visible = false;
     this.form = 'human';
     this.abyss = 0;
@@ -227,6 +227,7 @@ export class Hero {
       lunge = Math.max(0, Math.min(lunge * def.dur * 0.5, d)) / (def.dur * 0.5);
     }
     this.action = { kind, def, t: 0, hitDone: false, anim: def.anim, lunge };
+    this.game.onHeroAttack?.(def, kind, target);
     this.game.audio.swing(!!def.heavy);
     if (def.roar) this.game.audio.roar(this.pos);
     if (this.form === 'umbra') return;
@@ -251,11 +252,15 @@ export class Hero {
     const base = this.stats.damage * def.mult * (def === MOVES.power ? 1 + this.stats.powerDamage : 1) * this.#dmgMult();
     const umbra = this.form === 'umbra';
     const hit = (e, dir) => {
-      const dmg = Math.round(base * (0.92 + Math.random() * 0.16));
+      // Coup critique : plus probable quand le rang de style est élevé.
+      const crit = Math.random() < 0.07 + 0.025 * (this.game.combo?.rankIndex || 0);
+      const dmg = Math.round(base * (0.92 + Math.random() * 0.16) * (crit ? 1.6 : 1));
+      const kind = umbra ? 'umbra' : def === MOVES.dive ? 'dive' : def.heavy ? 'heavy' : 'light';
       // Tentacules : la créature est tirée vers Noa au lieu d'être repoussée.
       const d = def.pull ? dir.clone().negate() : dir;
-      const knock = def.pull ? Math.min(def.knock, Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z) * 1.2) : def.knock;
-      if (e.takeHit({ damage: dmg, dir: d, knock, poise: def.poise, heavy: !!def.heavy, power: def === MOVES.power || umbra })) hits++;
+      // Traction : vitesse calculée pour amener la créature au contact (amortie ×6/s).
+      const knock = def.pull ? Math.max(0, Math.hypot(e.pos.x - this.pos.x, e.pos.z - this.pos.z) - 2.2) * 6 : def.knock;
+      if (e.takeHit({ damage: dmg, dir: d, knock, poise: def.poise, heavy: !!def.heavy, power: def === MOVES.power || umbra, crit, kind })) hits++;
       if (umbra) this.hp = Math.min(this.stats.maxHp, this.hp + Math.max(1, Math.round(dmg * 0.06))); // la substance se nourrit
       if (def.roar) e.stagger?.(1.4);
       if (def.pull) this.game.fx.emit({ x: e.pos.x, y: e.pos.y + 1, z: e.pos.z }, { count: 10, color: '#1d1530', speed: 3, size: 0.3, life: 0.4 });
@@ -316,7 +321,7 @@ export class Hero {
     for (const e of v.list) {
       if (!e.alive) continue;
       const dmg = Math.round(base * (0.92 + Math.random() * 0.16));
-      e.takeHit({ damage: dmg, dir: e.pos.clone().sub(this.pos).setY(0).normalize(), knock: def.knock, poise: def.poise, heavy: true, power: true });
+      e.takeHit({ damage: dmg, dir: e.pos.clone().sub(this.pos).setY(0).normalize(), knock: def.knock, poise: def.poise, heavy: true, power: true, kind: 'power' });
       this.game.fx.starBurst({ x: e.pos.x, y: e.pos.y + e.def.height * 0.6, z: e.pos.z }, '#7fe3ff', 1.6);
     }
     if (v.list.length) {

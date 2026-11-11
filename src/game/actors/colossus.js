@@ -5,6 +5,7 @@
 // P3 (rage) : plus rapide, invoque des Stalkers, ultime « Effondrement »
 //      (saut puis écrasement massif), suivi d'un long épuisement.
 import * as THREE from 'three';
+import { addOutline } from '../fx/outline.js';
 import { toon } from '../fx/toon.js';
 
 const HP = 2800;
@@ -245,6 +246,7 @@ export class Colossus {
     this.def = { name: 'LE COLOSSE', height: H, color: '#b070ff', hp: HP, xp: 600, credits: [300, 400], loot: [{ id: 'abyss_fragment', chance: 1, qty: [3, 4] }], poise: 0 };
     this.id = 'colossus';
     this.model = new ColossusModel();
+    addOutline(this.model.root, { thickness: 0.06 });
     this.pos = new THREE.Vector3(pos.x, 0.15, pos.z);
     this.home = this.pos.clone();
     this.vel = new THREE.Vector3();
@@ -314,13 +316,13 @@ export class Colossus {
   }
 
   // Les dégâts sont réduits par l'armure, sauf quand les noyaux sont exposés.
-  takeHit({ damage, dir, heavy, power }) {
+  takeHit({ damage, dir, heavy, power, crit = false, kind }) {
     if (!this.alive || this.state === 'intro') return false;
     const mult = this.exposed ? 2.5 : 0.45;
     const dmg = Math.max(1, Math.round(damage * mult));
     this.hp -= dmg;
     this.flash = 1;
-    this.game.onEnemyDamaged(this, dmg, heavy || this.exposed);
+    this.game.onEnemyDamaged(this, dmg, heavy || this.exposed, crit, kind || (power ? 'power' : heavy ? 'heavy' : 'light'));
     const at = { x: this.pos.x - dir.x * R, y: this.pos.y + (this.exposed ? 5.6 : 3.5), z: this.pos.z - dir.z * R };
     this.game.fx.hitSpark(at, this.exposed ? '#ffe27a' : '#c38cff', heavy);
     this.game.audio.hit(this.pos, true);

@@ -270,3 +270,22 @@ test('données sociales et sélection de chapitre cohérentes', async () => {
     if (ch === 'ch2') assert.equal(log.tracked, 'd01_double_life');
   }
 });
+
+import { ComboMeter, RANKS } from '../src/game/systems/combo.js';
+test('combo : le rang monte avec des coups variés et chute quand on est touché', () => {
+  const c = new ComboMeter();
+  const kinds = ['light', 'heavy', 'power', 'magnet', 'dive', 'light', 'heavy', 'power', 'parry', 'light', 'heavy', 'power', 'magnet', 'dive', 'parry', 'umbra', 'light', 'heavy', 'power', 'magnet'];
+  for (const k of kinds) c.hit(k, 30);
+  assert.ok(c.rankIndex >= 3, `rang ${c.rank.id}`);
+  const r = c.rankIndex;
+  c.hurt();
+  assert.ok(c.rankIndex <= r - 2);
+  // Répéter le même coup rapporte moins que varier.
+  const a = new ComboMeter(); for (let i = 0; i < 10; i++) a.hit('light', 10);
+  const b = new ComboMeter(); for (let i = 0; i < 10; i++) b.hit(['light', 'heavy'][i % 2], 10);
+  assert.ok(b.score > a.score);
+  // Fin d'enchaînement : bonus d'XP.
+  let bonus = 0; for (let t = 0; t < 5 && !bonus; t += 0.1) bonus = a.update(0.1);
+  assert.ok(bonus > 0 && a.hits === 0);
+  assert.equal(RANKS[0].id, 'D');
+});

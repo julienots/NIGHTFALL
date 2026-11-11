@@ -4,7 +4,8 @@
 // Spécifiques : Stalker (observe, contourne, bondit) et Brute (rugit, frappe
 // le sol, balaie, charge), avec attaques télégraphiées.
 import * as THREE from 'three';
-import { StalkerModel, BruteModel, CrawlerModel } from './enemyModels.js';
+import { StalkerModel, BruteModel, CrawlerModel, WispModel } from './enemyModels.js';
+import { addOutline, setOutlineVisible } from '../fx/outline.js';
 
 export const ENEMY_TYPES = {
   stalker: {
@@ -19,6 +20,12 @@ export const ENEMY_TYPES = {
     xp: 35, credits: [6, 14], color: '#ff9a3d', leash: 40, forget: 5,
     loot: [{ id: 'scrap', chance: 0.6, qty: [1, 2] }, { id: 'abyss_fragment', chance: 0.1, qty: [1, 1] }],
   },
+  wisp: {
+    name: 'Veilleur', Model: WispModel, hp: 60, radius: 0.5, height: 2.4, mass: 0.9,
+    walk: 2.0, run: 5.5, sight: 30, fov: 2.6, hearing: 16, poise: 0,
+    xp: 55, credits: [10, 22], color: '#ff4dd2', leash: 45, forget: 6,
+    loot: [{ id: 'scrap', chance: 0.4, qty: [1, 2] }, { id: 'abyss_fragment', chance: 0.25, qty: [1, 1] }],
+  },
   brute: {
     name: 'Brute', Model: BruteModel, hp: 340, radius: 1.05, height: 3.0, mass: 0.22,
     walk: 1.6, run: 4.3, sight: 22, fov: 2.0, hearing: 18, poise: 120,
@@ -26,6 +33,15 @@ export const ENEMY_TYPES = {
     loot: [{ id: 'scrap', chance: 1, qty: [3, 5] }, { id: 'abyss_fragment', chance: 0.6, qty: [1, 2] }],
   },
 };
+
+// Affixes des créatures d'élite (aura colorée, nom, effets réels).
+export const AFFIXES = {
+  enraged: { label: 'ENRAGÉ', color: '#ff3b3b', speed: 1.3, dmg: 1.35 },
+  armored: { label: 'BLINDÉ', color: '#ffcd20', speed: 0.9, dmg: 1.1 },
+  spectral: { label: 'SPECTRAL', color: '#5fe3ff', speed: 1.1, dmg: 1.15 },
+};
+// Groupes « de quartier » où une élite peut apparaître (jamais dans les missions scriptées).
+const ELITE_GROUPS = ['park', 'port', 'industrial', 'suburb', 'stadium', 'north', 'rift'];
 
 const angleDiff = (a, b) => {
   let d = b - a;
@@ -41,6 +57,7 @@ export class Enemy {
     this.type = spawn.type;
     this.def = ENEMY_TYPES[spawn.type];
     this.model = new this.def.Model();
+    addOutline(this.model.root, { thickness: this.type === 'brute' ? 0.03 : 0.018 });
     this.radius = this.def.radius;
     this.pos = new THREE.Vector3(spawn.x, 0.15, spawn.z);
     this.home = this.pos.clone();
@@ -49,6 +66,7 @@ export class Enemy {
     this.yaw = Math.random() * Math.PI * 2;
     this.vel = new THREE.Vector3();
     this.vy = 0;
+    this.maxHp = this.def.hp;
     this.hp = this.def.hp;
     this.poise = this.def.poise;
     this.alive = true;
@@ -69,11 +87,53 @@ export class Enemy {
     this.telegraph = null;
     this.strafeDir = Math.random() < 0.5 ? -1 : 1;
     this.retreated = false;
+    this.slotAngle = null; // angle d'encerclement attribué par le directeur d'escouade
+    this.evadeCd = 0;
+    this.blinkCd = 0;
+    this.speedMult = 1;
+    this.dmgMult = 1;
+    // Élite : imposée par le point d'apparition, ou tirée au sort en quartier.
+    const roll = spawn.elite ?? (ELITE_GROUPS.includes(spawn.group) && (game.progression?.level || 1) >= 3 && Math.random() < 0.12 ? Object.keys(AFFIXES)[Math.floor(Math.random() * 3)] : null);
+    if (roll) this.#makeElite(roll === true ? 'enraged' : roll);
     this.model.root.position.copy(this.pos);
   }
 
+  #makeElite(affix) {
+    const A = AFFIXES[affix];
+    this.elite = true;
+    this.affix = affix;
+    this.affixLabel = A.label;
+    this.maxHp = Math.round(this.def.hp * 1.8);
+    this.hp = this.maxHp;
+    this.speedMult = A.speed;
+    this.dmgMult = A.dmg;
+    this.model.root.scale.setScalar(1.18);
+    this.model.baseScale = 1.18;
+    this.model.glow?.color?.set(A.color);
+    this.model.glow?.emissive?.set(A.color);
+    this.auraT = 0;
+  }
+
   get name() {
-    return this.def.name;
+    return this.elite ? `${this.def.name} d'élite` : this.def.name;
+  }
+
+  get xpValue() {
+    return Math.round(this.def.xp * (this.elite ? 2.5 : 1));
+  }
+
+  // Réaction à une attaque du héros (directeur : esquive latérale).
+  react(kind, heroPos) {
+    if (!this.alive || this.evadeCd > 0) return;
+    if (!['circle', 'observe', 'recover', 'kite'].includes(this.state)) return;
+    const chance = { stalker: 0.4, crawler: 0.22, wisp: 0.5, brute: 0 }[this.type] * (this.elite ? 1.4 : 1);
+    if (Math.random() > chance) return;
+    const away = Math.atan2(this.pos.x - heroPos.x, this.pos.z - heroPos.z);
+    const side = Math.random() < 0.5 ? -1 : 1;
+    this.evadeDir = new THREE.Vector3(Math.sin(away + side * 1.3), 0, Math.cos(away + side * 1.3));
+    this.evadeCd = 2.5;
+    this.game.releaseToken(this);
+    this.#set('evade');
   }
 
   #set(state) {
@@ -149,6 +209,9 @@ export class Enemy {
     if (this.type === 'crawler') {
       this.game.audio.stalkerClick(this.pos);
       this.#set('circle');
+    } else if (this.type === 'wisp') {
+      this.game.audio.stalkerHiss(this.pos);
+      this.#set('kite');
     } else if (this.type === 'stalker') {
       this.game.audio.stalkerClick(this.pos);
       this.#set('observe');
@@ -165,16 +228,18 @@ export class Enemy {
     this.lastKnown = pos.clone();
     this.alert = true;
     this.sinceSeen = 0.5;
-    this.#set(this.type === 'brute' ? 'chase' : 'circle');
+    this.#set(this.type === 'brute' ? 'chase' : this.type === 'wisp' ? 'kite' : 'circle');
   }
 
   // ---------- Dégâts reçus ----------
-  takeHit({ damage, dir, knock, poise, heavy, power }) {
+  takeHit({ damage, dir, knock, poise, heavy, power, crit = false, kind }) {
     if (!this.alive) return false;
+    // Affixe « blindé » : réduit les dégâts tant que la garde tient.
+    if (this.affix === 'armored' && this.poise > 0 && !power) damage = Math.round(damage * 0.6);
     this.hp -= damage;
     this.flash = 1;
     this.showBar = 4;
-    this.game.onEnemyDamaged(this, damage, heavy);
+    this.game.onEnemyDamaged(this, damage, heavy, crit, kind || (power ? 'power' : heavy ? 'heavy' : 'light'));
     this.game.fx.ichor({ x: this.pos.x, y: this.pos.y + this.def.height * 0.55, z: this.pos.z }, this.def.color);
     this.game.fx.hitSpark({ x: this.pos.x - dir.x * this.radius, y: this.pos.y + this.def.height * 0.55, z: this.pos.z - dir.z * this.radius }, power ? '#c38cff' : '#ffd27a', heavy);
     this.game.audio.hit(this.pos, heavy);
@@ -188,15 +253,30 @@ export class Enemy {
       this.#die();
       return true;
     }
+    // Spectral / Veilleur : se téléporte parfois quand il est touché.
+    if ((this.affix === 'spectral' || this.type === 'wisp') && this.blinkCd <= 0 && Math.random() < (this.type === 'wisp' ? 0.35 : 0.25)) {
+      if (this.#blink(7 + Math.random() * 4)) return true;
+    }
     if (this.type !== 'brute') {
       // Interrompu sauf pendant le bond déjà lancé.
       if (this.state !== 'lunge' || heavy) this.#set('stagger');
       this.staggerFor = heavy ? 0.7 : 0.35;
-      if (!this.retreated && this.hp < this.def.hp * 0.3) {
+      if (!this.retreated && this.hp < this.maxHp * 0.3) {
         this.retreated = true;
         this.retreatAfter = true;
       }
     } else {
+      // Rage de la Brute sous 35 % : plus rapide, frappe plus fort, rameute les siens.
+      if (!this.enraged && this.hp < this.maxHp * 0.35) {
+        this.enraged = true;
+        this.speedMult *= 1.25;
+        this.dmgMult *= 1.2;
+        this.game.audio.bruteRoar(this.pos);
+        this.game.fx.ring(this.pos, { color: '#ff3b3b', from: 0.5, to: 7, life: 0.6, y: 1 });
+        this.game.hud.toast(`${this.name} entre en rage !`, '#ff5a2a');
+        for (const o of this.game.enemies) if (o !== this && o.alive && o.pos.distanceTo(this.pos) < 30) o.alertTo(this.game.hero.pos);
+        this.model.glow?.emissive?.set('#ff2020');
+      }
       this.poise -= poise;
       if (this.poise <= 0) {
         this.poise = this.def.poise;
@@ -226,7 +306,7 @@ export class Enemy {
 
   // ---------- Attaques vers le héros ----------
   #strike(damage, opts) {
-    const r = this.game.hero.takeDamage(damage, this.pos, { ...opts, source: this });
+    const r = this.game.hero.takeDamage(Math.round(damage * this.dmgMult), this.pos, { ...opts, source: this });
     this.attackHit = true;
     return r;
   }
@@ -253,7 +333,7 @@ export class Enemy {
     if (d < 0.05) return d;
     this.#faceTo(Math.atan2(dx, dz), dt, rate);
     // Avance dans la direction regardée (virages naturels).
-    const s = Math.min(speed, d / dt);
+    const s = Math.min(speed * this.speedMult, d / dt);
     this.desired.set(Math.sin(this.yaw) * s, 0, Math.cos(this.yaw) * s);
     return d;
   }
@@ -262,6 +342,8 @@ export class Enemy {
     this.desired = this.desired || new THREE.Vector3();
     this.desired.set(0, 0, 0);
     this.stateT += dt;
+    this.evadeCd -= dt;
+    this.blinkCd -= dt;
     this.flash = Math.max(0, this.flash - dt * 6);
     this.showBar = Math.max(0, this.showBar - dt);
 
@@ -269,7 +351,10 @@ export class Enemy {
       this.deadT += dt;
       this.model.animate({ mode: 'dead', p: this.deadT, dt, speed: 0, phase: 0 });
       this.model.setFlash(0);
-      if (this.deadT > 2.2) this.model.setDissolve(Math.min(1, (this.deadT - 2.2) / 1.2));
+      if (this.deadT > 2.2) {
+        setOutlineVisible(this.model.root, false);
+        this.model.setDissolve(Math.min(1, (this.deadT - 2.2) / 1.2));
+      }
       this.#physics(dt);
       return;
     }
@@ -289,9 +374,21 @@ export class Enemy {
       this.#set(fromHome > this.def.leash || this.game.hero.dead ? 'return' : 'investigate');
     }
 
-    if (this.type === 'stalker') this.#stalkerAI(dt);
+    if (this.state === 'evade') this.#evade(dt);
+    else if (this.type === 'stalker') this.#stalkerAI(dt);
     else if (this.type === 'crawler') this.#crawlerAI(dt);
+    else if (this.type === 'wisp') this.#wispAI(dt);
     else this.#bruteAI(dt);
+    if (this.elite) {
+      // Aura d'élite : particules de la couleur de l'affixe.
+      this.auraT -= dt;
+      if (this.auraT <= 0) {
+        this.auraT = 0.12;
+        const a = Math.random() * Math.PI * 2;
+        const r = this.radius + 0.3;
+        this.game.fx.emit({ x: this.pos.x + Math.sin(a) * r, y: this.pos.y + 0.2, z: this.pos.z + Math.cos(a) * r }, { count: 1, color: AFFIXES[this.affix].color, speed: 0.6, up: 2.5, size: 0.3, life: 0.7, gravity: -2 });
+      }
+    }
 
     this.#physics(dt);
     this.#animate(dt);
@@ -327,7 +424,7 @@ export class Enemy {
         return true;
       }
       case 'return': {
-        this.hp = Math.min(this.def.hp, this.hp + dt * this.def.hp * 0.1);
+        this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * 0.1);
         if (this.#moveTo(this.home, this.def.walk * 1.5, dt, 4) < 1) this.#set('patrol');
         return true;
       }
@@ -336,7 +433,7 @@ export class Enemy {
           if (this.retreatAfter) {
             this.retreatAfter = false;
             this.#set('retreat');
-          } else this.#set(this.type === 'brute' ? 'chase' : 'circle');
+          } else this.#set(this.type === 'brute' ? 'chase' : this.type === 'wisp' ? 'kite' : 'circle');
         }
         return true;
       default:
@@ -361,7 +458,8 @@ export class Enemy {
         const behind = hero.yaw + Math.PI;
         this.strafeDir = angleDiff(toMe, behind) > 0 ? 1 : -1;
         const want = 7.5;
-        const ang = toMe + this.strafeDir * 0.9;
+        // Escouade : chacun vise son propre angle autour du héros (encerclement).
+        const ang = this.slotAngle != null ? toMe + Math.max(-0.9, Math.min(0.9, angleDiff(toMe, this.slotAngle))) : toMe + this.strafeDir * 0.9;
         const target = new THREE.Vector3(hero.pos.x + Math.sin(ang) * want, 0, hero.pos.z + Math.cos(ang) * want);
         this.#moveTo(target, this.def.run * 0.75, dt, 7);
         // Toujours tourné vers sa proie quand il est proche
@@ -433,7 +531,8 @@ export class Enemy {
       case 'circle': {
         // Trottine en cercle serré, change de sens, puis bondit.
         if (this.stateT < dt * 1.5) this.strafeDir = Math.random() < 0.5 ? -1 : 1;
-        const toMe = Math.atan2(this.pos.x - hero.pos.x, this.pos.z - hero.pos.z) + this.strafeDir * 0.8;
+        const raw = Math.atan2(this.pos.x - hero.pos.x, this.pos.z - hero.pos.z);
+        const toMe = this.slotAngle != null ? raw + Math.max(-0.8, Math.min(0.8, angleDiff(raw, this.slotAngle))) : raw + this.strafeDir * 0.8;
         const target = new THREE.Vector3(hero.pos.x + Math.sin(toMe) * 5.5, 0, hero.pos.z + Math.cos(toMe) * 5.5);
         this.#moveTo(target, this.def.run * 0.8, dt, 9);
         if (d < 1.8 && this.game.attackToken(this)) this.#set('bite');
@@ -480,6 +579,118 @@ export class Enemy {
           this.game.releaseToken(this);
           this.#set('circle');
         }
+        break;
+      default:
+        this.#set('patrol');
+    }
+  }
+
+  // ---------- Esquive latérale (réaction aux attaques du héros) ----------
+  #evade(dt) {
+    const k = 1 - this.stateT / 0.32;
+    this.desired.copy(this.evadeDir).multiplyScalar(13 * Math.max(0.15, k));
+    this.#faceHero(dt, 8);
+    if (this.stateT < dt * 1.5) this.game.fx.dustRing(this.pos, 0.6, 5, '#9a8c7a');
+    if (this.stateT > 0.32) this.#set(this.type === 'wisp' ? 'kite' : 'circle');
+  }
+
+  // Téléportation (fumée violette) vers un point dégagé à distance du héros.
+  #blink(dist) {
+    const hero = this.game.hero;
+    const col = this.game.col;
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const x = hero.pos.x + Math.sin(a) * dist;
+      const z = hero.pos.z + Math.cos(a) * dist;
+      if (Math.hypot(x - this.home.x, z - this.home.z) > this.def.leash * 0.8) continue;
+      const gh = col.groundHeight(x, z, this.radius, hero.pos.y + 2);
+      if (Math.abs(gh - hero.pos.y) > 1.5) continue;
+      if (!col.lineOfSight({ x, y: gh + 1.5, z }, { x: hero.pos.x, y: hero.pos.y + 1.4, z: hero.pos.z })) continue;
+      const c = AFFIXES[this.affix]?.color || this.def.color;
+      this.game.fx.emit({ x: this.pos.x, y: this.pos.y + 1.2, z: this.pos.z }, { count: 24, color: c, speed: 4, size: 0.35, life: 0.5, gravity: -1 });
+      this.pos.set(x, gh, z);
+      this.vel.set(0, 0, 0);
+      this.game.fx.emit({ x, y: gh + 1.2, z }, { count: 24, color: c, speed: 4, size: 0.35, life: 0.5, gravity: -1 });
+      this.game.fx.ring({ x, y: gh, z }, { color: c, from: 0.2, to: 2.2, life: 0.35 });
+      this.blinkCd = 4.5;
+      this.game.releaseToken(this);
+      this.#set(this.type === 'wisp' ? 'kite' : 'circle');
+      return true;
+    }
+    return false;
+  }
+
+  // ---------- Veilleur (distance) ----------
+  // Garde ses distances (9–14 m), se décale pour garder la ligne de vue,
+  // vise (orbe télégraphié) puis tire ; se téléporte si on l'approche.
+  #wispAI(dt) {
+    if (this.#commonStates(dt)) return;
+    const hero = this.game.hero;
+    const d = this.#heroDist();
+    switch (this.state) {
+      case 'circle':
+      case 'kite': {
+        if (this.state === 'circle') this.state = 'kite';
+        const toMe = Math.atan2(this.pos.x - hero.pos.x, this.pos.z - hero.pos.z);
+        const want = 11.5;
+        if (this.stateT < dt * 1.5) this.strafeDir = Math.random() < 0.5 ? -1 : 1;
+        const base = this.slotAngle != null ? toMe + Math.max(-0.6, Math.min(0.6, angleDiff(toMe, this.slotAngle))) : toMe + this.strafeDir * 0.5;
+        const target = new THREE.Vector3(hero.pos.x + Math.sin(base) * want, 0, hero.pos.z + Math.cos(base) * want);
+        this.#moveTo(target, d < 7 ? this.def.run : this.def.walk * 1.6, dt, 6);
+        this.#faceHero(dt, 7);
+        if (d < 4.5 && this.blinkCd <= 0) this.#blink(11);
+        else if (d < 2.6 && this.game.attackToken(this)) this.#set('swipeWindup');
+        else if (this.stateT > 1.6 + Math.random() * 1.4 && d < 24 && this.sees && this.game.attackToken(this)) this.#set('aim');
+        if (!this.sees && this.stateT > 2 && this.lastKnown) this.#moveTo(this.lastKnown, this.def.run, dt);
+        break;
+      }
+      case 'aim': {
+        // Télégraphe : l'orbe grossit 0,8 s, lueur et grésillement.
+        this.#faceHero(dt, 10);
+        if (this.stateT < dt * 1.5) {
+          this.game.audio.telegraph(this.pos);
+          this.game.fx.flash({ x: this.pos.x, y: this.pos.y + 1.7, z: this.pos.z }, '#ff4dd2', 10, 0.8);
+        }
+        if (this.stateT > 0.8) {
+          const fwd = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+          const from = new THREE.Vector3(this.pos.x, this.pos.y + 1.6, this.pos.z).addScaledVector(fwd, 0.6);
+          const aim = new THREE.Vector3(hero.pos.x, hero.pos.y + 1.1, hero.pos.z).addScaledVector(hero.vel, 0.25).sub(from);
+          const n = this.elite ? 3 : 1;
+          for (let i = 0; i < n; i++) {
+            const dir = aim.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), (i - (n - 1) / 2) * 0.22);
+            this.game.projectiles?.fire(this, from, dir, { damage: Math.round(14 * this.dmgMult), color: AFFIXES[this.affix]?.color || '#ff4dd2' });
+          }
+          this.game.audio.voidStrike?.();
+          this.#set('cast');
+        }
+        break;
+      }
+      case 'cast':
+        if (this.stateT > 0.5) {
+          this.game.releaseToken(this);
+          this.#set('kite');
+        }
+        break;
+      case 'swipeWindup':
+        this.#faceHero(dt, 10);
+        if (this.stateT > 0.4) this.#set('swipe');
+        break;
+      case 'swipe':
+        if (!this.attackHit && this.stateT > 0.08) {
+          if (d < 2.8 && Math.abs(hero.pos.y - this.pos.y) < 2.4) this.#strike(10, { knock: 6 });
+          else this.attackHit = true;
+        }
+        if (this.stateT > 0.4) this.#set('recover');
+        break;
+      case 'recover':
+        if (this.stateT > 0.6) {
+          this.game.releaseToken(this);
+          this.#set('kite');
+        }
+        break;
+      case 'retreat':
+        if (this.blinkCd <= 0) this.#blink(14);
+        else this.#set('kite');
         break;
       default:
         this.#set('patrol');
@@ -626,6 +837,14 @@ export class Enemy {
 
   #animate(dt) {
     const sp = this.speedNow / (this.type === 'brute' ? 3 : this.type === 'crawler' ? 3 : 4);
+    if (this.type === 'wisp') {
+      const wm = { aim: 'windup', cast: 'swipe', swipeWindup: 'windup', swipe: 'swipe', stagger: 'stagger', evade: 'move' }[this.state] || 'move';
+      this.model.animate({ mode: wm, speed: sp, phase: 0, p: Math.min(1, this.stateT / 0.8), dt, alert: this.alert });
+      this.model.setFlash(this.flash);
+      this.model.root.position.copy(this.pos);
+      this.model.root.rotation.y = this.yaw;
+      return;
+    }
     this.phase += dt * (this.type === 'brute' ? 5 : this.type === 'crawler' ? 14 : 9) * Math.min(1.6, sp);
     const mode = {
       observe: 'observe', windup: 'windup', lunge: 'lunge', lurk: 'lurk', bite: 'windup', swipeWindup: this.type === 'brute' ? 'swipeWindup' : 'windup',

@@ -30,7 +30,7 @@ export class Menus {
     this.sel = null;
     this.el = {};
     this.shopSection = 'featured';
-    for (const name of ['inventory', 'journal', 'pause', 'reward', 'death', 'skills', 'shop', 'relations']) {
+    for (const name of ['inventory', 'journal', 'pause', 'reward', 'death', 'skills', 'shop', 'relations', 'worldmap']) {
       const d = document.createElement('div');
       d.className = `menu ${name === 'inventory' ? 'inv' : name}`;
       document.body.appendChild(d);
@@ -67,14 +67,14 @@ export class Menus {
 
   toggle(name, opts) {
     if (this.open === name) this.hide();
-    else if (!this.open || ['inventory', 'journal', 'skills', 'relations'].includes(this.open)) this.show(name, opts);
+    else if (!this.open || ['inventory', 'journal', 'skills', 'relations', 'worldmap'].includes(this.open)) this.show(name, opts);
   }
 
   render() {
     const r = {
       inventory: () => this.#inventory(), journal: () => this.#journal(), pause: () => this.#pause(),
       reward: () => this.#reward(), death: () => this.#death(), skills: () => this.#skills(), shop: () => this.#shop(),
-      relations: () => this.#relations(),
+      relations: () => this.#relations(), worldmap: () => this.#worldmap(),
     }[this.open];
     r?.();
   }
@@ -238,6 +238,16 @@ export class Menus {
     this.el.journal.innerHTML = `<div class="body"><div class="head"><h2>JOURNAL</h2><button class="btn" data-act="close">Fermer</button></div>${rows}</div>`;
   }
 
+  // ---------- Carte du monde (M) ----------
+  #worldmap() {
+    const g = this.game;
+    this.el.worldmap.innerHTML = `<div class="head"><h2>CARTE DE VESPER</h2><button class="btn" data-act="close">Fermer [M]</button></div>
+      <div class="wm-wrap"><canvas width="900" height="900"></canvas></div>
+      <div class="wm-legend"><span style="color:#ffcd20"><i style="background:#ffcd20"></i>Objectif / caisses</span><span style="color:#ff3b5c"><i style="background:#ff3b5c"></i>Créatures</span>
+        <span style="color:#ffb020"><i style="background:#ffb020"></i>Élites</span><span style="color:#a060ff"><i style="background:#a060ff"></i>Failles instables</span><span style="color:#ff9cf0"><i style="background:#ff9cf0"></i>Amis</span></div>`;
+    g.minimap?.drawWorld(this.el.worldmap.querySelector('canvas'));
+  }
+
   // ---------- Pause / paramètres ----------
   #pause() {
     const s = this.game.settings;
@@ -267,7 +277,7 @@ export class Menus {
         <p class="cost">La qualité modifie immédiatement la résolution, les ombres et le bloom ; le nombre de lumières et la densité de pluie s'appliquent au prochain chargement.</p>
       </div>
       <div class="controls">ZQSD/WASD déplacer · Maj sprint · Espace sauter · Clic gauche combo (en l'air : attaque plongeante) · Clic droit coup lourd<br>
-        Ctrl/C esquive (au bon moment : esquive parfaite) · F Void Strike · R verrouiller · E interagir · H soin · I inventaire · J journal · N marqueurs<br>
+        Ctrl/C esquive (au bon moment : esquive parfaite) · F rafale · R verrouiller · E interagir · H soin · I inventaire · J journal · M carte · N marqueurs<br>
         Manette : stick G/D, A saut, X combo, Y lourd, B esquive, RB pouvoir, LB verrouillage, ↑ interagir</div>
     </div>`;
     this.el.pause.querySelector('[data-set=quality]').value = s.quality;

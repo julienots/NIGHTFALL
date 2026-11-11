@@ -31,6 +31,38 @@ lointains sont masqués automatiquement pour garder un bon rendu sur téléphone
 **Intérieurs visitables** : le lycée (hall, couloir et casiers, salles 12 et 14, labo de
 physique, cafétéria) et la maison de Noa (salon, cuisine, chambre).
 
+## Refonte v1.4 « Néon abyssal »
+**Interface** : écran titre animé (skyline en parallaxe, lune fendue par la faille, braises,
+anneaux en orbite, logo à reflet), boutons biseautés à reflet lumineux, HUD redessiné
+(portrait de Noa avec anneau de vie, barres segmentées, capacités en hexagones néon),
+**minicarte** orientée caméra (créatures, élites, caisses, failles, amis, objectif),
+**carte du monde** (M / bouton 🗺), compteur de **rang de style** (D → SS), marqueur
+d'impact, chiffres de dégâts et **coups critiques**, menus en verre sombre, curseurs et
+interrupteurs personnalisés (`src/game/ui/refonte.css`, `ui/minimap.js`, `src/title/titleBg.js`).
+
+**Visuels** : contours cartoon sur le héros, la Forme Abysse et toutes les créatures
+(`fx/outline.js`), tenue de justicier la nuit (masque à lentilles lumineuses + écharpe qui
+flotte avec la vitesse et en vol), étirement/écrasement à l'atterrissage, **traînées** de coups
+colorées selon le noyau, **images rémanentes** en esquive et en boost (`fx/trails.js`),
+écrasement des créatures à l'impact, étalonnage final (vignette, aberration chromatique au
+coup reçu, voile rouge en danger, teinte Abysse — `fx/grade.js`), aurore abyssale dans le
+ciel, néons sur les toits et balises clignotantes (`world/skyline.js`).
+
+**IA et logique** :
+- **Veilleur** (nouvelle créature, `enemyModels.js`) : spectre flottant qui garde ses
+  distances, vise (orbe télégraphié) et tire des orbes guidés ; se téléporte quand on
+  l'approche. Les orbes s'esquivent, se bloquent, et une **parade les renvoie** sur les
+  créatures (`systems/projectiles.js`).
+- **Élites** (quartiers, failles) : Enragée, Blindée ou Spectrale (téléportation), aura,
+  santé ×1,8, butin doublé + Abyss Shards.
+- **Directeur d'escouade** : les créatures en alerte se répartissent autour de Noa pour
+  l'encercler ; elles peuvent **esquiver** les coups lourds et la rafale ; la Brute entre en
+  **rage** sous 35 % et rameute les siens.
+- **Failles instables** (`systems/rifts.js`) : la nuit, une colonne de lumière s'ouvre dans
+  Vesper ; s'en approcher déclenche 3 vagues, puis une récompense (XP, Credits, Shards).
+- **Rang de style** (`systems/combo.js`) : varier les attaques fait monter le rang ; être
+  touché le fait chuter ; bonus d'XP à la fin de chaque enchaînement.
+
 ## Histoire (jouable dès la première seconde)
 1. **Prologue — Après les cours** : Noa Vant, 16 ans, somnole en cours de physique. M.
    Delcourt montre un fragment de cristal prêté par Aegis… qui « pique » Noa. Couloir,
@@ -70,5 +102,5 @@ ZQSD/WASD déplacer · Maj courir · Espace saut · Ctrl/C rouler · E parler/in
 1-2-3 choisir une réponse · Clic gauche coups · Clic droit fouet · F rafale · G bouclier ·
 X magnétisme · T Forme Abysse · V voler (en vol : Espace monter, Ctrl descendre, Maj boost,
 Clic gauche piqué, X tempête de métal) · R verrouiller · H soin · I inventaire · J journal ·
-K compétences · L relations · Échap pause. Manette standard prise en charge
+K compétences · L relations · M carte · Échap pause. Manette standard prise en charge
 (RT magnétisme, croix droite Forme Abysse).

@@ -274,7 +274,7 @@ export class Story {
     const T = g.world.targets;
     const Z = g.interiors.zones;
     const life = this.lifeMode();
-    if (this.seq || this.social.active) return out;
+    if ((this.seq && !this.seq.free) || this.social.active) return out;
     if (g.zone === 'city') {
       if (this.drone && !this.drone.done && g.missions.currentStep('m02_aegis_echo')?.target === 'aegis_drone') {
         out.push({ kind: 'story', id: 'aegis_drone', pos: T.aegis_drone, label: '<kbd>E</kbd>Récupérer l’enregistrement — <span style="color:#5fe3ff">drone Aegis</span>' });
@@ -718,7 +718,7 @@ export class Story {
         g.hud.phone('Inès', 'Cafète, 8 h. Tu me dois des explications. Et un chocolat chaud.', 6);
       } },
       { wait: 3, do: () => this.#say('Noa', 'Une journée normale. Je peux faire ça. … Je crois.', 3) },
-    ]);
+    ], { free: true });
     this.#placeFriends();
   }
 
@@ -833,8 +833,9 @@ export class Story {
 
   // ---------- Séquences ----------
   // run([{ wait, do }, …]) : exécute chaque action après son délai (temps de jeu).
-  #run(steps, { cinematic = false, onEnd } = {}) {
-    this.seq = { steps, i: 0, t: 0, cinematic, onEnd };
+  // free : séquence d'ambiance (SMS, pensées) qui ne bloque pas les interactions.
+  #run(steps, { cinematic = false, onEnd, free = false } = {}) {
+    this.seq = { steps, i: 0, t: 0, cinematic, onEnd, free };
     if (cinematic) this.#cineOn();
   }
 
