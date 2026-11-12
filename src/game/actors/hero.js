@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { HeroModel, PALETTES } from './heroModel.js';
 import { RingSystem } from './rings.js';
+import { RealModel, hasReal } from './realModel.js';
 
 export const MOVES = {
   light: [
@@ -45,9 +46,11 @@ const angleDiff = (a, b) => {
 export class Hero {
   constructor(game) {
     this.game = game;
-    this.model = new HeroModel(PALETTES.noa, { gear: true, outline: true });
+    // Personnage réaliste si les modèles sont chargés, sinon modèle procédural.
+    const real = hasReal('noa');
+    this.model = real ? new RealModel('noa', { gear: true }) : new HeroModel(PALETTES.noa, { gear: true, outline: true });
     // Seconde silhouette : la forme Abysse (même squelette, autre modèle).
-    this.umbraModel = new HeroModel(PALETTES.umbra, { outline: true });
+    this.umbraModel = real ? new RealModel('noa', { umbra: true }) : new HeroModel(PALETTES.umbra, { outline: true });
     this.umbraModel.root.visible = false;
     this.form = 'human';
     this.abyss = 0;
@@ -814,6 +817,8 @@ export class Hero {
       anim,
       animP,
       dodge: a?.kind === 'dodge',
+      dodgeP: a?.kind === 'dodge' ? a.t / a.dur : 0,
+      combat: this.game.inCombat || !!this.game.lockTarget,
       shield: this.shielding,
       hurt: a?.kind === 'hurt' ? this.hurtT : 0,
       lean: this.lean,

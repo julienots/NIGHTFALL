@@ -1,0 +1,29 @@
+<!doctype html><html><body style="margin:0;background:#222"><canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const names = new URLSearchParams(location.search).get('n').split(',');
+const W = 300, H = 420, cols = Math.min(6, names.length), rows = Math.ceil(names.length / cols);
+const r = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true });
+r.setSize(W * cols, H * rows); r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping;
+r.setScissorTest(true);
+const loader = new GLTFLoader();
+const pm = new THREE.PMREMGenerator(r); const env = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+window.info = [];
+for (let i = 0; i < names.length; i++) {
+  const g = await loader.loadAsync(`/assets_src/realistic/char/${names[i]}.glb`);
+  const s = new THREE.Scene(); s.background = new THREE.Color('#3a3550'); s.environment = env;
+  s.add(new THREE.HemisphereLight('#fff', '#445', 1.2)); const d = new THREE.DirectionalLight('#fff', 2); d.position.set(2, 4, 3); s.add(d);
+  const o = g.scene; s.add(o);
+  const box = new THREE.Box3().setFromObject(o); const size = box.getSize(new THREE.Vector3()); const c = box.getCenter(new THREE.Vector3());
+  let tris = 0, bones = 0, mats = new Set(); o.traverse((m) => { if (m.isMesh) { tris += (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3; [].concat(m.material).forEach((x) => mats.add(x)); } if (m.isBone) bones++; });
+  window.info.push({ n: names[i], h: +size.y.toFixed(2), tris: Math.round(tris), bones, mats: mats.size, anims: g.animations.length });
+  const cam = new THREE.PerspectiveCamera(30, W / H, 0.01, 1000);
+  cam.position.set(c.x + size.y * 0.35, c.y + size.y * 0.05, c.z + size.y * 2.1); cam.lookAt(c);
+  const col = i % cols, row = Math.floor(i / cols);
+  const x = col * W, y = (rows - 1 - row) * H;
+  r.setViewport(x, y, W, H); r.setScissor(x, y, W, H); r.render(s, cam);
+}
+window.done = true;
+</script></body></html>

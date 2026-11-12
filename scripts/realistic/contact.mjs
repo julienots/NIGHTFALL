@@ -1,0 +1,13 @@
+import { createServer } from 'vite';
+import { chromium } from 'playwright';
+const [names, out] = process.argv.slice(2);
+const server = await createServer({ server: { port: 5199, hmr: false, watch: null }, logLevel: 'error' });
+await server.listen();
+const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const p = await b.newPage({ viewport: { width: 1800, height: 1300 } });
+p.on('pageerror', (e) => console.log('ERR', e.message));
+await p.goto(`http://localhost:5199/scripts/realistic/contact.html?n=${names}`);
+await p.waitForFunction(() => window.done, null, { timeout: 600000 });
+console.log(JSON.stringify(await p.evaluate(() => window.info)));
+await (await p.$('canvas')).screenshot({ path: out });
+await b.close(); await server.close();

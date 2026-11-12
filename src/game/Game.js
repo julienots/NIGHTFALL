@@ -37,6 +37,7 @@ import { Magnetism, STORM } from './systems/magnetism.js';
 import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { Menus } from './ui/menus.js';
 import { Minimap } from './ui/minimap.js';
+import { loadRealAssets, applyRealEnv } from './actors/realModel.js';
 import { ComboMeter } from './systems/combo.js';
 import { Projectiles } from './systems/projectiles.js';
 import { Rifts } from './systems/rifts.js';
@@ -97,6 +98,10 @@ export class Game {
   async init() {
     // Police cartoon des enseignes (si disponible ; repli sinon après 2 s).
     await Promise.race([document.fonts?.load('40px "Lilita One"'), new Promise((r) => setTimeout(r, 2000))]).catch(() => {});
+    // Personnages réalistes (modèles riggués + capture de mouvement).
+    const loadTxt = document.querySelector('#loading .loading');
+    await loadRealAssets(undefined, (k) => loadTxt && (loadTxt.textContent = `Chargement des personnages… ${Math.round(k * 100)} %`));
+    if (loadTxt) loadTxt.textContent = 'Chargement de Vesper…';
     // --- Rendu ---
     const q = this.settings.quality;
     const r = (this.renderer = new THREE.WebGLRenderer({ antialias: q !== 'low', powerPreference: 'high-performance' }));
@@ -112,6 +117,7 @@ export class Game {
     const pmrem = new THREE.PMREMGenerator(r);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environmentIntensity = 0.0;
+    applyRealEnv(scene.environment, 0.9);
 
     this.camera = new THREE.PerspectiveCamera(62, 16 / 9, 0.1, 1500);
     this.hemi = new THREE.HemisphereLight('#d6d0ff', '#6a4a5a', 1.35);
@@ -484,12 +490,15 @@ export class Game {
     const a = this.inventory.equippedItem('armor');
     // Équipement visible : couleur des anneaux (noyau) et du sweat (protection).
     this.hero.rings.setColor(w ? ITEMS[w.id].visual.glow : '#5fe3ff');
-    const pal = this.hero.model.palette;
+    const pal = this.hero.model.palette || {};
     // Tenue choisie (cosmétique) prioritaire sur la couleur de la protection.
     const skin = this.inventory.equippedItem('skin');
     const hv = skin ? ITEMS[skin.id].visual : a ? { hoodie: ITEMS[a.id].visual.plate, hoodie2: ITEMS[a.id].visual.trim } : pal;
-    this.hero.model.mats.hoodie.color.set(hv.hoodie);
-    this.hero.model.mats.hoodie2.color.set(hv.hoodie2);
+    if (this.hero.model.setOutfit) this.hero.model.setOutfit(skin || a ? hv.hoodie : null);
+    else {
+      this.hero.model.mats.hoodie.color.set(hv.hoodie);
+      this.hero.model.mats.hoodie2.color.set(hv.hoodie2);
+    }
   }
 
   onEquipmentChanged() {

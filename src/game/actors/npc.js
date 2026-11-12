@@ -3,6 +3,8 @@
 import * as THREE from 'three';
 import { HeroModel, PALETTES } from './heroModel.js';
 import { mulberry32 } from '../core/rng.js';
+import { RealModel, hasReal } from './realModel.js';
+import { PALETTE_TO_CAST, CROWD, STUDENTS } from './realCast.js';
 
 const SKINS = ['#f2c6a0', '#e8b48a', '#c98b5e', '#a8714a', '#7a4f32', '#5a3a26'];
 const HAIRS = ['#2b1d16', '#1a1210', '#6a3a1a', '#c98a3a', '#e8d6a0', '#8a2a2a', '#3a3a5a'];
@@ -28,7 +30,10 @@ export class Npc {
     this.name = def.name || null;
     this.talk = def.talk || null;
     const palette = def.palette ? PALETTES[def.palette] : randomPalette(def.seed ?? Math.floor(Math.random() * 1e6));
-    this.model = new HeroModel(palette, { backpack: !!palette.bag, rim: '#ffd9a8' });
+    // Personnage réaliste : rôle nommé, sinon un passant choisi selon la graine.
+    const pool = /^(st|sc)\d/.test(def.id || '') ? STUDENTS : CROWD;
+    const castId = def.palette ? PALETTE_TO_CAST[def.palette] : pool[Math.abs(def.seed ?? Math.floor(Math.random() * 1e6)) % pool.length];
+    this.model = castId && hasReal(castId) ? new RealModel(castId) : new HeroModel(palette, { backpack: !!palette.bag, rim: '#ffd9a8' });
     this.pos = new THREE.Vector3(def.x, def.y ?? 0.15, def.z);
     this.pose = def.pose || null; // pose permanente (assis…)
     this.yaw = def.yaw ?? 0;
@@ -89,7 +94,8 @@ export class Npc {
       return;
     }
     // Les passants éloignés ne sont ni animés ni dessinés (économie d'appels de dessin).
-    const far = this.pos.distanceTo(this.game.hero.pos) > 70;
+    const dist = this.pos.distanceTo(this.game.hero.pos);
+    const far = dist > 70;
     this.model.root.visible = !far;
     if (far && this.mode !== 'flee') return;
     const col = this.game.col;
@@ -149,7 +155,7 @@ export class Npc {
       }
     }
     this.model.animate({
-      dt, speed: moving / 5.8 * 1.6, phase: this.phase, airborne: false, vy: 0,
+      dt, speed: moving / 5.8 * 1.6, speedMs: moving, skip: dist > 22, phase: this.phase, airborne: false, vy: 0,
       anim: this.anim || this.pose, animP: this.anim ? Math.min(1, this.animT / this.animDur) : 0.5,
     });
     this.model.root.position.copy(this.pos);

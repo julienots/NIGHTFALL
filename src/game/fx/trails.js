@@ -2,6 +2,7 @@
 // pendant les attaques) et images rémanentes (silhouettes fantômes laissées
 // pendant une esquive ou un boost en vol).
 import * as THREE from 'three';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const N = 18; // points d'historique par traînée
 
@@ -89,7 +90,7 @@ export class Afterimages {
     delete model.root.userData.outlines;
     for (let i = 0; i < count; i++) {
       const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
-      const root = model.root.clone(true);
+      const root = SkeletonUtils.clone(model.root);
       const nodes = [];
       root.traverse((o) => {
         nodes.push(o);

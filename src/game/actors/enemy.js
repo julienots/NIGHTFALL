@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { StalkerModel, BruteModel, CrawlerModel, WispModel } from './enemyModels.js';
 import { addOutline, setOutlineVisible } from '../fx/outline.js';
+import { RealCreatureModel, hasReal } from './realModel.js';
 
 export const ENEMY_TYPES = {
   stalker: {
@@ -56,8 +57,9 @@ export class Enemy {
     this.spawn = spawn;
     this.type = spawn.type;
     this.def = ENEMY_TYPES[spawn.type];
-    this.model = new this.def.Model();
-    addOutline(this.model.root, { thickness: this.type === 'brute' ? 0.03 : 0.018 });
+    // Stalker et Brute : créatures réalistes animées par capture de mouvement.
+    this.model = hasReal(spawn.type) ? new RealCreatureModel(spawn.type) : new this.def.Model();
+    if (!this.model.realistic) addOutline(this.model.root, { thickness: this.type === 'brute' ? 0.03 : 0.018 });
     this.radius = this.def.radius;
     this.pos = new THREE.Vector3(spawn.x, 0.15, spawn.z);
     this.home = this.pos.clone();

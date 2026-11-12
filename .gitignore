@@ -5,3 +5,5 @@ exports/*.png
 exports/screens/
 exports/*.apk
 exports/shots_*/
+assets_src/realistic/
+exports/realistic/

@@ -1,0 +1,27 @@
+<!doctype html><html><body style="margin:0"><canvas id="c"></canvas><script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { loadRealAssets, RealModel, applyRealEnv } from '/src/game/actors/realModel.js';
+await loadRealAssets(['noa']);
+const W = 1200, H = 700;
+const r = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+r.setSize(W, H); r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.NeutralToneMapping; r.setScissorTest(true);
+const env = new THREE.PMREMGenerator(r).fromScene(new RoomEnvironment(), 0.04).texture;
+applyRealEnv(env, 0.9);
+const views = [[{ gear: true }, 'head'], [{ gear: true }, 'body'], [{ umbra: true }, 'body'], [{ umbra: true }, 'head']]; views[1] = [{ gear: true }, 'head2'];
+views.forEach(([opt, kind], i) => {
+  const s = new THREE.Scene(); s.background = new THREE.Color('#2a1850');
+  s.add(new THREE.HemisphereLight('#d6d0ff', '#6a4a5a', 1.3)); const d = new THREE.DirectionalLight('#e8f0ff', 1.6); d.position.set(2, 4, 3); s.add(d);
+  const m = new RealModel('noa', opt); if (opt.gear) m.setGear(true);
+  s.add(m.root);
+  for (let k = 0; k < 10; k++) m.animate({ dt: 0.05, speed: 0 });
+  m.root.updateMatrixWorld(true);
+  const head = m.bones.head.getWorldPosition(new THREE.Vector3());
+  const cam = new THREE.PerspectiveCamera(30, (W / 4) / H, 0.01, 100);
+  if (kind === 'head') { cam.position.set(head.x + 0.15, head.y + 0.1, head.z + 0.75); cam.lookAt(head.x, head.y + 0.08, head.z); }
+  else if (kind === 'head2') { cam.position.set(head.x + 0.55, head.y + 0.05, head.z + 0.45); cam.lookAt(head.x, head.y + 0.06, head.z); }
+  else { cam.position.set(0.8, 1.2, 4.2); cam.lookAt(0, 1.0, 0); }
+  const x = i * W / 4; r.setViewport(x, 0, W / 4, H); r.setScissor(x, 0, W / 4, H); r.render(s, cam);
+});
+window.done = true; window.out = 'ok';
+</script></body></html>

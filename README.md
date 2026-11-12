@@ -31,6 +31,25 @@ lointains sont masqués automatiquement pour garder un bon rendu sur téléphone
 **Intérieurs visitables** : le lycée (hall, couloir et casiers, salles 12 et 14, labo de
 physique, cafétéria) et la maison de Noa (salon, cuisine, chambre).
 
+## Personnages réalistes (v1.5)
+Tous les personnages humains et deux créatures sont désormais des **modèles réalistes riggués**
+animés par **capture de mouvement** (squelette Mixamo commun) : Noa, Inès, Camille, Malik, Théo,
+M. Delcourt, Mara, les passants, le Stalker et la Brute. Locomotion fondue selon la vitesse
+(repos / marche / course / sprint, cadence calée pour que les pieds ne glissent pas), coups de
+poing, crochet, fouet, rafale, roulade, garde, impacts, mort, vol, assis, discussion, téléphone,
+salut… Les animations d'attaque sont synchronisées sur le timing du combat. Forme Abysse : le
+même corps recouvert d'un vernis noir à reflets cyan, yeux lumineux et tentacules.
+- Code : `src/game/actors/realModel.js` (chargement, mélangeur, créatures), `realCast.js` (casting
+  et correspondance animations ↔ clips). Repli automatique sur les modèles procéduraux si les
+  fichiers manquent.
+- Ressources : `public/assets/characters/*.glb` (≈ 15 Mo, textures WebP, maillages compressés),
+  reconstruites par `node scripts/realistic/build.mjs` à partir des sources (non versionnées).
+- **Licence** : modèles et animations issus de la bibliothèque **Mixamo** (Adobe), récupérés via un
+  jeu de données public. Mixamo autorise leur usage gratuit dans des jeux, y compris commerciaux,
+  mais pas leur redistribution en tant que fichiers bruts. Avant une diffusion publique, il faut
+  re-télécharger les mêmes personnages/animations sur mixamo.com avec un compte Adobe (gratuit)
+  et relancer le script de construction.
+
 ## Refonte v1.4 « Néon abyssal »
 **Interface** : écran titre animé (skyline en parallaxe, lune fendue par la faille, braises,
 anneaux en orbite, logo à reflet), boutons biseautés à reflet lumineux, HUD redessiné

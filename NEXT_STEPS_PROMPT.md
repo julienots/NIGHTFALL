@@ -58,6 +58,15 @@ Refonte graphique complète, voir la section « Refonte v1.4 » du README :
 - APK v1.4 construit (`versionCode 5` / `1.4-refonte`, `exports/NIGHTFALL-v1.4-refonte.apk`, non versionné).
   Le SDK Android s'installe dans `/home/user/android-sdk` (hôte `dl.google.com` requis).
 
+## v1.5 « Réaliste » (fait)
+Personnages réalistes riggués + capture de mouvement (voir README « Personnages réalistes ») :
+`src/game/actors/realModel.js`, `realCast.js`, ressources `public/assets/characters/`
+(reconstruites par `node scripts/realistic/build.mjs`, sources dans `assets_src/realistic/`,
+téléchargées depuis le jeu de données Hugging Face `Leeoo/mixamo-rigs-clips`). Contrôles visuels :
+`scripts/realistic/showcase.mjs`, `portrait.mjs`, `class.mjs`, `contact.mjs`. Tests 112/112, tactile 11/11.
+APK `versionCode 6` / `1.5-realiste`. Pistes : vraie voix / lip-sync, Crawler/Veilleur/Colosse
+encore procéduraux, licence Mixamo à régulariser avant diffusion (voir README).
+
 ## À FAIRE (par priorité)
 1. **Valider l'intégration** : lancer `node tests/smoke.mjs exports/screens` (≈115
    vérifications ; `CHROME=/opt/pw-browsers/chromium` si le Chromium de Playwright manque) et `tests/touch.mjs`, corriger chaque échec. Regarder les captures
