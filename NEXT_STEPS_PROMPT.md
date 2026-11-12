@@ -55,8 +55,8 @@ Refonte graphique complète, voir la section « Refonte v1.4 » du README :
   13 s (séquences « free »), traction des tentacules, favicon (404), test des Crawlers.
 - Tests de la v1.4 : `npm test` 17/17, `tests/smoke.mjs` **112/112** (histoire complète du
   prologue au chapitre 2 + rechargement, failles, Veilleur, élites, carte), `tests/touch.mjs` 11/11.
-- APK non reconstruit dans cette session (pas de SDK Android dans le conteneur) :
-  `versionCode 5` / `1.4-refonte` déjà renseignés dans `android/app/build.gradle`.
+- APK v1.4 construit (`versionCode 5` / `1.4-refonte`, `exports/NIGHTFALL-v1.4-refonte.apk`, non versionné).
+  Le SDK Android s'installe dans `/home/user/android-sdk` (hôte `dl.google.com` requis).
 
 ## À FAIRE (par priorité)
 1. **Valider l'intégration** : lancer `node tests/smoke.mjs exports/screens` (≈115
