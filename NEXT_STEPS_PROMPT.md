@@ -1,7 +1,7 @@
 # Consigne pour la session suivante (copier-coller dans un nouveau Claude Code)
 
 Tu reprends le développement de **NIGHTFALL: Rise of the Abyss** (studio SuperEssence),
-dépôt `julienots/nightfall`, branche `ccr-c35089d8-a3ztrq` (travaille sur cette branche,
+dépôt `julienots/nightfall`, branche `claude/dreamy-albattani-qrq106` (travaille sur cette branche,
 commit + push, pas de PR sans demande). Jeu 3D cartoon (Three.js 0.169 + Vite), APK Android
 via Capacitor 7. Code, commentaires et textes en jeu **en français**. Lis d'abord `README.md`.
 
@@ -66,6 +66,15 @@ téléchargées depuis le jeu de données Hugging Face `Leeoo/mixamo-rigs-clips`
 `scripts/realistic/showcase.mjs`, `portrait.mjs`, `class.mjs`, `contact.mjs`. Tests 112/112, tactile 11/11.
 APK `versionCode 6` / `1.5-realiste`. Pistes : vraie voix / lip-sync, Crawler/Veilleur/Colosse
 encore procéduraux, licence Mixamo à régulariser avant diffusion (voir README).
+
+## v1.6 « Ultra » — rendu réaliste (fait)
+Voir README « Rendu réaliste (v1.6) » : `fx/pbr.js` (matériaux PBR + pluie/flaques),
+`world/sky.js` (ciel physique, IBL, lune, étoiles, nuages), `fx/cinematic.js` (MSAA, SSAO, SSR,
+rayons, flou de mouvement), `fx/grade.js` (étalonnage film), qualité « Ultra » dans le menu.
+Tests : `npm test` 17/17, `tests/smoke.mjs` 112/112 en qualité basse **et** ultra
+(`QUALITY=ultra`), `tests/touch.mjs` 11/11. APK non construit dans cette session (SDK absent).
+Pistes : géométrie des bâtiments/voitures encore « jouet » (biseaux, proportions), arbres en
+boules, ombres lointaines (cascades), réflexions SSR des néons sur les façades vitrées.
 
 ## À FAIRE (par priorité)
 1. **Valider l'intégration** : lancer `node tests/smoke.mjs exports/screens` (≈115

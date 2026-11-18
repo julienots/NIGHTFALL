@@ -102,31 +102,32 @@ const SHOPS = [
   ['TABAC PRESSE', '#ff8a65', '#3a5ba8'], ['RAMEN 88', '#ff4f5e', '#2b2050'], ['FLEURS', '#f06292', '#66bb6a'],
 ];
 
+// Teintes réalistes (briques, enduits, pierre, verre teinté).
 const PALETTES = {
-  brick: ['#c0563f', '#a8483a', '#d27a4a', '#b5653f', '#9a4a42'],
-  stucco: ['#f2c6a0', '#9fd8e8', '#f2e2a0', '#c9b8ff', '#a8e0c0', '#f5b8c8', '#ffd8a8'],
-  office: ['#c9c4d8', '#b8c0d0', '#d8d0c0', '#a8b0c8'],
-  glass: ['#3d6fd1', '#2fa8a8', '#5b4ad6', '#2b7fae'],
-  artdeco: ['#e8d8b8', '#d8c8a8', '#c8d0d8', '#f0e0c8'],
+  brick: ['#8a4a3a', '#7a4034', '#9a5a44', '#6e3a30', '#a0624a'],
+  stucco: ['#cdbfa8', '#b9b2a4', '#d8cbb0', '#a9a49a', '#c4b49a', '#bfb6a8', '#d2c4aa'],
+  office: ['#9c9a96', '#8e9196', '#b0aaa0', '#7f858c'],
+  glass: ['#4a6278', '#3f5e66', '#4b5566', '#3a5870'],
+  artdeco: ['#cbbfa4', '#bdb29a', '#b4b8b8', '#d4c8b0'],
 };
 
 export function createBuildingKit(root, col, rand, quality) {
   const low = quality === 'low';
   const M = {
     frameWhite: toon('#f4f0e8', { shared: false }),
-    frameDark: toon('#2b2050', { shared: false }),
-    glass: toon('#3a4f9a', { rim: '#9fd8ff', rimStrength: 0.5, shared: false }),
+    frameDark: toon('#2b2050', { shared: false, surface: 'metal' }),
+    glass: toon('#3a4f9a', { shared: false, surface: 'glass' }),
     lit: new THREE.MeshBasicMaterial({ color: '#ffffff' }),
     curtain: new THREE.MeshBasicMaterial({ color: '#ffffff' }),
-    stone: toon('#e8e0d0', { shared: false }),
-    metal: toon('#3a3448', { shared: false }),
+    stone: toon('#e8e0d0', { shared: false, surface: 'concrete' }),
+    metal: toon('#3a3448', { shared: false, surface: 'metal' }),
     ac: toon('#d8dce8', { shared: false }),
-    roof: toon('#ffffff', { map: roofTexture(), shared: false }),
+    roof: toon('#ffffff', { map: roofTexture(), shared: false, surface: 'concrete' }),
     tank: toon('#8a5a3a', { shared: false }),
     awning: toon('#ffffff', { map: awningTexture(), shared: false }),
     shopGlass: new THREE.MeshBasicMaterial({ color: '#ffe8b0' }),
     door: toon('#5a3a2a', { shared: false }),
-    solar: toon('#2a3a8a', { rim: '#9fd8ff', shared: false }),
+    solar: toon('#2a3a8a', { shared: false, surface: 'glass' }),
     fin: toon('#e8ecff', { shared: false }),
     crownLight: new THREE.MeshBasicMaterial({ color: '#ffe27a' }),
   };
@@ -159,7 +160,7 @@ export function createBuildingKit(root, col, rand, quality) {
   const wallMats = {};
   const wallMat = (kind, color) => {
     const k = kind + color;
-    if (!wallMats[k]) wallMats[k] = toon('#ffffff', { map: wallTexture(kind, color), shared: false, ...(kind === 'glass' ? { emissiveMap: wallTexture('glassLit', color), emissive: '#ffffff', emissiveIntensity: 0.9 } : {}) });
+    if (!wallMats[k]) wallMats[k] = toon('#ffffff', { map: wallTexture(kind, color), shared: false, surface: kind === 'glass' ? 'glass' : 'plaster', ...(kind === 'glass' ? { emissiveMap: wallTexture('glassLit', color), emissive: '#ffffff', emissiveIntensity: 0.9 } : {}) });
     return wallMats[k];
   };
   const glassEmissive = [];

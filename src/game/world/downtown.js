@@ -22,7 +22,7 @@ export function buildDowntown(scene, col, quality) {
   const updaters = [];
   const smokeSources = [];
   const lampLights = [];
-  const maxLights = { low: 3, medium: 8, high: 14 }[quality] ?? 8;
+  const maxLights = { low: 3, medium: 8, high: 14, ultra: 18 }[quality] ?? 8;
 
   // ---------- Matériaux partagés ----------
   const asphalt = asphaltTextures();
@@ -30,11 +30,13 @@ export function buildDowntown(scene, col, quality) {
   asphalt.roughness.repeat.set(53, 53);
   const groundMat = M({
     map: asphalt.map,
+    roughnessMap: asphalt.roughness,
+    surface: 'asphalt',
   });
-  const sidewalkMat = M({ map: sidewalkTexture() });
-  const concreteMat = M({ color: '#8f8bc4' });
-  const darkMetal = M({ color: '#3a2f6b' });
-  const roofMat = M({ color: '#4a3f7a' });
+  const sidewalkMat = M({ map: sidewalkTexture(), surface: 'concrete' });
+  const concreteMat = M({ color: '#8f8bc4', surface: 'concrete' });
+  const darkMetal = M({ color: '#3a2f6b', surface: 'metal' });
+  const roofMat = M({ color: '#4a3f7a', surface: 'concrete' });
   const barrierMat = M({ color: '#f2efe6' });
   const stripeMat = M({ color: '#ff8a3d' });
 
@@ -327,8 +329,8 @@ export function buildDowntown(scene, col, quality) {
   }
 
   // Arbre « sucette » dans un bac : tronc courbe, feuillage en boules.
-  const leafMats = [M({ color: '#2fa88a' }), M({ color: '#3cc29a' }), M({ color: '#7b5cd6' })];
-  const trunkMat = M({ color: '#7a4a3a' });
+  const leafMats = [M({ color: '#4a6b32', surface: 'foliage' }), M({ color: '#56763a', surface: 'foliage' }), M({ color: '#7a6a34', surface: 'foliage' })];
+  const trunkMat = M({ color: '#5a4434', surface: 'plaster' });
   function tree(x, z, purple = false) {
     const g = new THREE.Group();
     const planter = new THREE.Mesh(rbox(1.6, 0.6, 1.6, 0.15), concreteMat);
@@ -601,94 +603,8 @@ export function buildDowntown(scene, col, quality) {
   // Rue vivante : feux, circulation, mobilier, tunnels (voir street.js).
   const street = buildStreet({ root, col, rand, quality, car, box, M, lampLights, barrierMat, darkMetal, concreteMat });
 
-  // ---------- Ciel, anomalie lointaine, pluie ----------
-  const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(900, 32, 16),
-    new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      fog: false,
-      uniforms: { uTime: { value: 0 }, uNight: { value: 1 }, uDay: { value: 0 } },
-      vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: `
-        varying vec3 vDir; uniform float uTime; uniform float uNight; uniform float uDay;
-        float hash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-        void main(){
-          float h = clamp(vDir.y, -0.1, 1.0);
-          // Dégradé cartoon en bandes : indigo > violet > rose à l'horizon
-          float k = floor(pow(max(h, 0.0), 0.45) * 7.0) / 7.0;
-          vec3 top = vec3(0.07, 0.04, 0.2);
-          vec3 mid = vec3(0.22, 0.1, 0.42);
-          vec3 hor = vec3(0.85, 0.36, 0.6);
-          vec3 col = k < 0.3 ? mix(hor, mid, k / 0.3) : mix(mid, top, (k - 0.3) / 0.7);
-          // Crépuscule (avant le Nightfall) : bleu, rose et orange chauds.
-          vec3 dTop = vec3(0.24, 0.32, 0.68), dMid = vec3(0.85, 0.48, 0.66), dHor = vec3(1.0, 0.68, 0.42);
-          vec3 dusk = k < 0.3 ? mix(dHor, dMid, k / 0.3) : mix(dMid, dTop, (k - 0.3) / 0.7);
-          col = mix(dusk, col, uNight);
-          // Plein jour : bleu ciel lumineux, horizon presque blanc.
-          vec3 yTop = vec3(0.22, 0.48, 0.95), yMid = vec3(0.45, 0.7, 1.0), yHor = vec3(0.86, 0.93, 1.0);
-          vec3 day = k < 0.3 ? mix(yHor, yMid, k / 0.3) : mix(yMid, yTop, (k - 0.3) / 0.7);
-          col = mix(col, day, uDay);
-          // Lueur de l'anomalie au nord (-Z)
-          float a = max(dot(normalize(vec3(vDir.x, 0.0, vDir.z)), vec3(0.0, 0.0, -1.0)), 0.0);
-          col = mix(col, vec3(0.75, 0.35, 1.0), step(0.93, a) * (1.0 - smoothstep(0.0, 0.35, h)) * 0.5 * uNight);
-          // Étoiles scintillantes
-          vec3 cell = floor(vDir * 160.0);
-          float st = step(0.996, hash(cell)) * smoothstep(0.15, 0.4, h);
-          col += vec3(1.0, 0.95, 0.85) * st * (0.6 + 0.4 * sin(uTime * 2.0 + hash(cell + 3.0) * 30.0)) * uNight;
-          // Aurore abyssale : rubans ondulants violet / cyan au-dessus de la ville.
-          float az = atan(vDir.x, vDir.z);
-          float band = 0.34 + sin(az * 3.0 + uTime * 0.05) * 0.07;
-          float rib = exp(-pow((h - band) * 11.0, 2.0)) * (0.55 + 0.45 * sin(az * 21.0 + uTime * 0.35 + sin(az * 6.0 - uTime * 0.15) * 3.0));
-          vec3 aur = mix(vec3(0.25, 0.95, 1.0), vec3(0.8, 0.3, 1.0), 0.5 + 0.5 * sin(az * 2.0 + uTime * 0.08));
-          col += aur * rib * 0.28 * uNight * smoothstep(0.1, 0.25, h);
-          gl_FragColor = vec4(col, 1.0);
-        }`,
-    }),
-  );
-  sky.renderOrder = -2;
-  scene.add(sky);
-
-  // Grosse lune cartoon avec cratères et halo
-  const moonG = new THREE.Group();
-  const moonDisc = new THREE.Mesh(new THREE.CircleGeometry(38, 48), new THREE.MeshBasicMaterial({ color: '#f4f0ff', fog: false }));
-  moonG.add(moonDisc);
-  for (const [cx, cy, r] of [[-12, 8, 7], [10, -6, 9], [8, 16, 4], [-6, -16, 5]]) {
-    const cr = new THREE.Mesh(new THREE.CircleGeometry(r, 24), new THREE.MeshBasicMaterial({ color: '#d4cdf5', fog: false }));
-    cr.position.set(cx, cy, 0.5);
-    moonG.add(cr);
-  }
-  for (const [r, o] of [[52, 0.18], [70, 0.08]]) {
-    const halo = new THREE.Mesh(new THREE.RingGeometry(38, r, 48), new THREE.MeshBasicMaterial({ color: '#c8b8ff', transparent: true, opacity: o, fog: false, depthWrite: false }));
-    halo.position.z = -0.5;
-    moonG.add(halo);
-  }
-  moonG.position.set(-260, 330, 420);
-  moonG.lookAt(0, 0, 0);
-  moonG.traverse((o) => { if (o.material) o.material.depthWrite = false; o.renderOrder = -1; });
-  scene.add(moonG);
-
-  // Nuages stylisés qui dérivent lentement
-  const cloudMat = toon('#4b2f7e', { rim: '#ff9ccf', rimStrength: 0.7 });
-  cloudMat.fog = false;
-  const clouds = new THREE.Group();
-  for (let i = 0; i < 14; i++) {
-    const c = new THREE.Group();
-    const n = 4 + Math.floor(rand() * 3);
-    for (let k = 0; k < n; k++) {
-      const b = new THREE.Mesh(new THREE.SphereGeometry(18 + rand() * 14, 12, 8), cloudMat);
-      b.position.set((k - n / 2) * 22 + rand() * 6, rand() * 8, rand() * 10);
-      b.scale.y = 0.55;
-      c.add(b);
-    }
-    const ang = (i / 14) * Math.PI * 2 + rand() * 0.3;
-    const r = 480 + rand() * 120;
-    c.position.set(Math.cos(ang) * r, 160 + rand() * 90, Math.sin(ang) * r);
-    c.lookAt(0, c.position.y, 0);
-    clouds.add(c);
-  }
-  scene.add(clouds);
-
+  // ---------- Anomalie lointaine, pluie ----------
+  // (Le ciel physique, la lune, les étoiles et les nuages sont dans world/sky.js.)
   const anomaly = new THREE.Mesh(
     new THREE.CylinderGeometry(18, 40, 900, 32, 1, true),
     new THREE.ShaderMaterial({
@@ -716,7 +632,7 @@ export function buildDowntown(scene, col, quality) {
   anomaly.position.set(30, 300, -620);
   scene.add(anomaly);
 
-  const rainCount = { low: 800, medium: 2000, high: 4000 }[quality] ?? 2000;
+  const rainCount = { low: 800, medium: 2000, high: 4000, ultra: 6000 }[quality] ?? 2000;
   const rainGeo = new THREE.BufferGeometry();
   const rainPos = new Float32Array(rainCount * 6);
   const rainSeed = new Float32Array(rainCount * 3);
@@ -728,17 +644,13 @@ export function buildDowntown(scene, col, quality) {
   rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
   const rain = new THREE.LineSegments(
     rainGeo,
-    new THREE.LineBasicMaterial({ color: '#c9d8ff', transparent: true, opacity: 0.45, depthWrite: false }),
+    // Gouttes : traits fins et translucides (éclairés par la ville, pas lumineux).
+    new THREE.LineBasicMaterial({ color: '#8f9cb4', transparent: true, opacity: 0.16, depthWrite: false }),
   );
   rain.frustumCulled = false;
   scene.add(rain);
 
   updaters.push((dt, t, cam) => {
-    sky.position.copy(cam.position);
-    moonG.position.set(cam.position.x - 260, 330, cam.position.z + 420);
-    clouds.position.set(cam.position.x, 0, cam.position.z);
-    clouds.rotation.y = t * 0.004;
-    sky.material.uniforms.uTime.value = t;
     anomaly.material.uniforms.uTime.value = t;
     const fall = 28;
     for (let i = 0; i < rainCount; i++) {
@@ -788,23 +700,13 @@ export function buildDowntown(scene, col, quality) {
     const day = Math.max(0, -kIn);
     const k = Math.max(0, kIn);
     night = k;
-    sky.material.uniforms.uNight.value = k;
-    sky.material.uniforms.uDay.value = day;
     anomaly.material.uniforms.uNight.value = k;
     anomaly.scale.y = Math.max(0.001, k);
     anomaly.position.y = 300 * k - 150 * (1 - k);
-    moonG.visible = k > 0.05;
     // En journée : lampadaires éteints, halos au sol invisibles.
-    poolWarm.opacity = poolCold.opacity = 0.16 * (1 - day);
+    poolWarm.opacity = poolCold.opacity = 0.05 * (1 - day);
     lampHeadMat.emissiveIntensity = lampColdMat.emissiveIntensity = 2.5 * (1 - day * 0.9);
     for (const l of lampLights) l.light.userData.day = day > 0.5;
-    moonG.traverse((o) => {
-      if (!o.material) return;
-      o.material.transparent = true;
-      if (o.material.userData.base == null) o.material.userData.base = o.material.opacity;
-      o.material.opacity = o.material.userData.base * k;
-    });
-    cloudMat.color.set('#ffb8d0').lerp(new THREE.Color('#4b2f7e'), k).lerp(new THREE.Color('#ffffff'), day);
     rain.visible = k > 0.5;
     for (const r of rifts) r.visible = k > 0.5;
     kit.setLights(0.75 + k * 0.25 - day * 0.55);

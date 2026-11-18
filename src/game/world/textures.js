@@ -27,10 +27,39 @@ function grain(ctx, w, h, rand, amount, alpha = 0.08) {
   }
 }
 
-// Façade cartoon : mur en aplat, fenêtres arrondies à cadre épais.
+// Bruit de pixels (grain fin réaliste) appliqué à tout un canvas.
+function pixelNoise(ctx, w, h, rand, amp = 18, mono = true) {
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (rand() - 0.5) * amp;
+    d[i] = Math.max(0, Math.min(255, d[i] + n));
+    d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + (mono ? n : (rand() - 0.5) * amp)));
+    d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + (mono ? n : (rand() - 0.5) * amp)));
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+// Taches diffuses (usure, humidité, salissures).
+function blotches(ctx, w, h, rand, n, rgb, aMin, aMax, rMin, rMax) {
+  for (let i = 0; i < n; i++) {
+    const px = rand() * w;
+    const py = rand() * h;
+    const r = rMin + rand() * (rMax - rMin);
+    const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+    const a = aMin + rand() * (aMax - aMin);
+    g.addColorStop(0, `rgba(${rgb},${a})`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(px - r, py - r, r * 2, r * 2);
+  }
+}
+
+// Façade réaliste : enduit / brique / mur-rideau, fenêtres vitrées avec reflet
+// du ciel, intérieurs éclairés (texture émissive associée).
 // (8 travées x 8 étages par répétition). style : 'concrete' | 'brick' | 'glass'.
-const WALLS = ['#e86f6f', '#5fb7c9', '#f2b84b', '#8f7ad8', '#6fcf97', '#e98ccf', '#4f74c9', '#ff9f5a'];
-const LIT = ['#ffe27a', '#ffd166', '#9ff3ff', '#ffb3e6', '#ffe27a'];
+const WALLS = ['#9a5b46', '#b8ab94', '#8d8f91', '#c9c1b2', '#6f7479', '#a8836a', '#d4cfc4', '#7d6a5a'];
+const LIT = ['#ffd9a0', '#ffe6bf', '#fff1d8', '#ffcf8a', '#e8f0ff'];
 
 function roundRect(x, px, py, w, h, r) {
   x.beginPath();
@@ -54,179 +83,227 @@ export function facadeTextures(style, seed = 1) {
   const fh = H / floors;
   const [c, x] = canvas(W, H);
   const [e, ex] = canvas(W, H);
-  const wall = style === 'glass' ? ['#3d6fd1', '#2fa8a8', '#7b4ad6'][seed % 3] : WALLS[(seed * 3 + style.length) % WALLS.length];
+  const glass = style === 'glass';
+  const wall = glass ? ['#3e5468', '#3c5a60', '#46505e'][seed % 3] : WALLS[(seed * 3 + style.length) % WALLS.length];
   x.fillStyle = wall;
   x.fillRect(0, 0, W, H);
   ex.fillStyle = '#000';
   ex.fillRect(0, 0, W, H);
   if (style === 'brick') {
-    // Briques arrondies, à peine plus sombres
-    x.fillStyle = 'rgba(0,0,0,0.10)';
-    for (let row = 0; row < H / 14; row++) {
-      for (let col = -1; col < W / 32; col++) {
-        if (rand() < 0.35) continue;
-        roundRect(x, col * 32 + (row % 2) * 16 + 2, row * 14 + 2, 28, 10, 4);
-        x.fill();
+    x.fillStyle = shade(wall, 0.12);
+    x.fillRect(0, 0, W, H);
+    for (let row = 0; row < H / 8; row++) {
+      for (let col = -1; col < W / 20 + 1; col++) {
+        x.fillStyle = shade(wall, (rand() - 0.5) * 0.08);
+        x.fillRect(col * 20 + (row % 2) * 10 + 1, row * 8 + 1, 18, 6);
       }
     }
   }
-  // Bandeaux d'étage
+  blotches(x, W, H, rand, 30, '30,26,22', 0.04, 0.12, 20, 90);
   for (let f = 0; f < floors; f++) {
-    x.fillStyle = 'rgba(20,10,50,0.22)';
-    x.fillRect(0, f * fh + fh - 7, W, 7);
-    x.fillStyle = 'rgba(255,255,255,0.12)';
-    x.fillRect(0, f * fh + fh - 9, W, 2);
+    // Bandeau d'étage en pierre
+    x.fillStyle = shade(wall, 0.08);
+    x.fillRect(0, f * fh + fh - 6, W, 6);
+    x.fillStyle = 'rgba(0,0,0,0.25)';
+    x.fillRect(0, f * fh + fh - 1, W, 1);
     for (let b = 0; b < bays; b++) {
-      const glass = style === 'glass';
-      const ww = bw * (glass ? 0.8 : 0.56);
-      const wh = fh * (glass ? 0.72 : 0.58);
+      const ww = bw * (glass ? 0.86 : 0.52);
+      const wh = fh * (glass ? 0.78 : 0.6);
       const wx = b * bw + (bw - ww) / 2;
-      const wy = f * fh + fh * (glass ? 0.1 : 0.16);
-      const lit = rand() < (glass ? 0.35 : 0.3);
-      // Cadre épais sombre
-      x.fillStyle = '#1d1640';
-      roundRect(x, wx - 4, wy - 4, ww + 8, wh + 8, 9);
-      x.fill();
-      x.fillStyle = lit ? LIT[Math.floor(rand() * LIT.length)] : '#2a2160';
-      roundRect(x, wx, wy, ww, wh, 6);
-      x.fill();
+      const wy = f * fh + fh * (glass ? 0.08 : 0.14);
+      const lit = rand() < (glass ? 0.32 : 0.3);
+      // Embrasure sombre + cadre aluminium
+      x.fillStyle = 'rgba(0,0,0,0.45)';
+      x.fillRect(wx - 3, wy - 3, ww + 6, wh + 6);
+      x.fillStyle = '#5a5d62';
+      x.fillRect(wx - 2, wy - 2, ww + 4, wh + 4);
       if (lit) {
-        ex.fillStyle = x.fillStyle;
-        roundRect(ex, wx, wy, ww, wh, 6);
-        ex.fill();
-        // Rideaux ou silhouette
-        if (rand() < 0.45) {
-          const cc = ['#e86f6f', '#6fcf97', '#8f7ad8'][Math.floor(rand() * 3)];
-          for (const ctx of [x, ex]) {
-            ctx.fillStyle = ctx === ex ? '#000' : cc;
-            ctx.fillRect(wx, wy, ww * 0.22, wh);
-            ctx.fillRect(wx + ww * 0.78, wy, ww * 0.22, wh);
-          }
+        const col = LIT[Math.floor(rand() * LIT.length)];
+        for (const ctx of [x, ex]) {
+          const g = ctx.createLinearGradient(0, wy, 0, wy + wh);
+          g.addColorStop(0, col);
+          g.addColorStop(1, shade(col, -0.35));
+          ctx.fillStyle = g;
+          ctx.fillRect(wx, wy, ww, wh);
+          // Stores / rideaux / silhouette de mobilier
+          ctx.fillStyle = ctx === ex ? 'rgba(0,0,0,0.55)' : 'rgba(60,40,30,0.55)';
+          if (rand() < 0.4) ctx.fillRect(wx, wy, ww, wh * (0.2 + rand() * 0.5));
+          if (rand() < 0.35) ctx.fillRect(wx + ww * (0.2 + rand() * 0.5), wy + wh * 0.6, ww * 0.25, wh * 0.4);
         }
       } else {
-        // Reflet cartoon : deux traits diagonaux
-        x.strokeStyle = 'rgba(160,200,255,0.35)';
-        x.lineWidth = 3;
+        // Vitre éteinte : reflet du ciel (dégradé) + reflet diagonal discret
+        const g = x.createLinearGradient(0, wy, 0, wy + wh);
+        g.addColorStop(0, '#6d7f92');
+        g.addColorStop(0.55, '#2c3640');
+        g.addColorStop(1, '#151a20');
+        x.fillStyle = g;
+        x.fillRect(wx, wy, ww, wh);
+        x.fillStyle = 'rgba(255,255,255,0.06)';
         x.beginPath();
-        x.moveTo(wx + ww * 0.2, wy + wh * 0.65);
-        x.lineTo(wx + ww * 0.55, wy + wh * 0.2);
-        x.moveTo(wx + ww * 0.45, wy + wh * 0.75);
-        x.lineTo(wx + ww * 0.7, wy + wh * 0.45);
-        x.stroke();
-      }
-      if (!glass) {
-        // Rebord + croisillon
-        x.fillStyle = 'rgba(255,255,255,0.35)';
-        roundRect(x, wx - 6, wy + wh + 3, ww + 12, 5, 2);
+        x.moveTo(wx + ww * 0.15, wy + wh);
+        x.lineTo(wx + ww * 0.55, wy);
+        x.lineTo(wx + ww * 0.75, wy);
+        x.lineTo(wx + ww * 0.35, wy + wh);
         x.fill();
-        x.fillStyle = '#1d1640';
-        x.fillRect(wx + ww / 2 - 1.5, wy, 3, wh);
+      }
+      // Meneaux
+      x.fillStyle = '#4a4d52';
+      x.fillRect(wx + ww / 2 - 1, wy, 2, wh);
+      if (!glass) {
+        x.fillRect(wx, wy + wh * 0.62, ww, 2);
+        // Appui de fenêtre + coulure
+        x.fillStyle = shade(wall, 0.15);
+        x.fillRect(wx - 5, wy + wh + 2, ww + 10, 4);
+        const sg = x.createLinearGradient(0, wy + wh + 6, 0, wy + wh + 26);
+        sg.addColorStop(0, 'rgba(20,18,16,0.22)');
+        sg.addColorStop(1, 'rgba(20,18,16,0)');
+        x.fillStyle = sg;
+        x.fillRect(wx - 2, wy + wh + 6, ww + 4, 20);
       }
     }
   }
+  pixelNoise(x, W, H, rand, 14);
   const out = { map: tex(c), emissive: tex(e), bays, floors };
   cache.set(key, out);
   return out;
 }
 
-// Asphalte cartoon : violet-bleu, flaques stylisées bleu ciel, fissures épaisses.
+// Asphalte réaliste : granulats, rapiéçages, fissures fines, taches d'huile
+// et traces de pneus ; carte de rugosité associée (zones lissées plus brillantes).
 export function asphaltTextures() {
   if (cache.has('asphalt')) return cache.get('asphalt');
   const rand = mulberry32(7);
-  const S = 512;
+  const S = 1024;
   const [c, x] = canvas(S, S);
   const [r, rx] = canvas(S, S);
-  x.fillStyle = '#3b3561';
+  x.fillStyle = '#3a3a3c';
   x.fillRect(0, 0, S, S);
-  rx.fillStyle = '#d0d0d0';
+  rx.fillStyle = '#e0e0e0';
   rx.fillRect(0, 0, S, S);
-  // Taches plus claires (usure) en formes rondes
-  for (let i = 0; i < 40; i++) {
-    x.fillStyle = `rgba(120,110,190,${0.08 + rand() * 0.08})`;
-    x.beginPath();
-    x.ellipse(rand() * S, rand() * S, 10 + rand() * 40, 6 + rand() * 20, rand() * 3, 0, Math.PI * 2);
-    x.fill();
-  }
-  // Flaques : aplat clair + reflet
-  for (let i = 0; i < 9; i++) {
+  blotches(x, S, S, rand, 60, '70,70,72', 0.08, 0.2, 30, 160);
+  blotches(x, S, S, rand, 40, '18,18,20', 0.1, 0.25, 30, 140);
+  // Rapiéçages rectangulaires plus sombres
+  for (let i = 0; i < 6; i++) {
+    const w = 60 + rand() * 180;
+    const h = 40 + rand() * 120;
     const px = rand() * S;
     const py = rand() * S;
-    const a = 18 + rand() * 30;
-    const b = a * (0.4 + rand() * 0.3);
-    x.fillStyle = '#5a5fa8';
-    x.beginPath();
-    x.ellipse(px, py, a, b, 0, 0, Math.PI * 2);
-    x.fill();
-    x.strokeStyle = 'rgba(190,230,255,0.7)';
-    x.lineWidth = 3;
-    x.beginPath();
-    x.ellipse(px - a * 0.2, py - b * 0.2, a * 0.5, b * 0.35, 0, Math.PI * 1.1, Math.PI * 1.6);
-    x.stroke();
-    rx.fillStyle = '#202020';
-    rx.beginPath();
-    rx.ellipse(px, py, a, b, 0, 0, Math.PI * 2);
-    rx.fill();
+    x.fillStyle = `rgba(22,22,24,${0.35 + rand() * 0.25})`;
+    x.fillRect(px, py, w, h);
+    x.strokeStyle = 'rgba(10,10,10,0.5)';
+    x.lineWidth = 1.5;
+    x.strokeRect(px, py, w, h);
+    rx.fillStyle = '#c8c8c8';
+    rx.fillRect(px, py, w, h);
   }
-  // Fissures épaisses arrondies
-  x.strokeStyle = '#231d45';
+  // Taches d'huile (plus lisses)
+  for (let i = 0; i < 18; i++) {
+    const px = rand() * S;
+    const py = rand() * S;
+    const rr = 8 + rand() * 30;
+    const g = x.createRadialGradient(px, py, 0, px, py, rr);
+    g.addColorStop(0, 'rgba(8,8,10,0.5)');
+    g.addColorStop(1, 'rgba(8,8,10,0)');
+    x.fillStyle = g;
+    x.fillRect(px - rr, py - rr, rr * 2, rr * 2);
+    const gr = rx.createRadialGradient(px, py, 0, px, py, rr);
+    gr.addColorStop(0, 'rgba(60,60,60,0.9)');
+    gr.addColorStop(1, 'rgba(60,60,60,0)');
+    rx.fillStyle = gr;
+    rx.fillRect(px - rr, py - rr, rr * 2, rr * 2);
+  }
+  // Fissures fines ramifiées
   x.lineCap = x.lineJoin = 'round';
-  for (let i = 0; i < 10; i++) {
-    x.lineWidth = 2 + rand() * 2;
+  for (let i = 0; i < 26; i++) {
+    x.strokeStyle = `rgba(12,12,12,${0.5 + rand() * 0.4})`;
+    x.lineWidth = 0.8 + rand() * 1.4;
     x.beginPath();
     let px = rand() * S;
     let py = rand() * S;
+    let a = rand() * Math.PI * 2;
     x.moveTo(px, py);
-    for (let k = 0; k < 4; k++) {
-      px += (rand() - 0.5) * 50;
-      py += (rand() - 0.5) * 50;
+    for (let k = 0; k < 14; k++) {
+      a += (rand() - 0.5) * 1.1;
+      px += Math.cos(a) * (6 + rand() * 12);
+      py += Math.sin(a) * (6 + rand() * 12);
       x.lineTo(px, py);
     }
     x.stroke();
   }
+  // Granulats : points clairs et sombres
+  for (let i = 0; i < 42000; i++) {
+    const v = rand();
+    x.fillStyle = v < 0.5 ? `rgba(140,140,140,${0.2 + rand() * 0.3})` : `rgba(10,10,10,${0.2 + rand() * 0.3})`;
+    const sz = 0.8 + rand() * 1.8;
+    x.fillRect(rand() * S, rand() * S, sz, sz);
+  }
+  pixelNoise(x, S, S, rand, 16);
+  pixelNoise(rx, S, S, rand, 30);
   const out = { map: tex(c), roughness: tex(r, { srgb: false }) };
   cache.set('asphalt', out);
   return out;
 }
 
+// Trottoir : dalles de béton (joints, usure, taches de chewing-gum).
 export function sidewalkTexture() {
   if (cache.has('sidewalk')) return cache.get('sidewalk');
   const rand = mulberry32(11);
-  const S = 256;
+  const S = 512;
   const [c, x] = canvas(S, S);
-  x.fillStyle = '#4b4880';
+  x.fillStyle = '#4c4b48';
   x.fillRect(0, 0, S, S);
-  const tiles = ['#7a76b8', '#8480c2', '#706cae'];
   for (let i = 0; i < 4; i++) {
     for (let j = 0; j < 4; j++) {
-      x.fillStyle = tiles[Math.floor(rand() * tiles.length)];
-      roundRect(x, i * 64 + 3, j * 64 + 3, 58, 58, 10);
-      x.fill();
-      x.fillStyle = 'rgba(255,255,255,0.12)';
-      roundRect(x, i * 64 + 7, j * 64 + 6, 40, 6, 3);
-      x.fill();
+      const v = 128 + Math.floor((rand() - 0.5) * 18);
+      x.fillStyle = `rgb(${v},${v - 2},${v - 6})`;
+      x.fillRect(i * 128 + 2, j * 128 + 2, 124, 124);
     }
   }
+  blotches(x, S, S, rand, 40, '50,48,44', 0.06, 0.18, 10, 70);
+  for (let i = 0; i < 70; i++) {
+    x.fillStyle = `rgba(40,40,40,${0.2 + rand() * 0.3})`;
+    x.beginPath();
+    x.arc(rand() * S, rand() * S, 1 + rand() * 2.5, 0, Math.PI * 2);
+    x.fill();
+  }
+  pixelNoise(x, S, S, rand, 22);
   const out = tex(c);
   cache.set('sidewalk', out);
   return out;
 }
 
-// Métal nervuré cartoon (conteneurs, caisses) : bandes franches, bosses.
+// Tôle nervurée (conteneurs, caisses) : ondulations ombrées, rouille, rayures.
 export function ribbedTexture(color) {
   const key = 'ribbed:' + color;
   if (cache.has(key)) return cache.get(key);
+  const rand = mulberry32(color.charCodeAt(1) * 13 + color.charCodeAt(4));
   const [c, x] = canvas(256, 256);
   x.fillStyle = color;
   x.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 256; i += 32) {
-    x.fillStyle = 'rgba(20,10,50,0.28)';
-    x.fillRect(i + 22, 0, 8, 256);
-    x.fillStyle = 'rgba(255,255,255,0.22)';
-    x.fillRect(i + 4, 0, 5, 256);
+    const g = x.createLinearGradient(i, 0, i + 32, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0.10)');
+    g.addColorStop(0.35, 'rgba(0,0,0,0.0)');
+    g.addColorStop(0.7, 'rgba(0,0,0,0.28)');
+    g.addColorStop(1, 'rgba(255,255,255,0.06)');
+    x.fillStyle = g;
+    x.fillRect(i, 0, 32, 256);
   }
-  x.strokeStyle = 'rgba(20,10,50,0.6)';
-  x.lineWidth = 8;
-  x.strokeRect(4, 4, 248, 248);
+  blotches(x, 256, 256, rand, 14, '110,58,30', 0.12, 0.35, 6, 30);
+  for (let i = 0; i < 40; i++) {
+    x.strokeStyle = `rgba(200,200,200,${0.05 + rand() * 0.12})`;
+    x.lineWidth = 0.7;
+    x.beginPath();
+    const px = rand() * 256;
+    const py = rand() * 256;
+    x.moveTo(px, py);
+    x.lineTo(px + (rand() - 0.5) * 30, py + (rand() - 0.5) * 8);
+    x.stroke();
+  }
+  x.strokeStyle = 'rgba(0,0,0,0.45)';
+  x.lineWidth = 4;
+  x.strokeRect(2, 2, 252, 252);
+  pixelNoise(x, 256, 256, rand, 14);
   const out = tex(c);
   cache.set(key, out);
   return out;
@@ -327,11 +404,10 @@ export function wallTexture(kind, color) {
       for (let k = -1; k < S / bw + 1; k++) {
         const px = k * bw + (row % 2) * (bw / 2) + 1.5;
         const py = row * bh + 1.5;
-        x.fillStyle = shade(color, (rand() - 0.5) * 0.09);
-        roundRect(x, px, py, bw - 3, bh - 3, 2.5);
-        x.fill();
-        x.fillStyle = 'rgba(255,255,255,0.10)';
-        x.fillRect(px + 2, py + 1, bw - 8, 2);
+        x.fillStyle = shade(color, (rand() - 0.5) * 0.1);
+        x.fillRect(px, py, bw - 3, bh - 3);
+        x.fillStyle = 'rgba(0,0,0,0.12)';
+        x.fillRect(px, py + bh - 5, bw - 3, 2);
       }
     }
   } else if (kind === 'stucco' || kind === 'artdeco') {
@@ -352,8 +428,8 @@ export function wallTexture(kind, color) {
         const px = k * pw + (kind === 'stone' ? (row % 2) * (pw / 2) : 0);
         x.fillStyle = shade(color, (rand() - 0.5) * 0.06);
         x.fillRect(px + 2, row * ph + 2, pw - 4, ph - 4);
-        x.fillStyle = 'rgba(255,255,255,0.12)';
-        x.fillRect(px + 3, row * ph + 3, pw - 8, 3);
+        x.fillStyle = 'rgba(0,0,0,0.08)';
+        x.fillRect(px + 2, row * ph + ph - 4, pw - 4, 2);
       }
     }
   } else if (kind === 'glass' || kind === 'glassLit') {
@@ -377,16 +453,13 @@ export function wallTexture(kind, color) {
           g.addColorStop(1, shade(color, -0.08));
           x.fillStyle = g;
           x.fillRect(i * p + 3, j * p + 3, p - 6, p - 6);
-          x.strokeStyle = 'rgba(255,255,255,0.35)';
-          x.lineWidth = 3;
-          x.beginPath();
-          x.moveTo(i * p + 10, j * p + p * 0.6);
-          x.lineTo(i * p + p * 0.5, j * p + 10);
-          x.stroke();
+          x.fillStyle = 'rgba(255,255,255,0.05)';
+          x.fillRect(i * p + 3, j * p + 3, p - 6, (p - 6) * 0.35);
         }
       }
     }
   }
+  if (kind !== 'glassLit') pixelNoise(x, S, S, rand, 12);
   const out = tex(c);
   cache.set(key, out);
   return out;
@@ -396,16 +469,17 @@ export function roofTexture() {
   if (cache.has('roof')) return cache.get('roof');
   const rand = mulberry32(99);
   const [c, x] = canvas(256, 256);
-  x.fillStyle = '#6a6488';
+  x.fillStyle = '#6b6a66';
   x.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 1800; i++) {
-    x.fillStyle = rand() < 0.5 ? '#7a74a0' : '#58527a';
+  for (let i = 0; i < 2600; i++) {
+    x.fillStyle = rand() < 0.5 ? '#7d7b76' : '#55534f';
     x.beginPath();
     x.arc(rand() * 256, rand() * 256, 1 + rand() * 2.5, 0, Math.PI * 2);
     x.fill();
   }
-  x.strokeStyle = 'rgba(30,20,50,0.5)';
-  x.lineWidth = 3;
+  blotches(x, 256, 256, rand, 12, '30,30,28', 0.08, 0.2, 10, 50);
+  x.strokeStyle = 'rgba(20,20,20,0.35)';
+  x.lineWidth = 2;
   x.strokeRect(0, 0, 256, 256);
   const out = tex(c);
   cache.set('roof', out);

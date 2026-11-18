@@ -4,7 +4,6 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 import { CollisionWorld } from './core/physics.js';
 import { Input } from './core/input.js';
@@ -18,6 +17,9 @@ import { Social } from './systems/social.js';
 import { Crate } from './world/crate.js';
 import { Effects } from './fx/effects.js';
 import { GradePass } from './fx/grade.js';
+import { ScenePass, CinematicPass } from './fx/cinematic.js';
+import { PBR, setPbrDetail } from './fx/pbr.js';
+import { Sky } from './world/sky.js';
 import { Trail, Afterimages } from './fx/trails.js';
 import { Hero, MOVES } from './actors/hero.js';
 import { Enemy, ENEMY_TYPES } from './actors/enemy.js';
@@ -104,35 +106,47 @@ export class Game {
     if (loadTxt) loadTxt.textContent = 'Chargement de Vesper…';
     // --- Rendu ---
     const q = this.settings.quality;
-    const r = (this.renderer = new THREE.WebGLRenderer({ antialias: q !== 'low', powerPreference: 'high-performance' }));
+    // Rendu réaliste : matériaux PBR détaillés (sauf en qualité basse).
+    setPbrDetail(q !== 'low');
+    const r = (this.renderer = new THREE.WebGLRenderer({ antialias: q === 'low', powerPreference: 'high-performance' }));
     r.outputColorSpace = THREE.SRGBColorSpace;
-    r.toneMapping = THREE.NeutralToneMapping; // préserve les couleurs saturées
+    r.toneMapping = THREE.ACESFilmicToneMapping; // tonalité cinéma (hautes lumières douces)
     r.toneMappingExposure = 1.0;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(r.domElement);
 
     const scene = (this.scene = new THREE.Scene());
-    scene.fog = new THREE.FogExp2('#4a2f7a', 0.0055);
-    scene.background = new THREE.Color('#1a0d36');
-    const pmrem = new THREE.PMREMGenerator(r);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = 0.0;
-    applyRealEnv(scene.environment, 0.9);
+    scene.fog = new THREE.FogExp2('#7a8494', 0.003);
+    scene.background = new THREE.Color('#0d0f14');
+    // Ciel physique : il fournit aussi l'éclairage d'environnement (reflets, ambiance).
+    this.sky = new Sky(r, q);
+    scene.add(this.sky.mesh);
+    scene.environment = this.sky.envTexture(true);
+    scene.environmentIntensity = 1;
+    applyRealEnv(null);
 
     this.camera = new THREE.PerspectiveCamera(62, 16 / 9, 0.1, 1500);
-    this.hemi = new THREE.HemisphereLight('#d6d0ff', '#6a4a5a', 1.35);
+    this.hemi = new THREE.HemisphereLight('#d6d0ff', '#6a4a5a', 0.4);
     scene.add(this.hemi);
+    // Lumière directionnelle principale : le soleil le jour, la lune la nuit.
     const moon = (this.moon = new THREE.DirectionalLight('#e8f0ff', 1.6));
     moon.shadow.camera.left = moon.shadow.camera.bottom = -36;
     moon.shadow.camera.right = moon.shadow.camera.top = 36;
-    moon.shadow.camera.far = 160;
-    moon.shadow.bias = -0.0006;
-    moon.shadow.normalBias = 0.03;
+    moon.shadow.camera.far = 200;
+    moon.shadow.bias = -0.0004;
+    moon.shadow.normalBias = 0.035;
     scene.add(moon, moon.target);
 
+    // Post-traitement : scène HDR (MSAA + profondeur) -> SSAO, réflexions,
+    // rayons, flou de mouvement -> bloom -> tonalité ACES -> étalonnage film.
     this.composer = new EffectComposer(r);
-    this.composer.addPass(new RenderPass(scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.55, 0.4, 0.88);
+    this.renderPass = new RenderPass(scene, this.camera);
+    this.composer.addPass(this.renderPass);
+    this.scenePass = new ScenePass(scene, this.camera, 4);
+    this.composer.addPass(this.scenePass);
+    this.cine = new CinematicPass(this.scenePass, this.camera, q);
+    this.composer.addPass(this.cine);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.42, 0.55, 1.1);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.post = new GradePass();
@@ -297,14 +311,20 @@ export class Game {
     const k = Math.max(0, kIn);
     const day = Math.max(0, -kIn);
     const c = (a, b, dayCol) => new THREE.Color(a).lerp(new THREE.Color(b), k).lerp(new THREE.Color(dayCol), day);
-    this.hemi.color.copy(c('#ffe0c8', '#d6d0ff', '#ffffff'));
-    this.hemi.groundColor.copy(c('#7a5a6a', '#6a4a5a', '#8a8070'));
-    this.hemi.intensity = 1.5 - k * 0.15 + day * 0.25;
-    this.moon.color.copy(c('#ffc08a', '#e8f0ff', '#fff6e6'));
-    this.moon.intensity = 2.0 - k * 0.4 + day * 0.5;
-    this.scene.fog.color.copy(c('#e8a0a8', '#4a2f7a', '#bcd6ff'));
-    this.scene.fog.density = 0.0035 + k * 0.002 - day * 0.001;
-    this.scene.background.copy(c('#e8a0a8', '#1a0d36', '#a8cdff'));
+    const sky = this.sky;
+    sky.set(kIn, { rain: k > 0.5 && this.zone === 'city' });
+    // Ambiance : le ciel (IBL) éclaire déjà ; l'hémisphère ne sert que de
+    // débouchage léger (nuit lisible sans être grise).
+    this.hemi.color.copy(c('#ffd8c0', '#8a9cff', '#dfe8ff'));
+    this.hemi.groundColor.copy(c('#4a3a30', '#1a1622', '#4a463e'));
+    this.hemi.intensity = 0.35 + k * 0.25 - day * 0.1;
+    this.moon.color.copy(sky.lightColor);
+    this.moon.intensity = sky.lightIntensity;
+    this.scene.fog.color.copy(sky.fogColor);
+    this.scene.fog.density = 0.0018 + k * 0.0026 + Math.max(0, 0.6 - Math.abs(kIn)) * 0.0012 - day * 0.0004;
+    this.scene.background.copy(sky.fogColor);
+    this.scene.environmentIntensity = sky.ambient;
+    this.renderer.toneMappingExposure = sky.exposure;
     this.audio.setRain?.(k > 0.5 && this.zone === 'city');
   }
 
@@ -371,6 +391,7 @@ export class Game {
       this.camYaw = sp.yaw;
     }
     this.camPos = null;
+    this.cine?.resetHistory();
     this.lockTarget = null;
     this.hero.rings.placed = false;
     if (this.hero.powers.rings && this.hero.form === 'human') this.hero.rings.set('idle');
@@ -439,6 +460,8 @@ export class Game {
     this.world.update(0.016, this.time, this.camera, this.hero.pos);
     this.#cullDistricts();
     this.#updateHud(0.016);
+    this.#updateRender(0.016, true);
+    this.cine.resetHistory();
     this.composer.render();
   }
 
@@ -448,10 +471,17 @@ export class Game {
     saveSettings(s);
     this.audio.applySettings(s);
     const q = s.quality;
-    this.renderer.setPixelRatio(q === 'low' ? Math.min(devicePixelRatio, 1) * 0.75 : q === 'medium' ? Math.min(devicePixelRatio, 1.25) : Math.min(devicePixelRatio, 2));
+    this.renderer.setPixelRatio(q === 'low' ? Math.min(devicePixelRatio, 1) * 0.75 : q === 'medium' ? Math.min(devicePixelRatio, 1.25) : q === 'high' ? Math.min(devicePixelRatio, 1.5) : Math.min(devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = q !== 'low';
     this.moon.castShadow = q !== 'low';
-    const size = q === 'high' ? 2048 : 1024;
+    const size = q === 'ultra' ? 4096 : q === 'high' ? 2048 : 1024;
+    // Chaîne de rendu : simple en qualité basse (téléphones), cinéma sinon.
+    const cine = q !== 'low';
+    this.renderPass.enabled = !cine;
+    this.scenePass.enabled = cine;
+    this.cine.enabled = cine;
+    if (cine) this.cine.setQuality(q);
+    this.moon.shadow.radius = q === 'ultra' ? 3 : 2;
     if (this.moon.shadow.mapSize.x !== size) {
       this.moon.shadow.mapSize.set(size, size);
       this.moon.shadow.map?.dispose();
@@ -539,8 +569,35 @@ export class Game {
     this.#cullDistricts();
     this.#updateHud(realDt);
     this.#updateTouch();
+    this.#updateRender(realDt);
     this.composer.render();
     this.input.endFrame();
+  }
+
+  // Ciel, éclairage d'environnement, pluie sur les matériaux, effets cinéma.
+  #updateRender(dt, instant = false) {
+    const sky = this.sky;
+    sky.update(dt, this.time);
+    PBR.time.value = this.time;
+    const city = this.zone === 'city';
+    const night = this.night ?? 0;
+    const raining = city && night > 0.5;
+    // Le sol sèche lentement, se mouille vite.
+    const tgt = raining ? 1 : 0;
+    const rate = instant ? 1 : Math.min(1, dt * (tgt > PBR.wet.value ? 0.5 : 0.08));
+    PBR.wet.value = city ? PBR.wet.value + (tgt - PBR.wet.value) * rate : 0;
+    PBR.rain.value = raining ? 1 : 0;
+    this.scene.environment = sky.envTexture(instant && sky.envDirty);
+    const st = this.cine.state;
+    st.wet = city ? PBR.wet.value : 0;
+    st.time = this.time;
+    st.fogDensity = this.scene.fog.density;
+    const sunUp = sky.sunDir.y > -0.03;
+    st.sunDir.copy(sunUp ? sky.sunDir : sky.moonDir);
+    st.shaftCol.copy(sky.lightColor);
+    st.shaft = city ? (sunUp ? 0.55 : 0.35) : 0;
+    st.haloCol.copy(sky.lightColor).multiplyScalar(city ? sky.lightIntensity * (sunUp ? 0.05 : 0.04) : 0);
+    st.mbScale = this.menus.isOpen ? 0 : 1;
   }
 
   // Boutons tactiles selon le contexte (aussi appelé par la simulation à pas fixe).
@@ -628,7 +685,7 @@ export class Game {
     }
 
     // Lumière de lune qui suit le joueur (ombres)
-    this.moon.position.set(hero.pos.x + 30, 60, hero.pos.z + 18);
+    this.moon.position.copy(this.sky.lightDir).multiplyScalar(90).add(hero.pos);
     this.moon.target.position.copy(hero.pos);
 
     // Actions générales
@@ -702,7 +759,7 @@ export class Game {
     // Masque + écharpe la nuit, en ville, une fois les pouvoirs éveillés.
     const gear = h.powers.rings && this.zone === 'city' && this.clock.phase === 'night' && !h.pose;
     if (h.model.gearOn !== gear) h.model.setGear(gear);
-    this.post?.tick(dt, { lowHp: Math.max(0, 1 - h.hp / h.stats.maxHp / 0.3), umbra, aspect: this.camera.aspect, time: this.time });
+    this.post?.tick(dt, { lowHp: Math.max(0, 1 - h.hp / h.stats.maxHp / 0.3), umbra, aspect: this.camera.aspect, time: this.time, night: Math.max(0, this.night ?? 0) });
   }
 
   // Directeur d'escouade : répartit les créatures en alerte autour du héros

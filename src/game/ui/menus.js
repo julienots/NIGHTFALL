@@ -273,8 +273,8 @@ export class Menus {
         ${check('markers', 'Marqueurs d’objectif')}
         ${check('subtitles', 'Sous-titres')}
         <label>Qualité graphique<select data-set="quality">
-          <option value="low">Basse</option><option value="medium">Moyenne</option><option value="high">Élevée</option></select><span></span></label>
-        <p class="cost">La qualité modifie immédiatement la résolution, les ombres et le bloom ; le nombre de lumières et la densité de pluie s'appliquent au prochain chargement.</p>
+          <option value="low">Basse</option><option value="medium">Moyenne</option><option value="high">Élevée</option><option value="ultra">Ultra (cinéma)</option></select><span></span></label>
+        <p class="cost">La qualité modifie immédiatement la résolution, les ombres et les effets (occlusion, réflexions sur sol mouillé, rayons de lumière, flou de mouvement) ; les détails des matériaux, le nombre de lumières et la densité de pluie s'appliquent au prochain chargement.</p>
       </div>
       <div class="controls">ZQSD/WASD déplacer · Maj sprint · Espace sauter · Clic gauche combo (en l'air : attaque plongeante) · Clic droit coup lourd<br>
         Ctrl/C esquive (au bon moment : esquive parfaite) · F rafale · R verrouiller · E interagir · H soin · I inventaire · J journal · M carte · N marqueurs<br>

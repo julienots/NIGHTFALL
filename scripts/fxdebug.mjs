@@ -1,0 +1,24 @@
+// Diagnostic rapide : démarre le chapitre 1 et affiche les erreurs console en direct.
+import { createServer } from 'vite';
+import { chromium } from 'playwright';
+const quality = process.argv[2] || 'high';
+const server = await createServer({ server: { port: 5208, hmr: false, watch: null }, logLevel: 'error' });
+await server.listen();
+const b = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const p = await b.newPage({ viewport: { width: 640, height: 360 } });
+p.setDefaultTimeout(300000);
+const t0 = Date.now();
+p.on('pageerror', (e) => console.log('[pageerror]', e.message));
+p.on('console', (m) => (m.type() === 'error' || m.type() === 'warning') && console.log(`[${m.type()}]`, m.text().slice(0, 1500)));
+await p.goto('http://localhost:5208/');
+await p.evaluate((q) => { localStorage.clear(); localStorage.setItem('nightfall.settings', JSON.stringify({ quality: q })); }, quality);
+await p.click('#start'); await p.waitForTimeout(500); await p.keyboard.press('Space');
+await p.waitForSelector('#title:not(.hidden)'); await p.waitForTimeout(400); await p.keyboard.press('Enter'); await p.waitForTimeout(300);
+await p.click('#btn-chapters'); await p.click('[data-ch="ch1"]');
+await p.waitForFunction(() => window.__nightfall?.running, null, { timeout: 300000 });
+console.log('démarré en', (Date.now() - t0) / 1000, 's');
+await p.evaluate(() => window.__nightfall.stopLoop());
+const t1 = Date.now();
+await p.evaluate(() => window.__nightfall.renderOnce());
+console.log('une image en', (Date.now() - t1) / 1000, 's');
+await b.close(); await server.close();

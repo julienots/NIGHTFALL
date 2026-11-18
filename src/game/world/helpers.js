@@ -3,17 +3,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { toon } from '../fx/toon.js';
+import { pbr } from '../fx/pbr.js';
 
-// Matériau cartoon à partir de paramètres « standard » (rugosité/métal ignorés).
+// Matériau réaliste (PBR) à partir de paramètres « standard » : rugosité et
+// métal sont respectés, sinon déduits de la couleur (voir fx/pbr.js).
 export function M(p = {}) {
-  const m = new THREE.MeshToonMaterial({ gradientMap: toon('#fff').gradientMap });
-  for (const k of ['color', 'map', 'emissive', 'emissiveMap', 'emissiveIntensity', 'transparent', 'opacity', 'side', 'wireframe', 'polygonOffset', 'polygonOffsetFactor', 'depthWrite']) {
-    if (p[k] === undefined) continue;
-    if (k === 'color' || k === 'emissive') m[k].set(p[k]);
-    else m[k] = p[k];
-  }
-  return m;
+  return pbr(p);
 }
 
 // Boîte aux arêtes arrondies (style « jouet »).

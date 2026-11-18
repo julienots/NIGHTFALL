@@ -6,6 +6,7 @@
 // l'Ombre (symbiote) → chapitre 2 « Double vie » (lycée le jour, héros la nuit).
 // Les cinématiques avancent en temps de jeu (testables, synchronisées).
 import * as THREE from 'three';
+import { pbr } from '../fx/pbr.js';
 import { Npc } from '../actors/npc.js';
 import { SCENES } from '../data/characters.js';
 
@@ -524,8 +525,8 @@ export class Story {
     const g = this.game;
     const t = g.world.targets.aegis_drone;
     const grp = new THREE.Group();
-    const white = new THREE.MeshToonMaterial({ color: '#e8ecff' });
-    const dark = new THREE.MeshToonMaterial({ color: '#2b2050' });
+    const white = pbr({ color: '#e8ecff' });
+    const dark = pbr({ color: '#2b2050' });
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.22, 0.7), white);
     body.position.y = 0.2;
     grp.add(body);
@@ -613,7 +614,7 @@ export class Story {
     const g = this.game;
     const t = g.world.targets.abyss_ooze || (g.world.targets.abyss_ooze = { x: 0, y: 0.15, z: -11 });
     const grp = new THREE.Group();
-    const mat = new THREE.MeshToonMaterial({ color: '#140c22', emissive: '#2a1650', emissiveIntensity: 0.6 });
+    const mat = pbr({ color: '#140c22', emissive: '#2a1650', emissiveIntensity: 0.6 });
     const blob = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), mat);
     blob.scale.set(1.6, 0.35, 1.3);
     grp.add(blob);
@@ -801,12 +802,12 @@ export class Story {
     const g = this.game;
     const t = g.world.targets.aegis_case;
     const grp = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.25, 0.55), new THREE.MeshToonMaterial({ color: '#e8ecff' }));
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.25, 0.55), pbr({ color: '#e8ecff' }));
     body.position.y = 0.13;
-    const band = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.05, 0.57), new THREE.MeshToonMaterial({ color: '#5fe3ff', emissive: '#5fe3ff', emissiveIntensity: 1.5 }));
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.05, 0.57), pbr({ color: '#5fe3ff', emissive: '#5fe3ff', emissiveIntensity: 1.5 }));
     band.position.y = 0.2;
     // Le cristal (même matière que le fragment du labo, en plus gros).
-    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshToonMaterial({ color: '#1d1530', emissive: '#5fe3ff', emissiveIntensity: 1.2 }));
+    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), pbr({ color: '#1d1530', emissive: '#5fe3ff', emissiveIntensity: 1.2 }));
     crystal.position.y = 0.48;
     crystal.scale.y = 1.6;
     const light = new THREE.PointLight('#5fe3ff', 6, 7, 2);

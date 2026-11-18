@@ -5,6 +5,8 @@
 import * as THREE from 'three';
 
 const cache = new Map();
+// Contours cartoon désactivés depuis la refonte réaliste.
+const OUTLINES = false;
 
 export function outlineMaterial(color = '#12052e', thickness = 0.012) {
   const key = color + thickness;
@@ -26,6 +28,11 @@ export function outlineMaterial(color = '#12052e', thickness = 0.012) {
 // Ajoute un contour à tous les maillages de root (sauf exclusions).
 // Renvoie la liste des coques pour pouvoir les masquer (dissolution, etc.).
 export function addOutline(root, { color = '#12052e', thickness = 0.012, skip = () => false } = {}) {
+  // Rendu réaliste : plus de contour cartoon (aucune coque ajoutée).
+  if (!OUTLINES) {
+    root.userData.outlines = [];
+    return [];
+  }
   const mat = outlineMaterial(color, thickness);
   const meshes = [];
   root.traverse((o) => {

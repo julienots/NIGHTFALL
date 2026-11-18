@@ -1654,7 +1654,7 @@ function buildSchool(scene, col, quality) {
       pos.setXYZ(i, pos.getX(i) * (y > 0 ? 0.7 : 1.0) + y * 0.18, y * 1.7, pos.getZ(i) * 0.75);
     }
     g.computeVertexNormals();
-    fragMat = new THREE.MeshToonMaterial({ color: '#070a1c', emissive: '#12c8ff', emissiveIntensity: 0.008, gradientMap: M().gradientMap });
+    fragMat = M({ color: '#070a1c', emissive: '#12c8ff', emissiveIntensity: 0.008, surface: 'glass' });
     fragment = new THREE.Mesh(g, fragMat);
     fragment.name = 'fragment';
     fragment.position.set(FX, 1.43, FZ);

@@ -205,7 +205,7 @@ const nonIdx = (g) => (g.index ? g.toNonIndexed() : g);
 
 export function buildDistricts({ scene, col, quality = 'medium', rand = Math.random, lampLights = [] }) {
   const low = quality === 'low';
-  const Q = { low: 0.45, medium: 0.75, high: 1 }[quality] ?? 0.75; // densité des décors
+  const Q = { low: 0.45, medium: 0.75, high: 1, ultra: 1 }[quality] ?? 0.75; // densité des décors
   const districts = [];
   const updaters = [];
   const kits = [];
@@ -231,21 +231,21 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     return ribCache.get(color);
   };
   const MAT = {
-    pave: M({ map: T.side }),
-    paveWarm: M({ map: T.side, color: '#ffd6b8' }),
-    paveCold: M({ map: T.side, color: '#cfdcff' }),
-    concrete: M({ map: T.side, color: '#b2adc4' }),
-    plaza: M({ map: T.side, color: '#ffe6c8', polygonOffset: true, polygonOffsetFactor: -1 }),
-    grass: M({ map: T.grass }),
-    grassDark: M({ map: T.grass, color: '#6f8a8c' }),
-    lawn: M({ map: T.grass, color: '#e8ffe0', polygonOffset: true, polygonOffsetFactor: -1 }),
-    path: M({ color: '#d9b88f', polygonOffset: true, polygonOffsetFactor: -2 }),
-    dirt: M({ color: '#a8805a', polygonOffset: true, polygonOffsetFactor: -2 }),
-    sand: M({ color: '#ecd29a', polygonOffset: true, polygonOffsetFactor: -2 }),
-    asphalt: M({ color: '#433c6c', polygonOffset: true, polygonOffsetFactor: -1 }),
+    pave: M({ map: T.side, surface: 'concrete' }),
+    paveWarm: M({ map: T.side, color: '#ffd6b8', surface: 'concrete' }),
+    paveCold: M({ map: T.side, color: '#cfdcff', surface: 'concrete' }),
+    concrete: M({ map: T.side, color: '#b2adc4', surface: 'concrete' }),
+    plaza: M({ map: T.side, color: '#ffe6c8', polygonOffset: true, polygonOffsetFactor: -1, surface: 'concrete' }),
+    grass: M({ map: T.grass, surface: 'grass' }),
+    grassDark: M({ map: T.grass, color: '#6f8a8c', surface: 'grass' }),
+    lawn: M({ map: T.grass, color: '#e8ffe0', polygonOffset: true, polygonOffsetFactor: -1, surface: 'grass' }),
+    path: M({ color: '#d9b88f', polygonOffset: true, polygonOffsetFactor: -2, surface: 'concrete' }),
+    dirt: M({ color: '#a8805a', polygonOffset: true, polygonOffsetFactor: -2, surface: 'plaster' }),
+    sand: M({ color: '#ecd29a', polygonOffset: true, polygonOffsetFactor: -2, surface: 'plaster' }),
+    asphalt: M({ color: '#433c6c', polygonOffset: true, polygonOffsetFactor: -1, surface: 'asphalt' }),
     lines: M({ color: '#f4efe0', polygonOffset: true, polygonOffsetFactor: -3 }),
-    track: M({ color: '#c4573f', polygonOffset: true, polygonOffsetFactor: -1 }),
-    pitch: M({ map: T.grass, color: '#c8ffb8', polygonOffset: true, polygonOffsetFactor: -2 }),
+    track: M({ color: '#c4573f', polygonOffset: true, polygonOffsetFactor: -1, surface: 'plaster' }),
+    pitch: M({ map: T.grass, color: '#c8ffb8', polygonOffset: true, polygonOffsetFactor: -2, surface: 'grass' }),
     curb: mat('#8f8bc4'),
     white: mat('#f4f0e8'),
     dark: mat('#3a2f6b'),
@@ -255,7 +255,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     stone: mat('#b9b2cc'),
     hedge: mat('#3f8a52'),
     trunk: mat('#7a4a3a'),
-    water: M({ map: T.water, emissive: '#1b3c80', emissiveIntensity: 0.45, polygonOffset: true, polygonOffsetFactor: -2 }),
+    water: M({ map: T.water, emissive: '#1b3c80', emissiveIntensity: 0.06, polygonOffset: true, polygonOffsetFactor: -2, surface: 'water' }),
     chain: (() => {
       const m = M({ map: T.chain, side: THREE.DoubleSide });
       m.alphaTest = 0.5;
@@ -488,8 +488,8 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
   }
 
   // ---------- Décors réutilisables ----------
-  const LEAF = ['#2fa88a', '#3cc29a', '#58b368', '#4a9e6a'];
-  const PINE = ['#1f5a4a', '#245048', '#2b4a5a', '#1d4a3c', '#33505e'];
+  const LEAF = ['#4a6b32', '#56763a', '#3f5f2c', '#66703a'];
+  const PINE = ['#26402a', '#2c4630', '#223a28', '#30482e', '#283e2c'];
   // Arbre : 'round' (tilleul), 'pine' (sapin), 'dead' (arbre mort). y = sol.
   function tree(ctx, kind, x, y, z, s = 1, color) {
     if (kind === 'pine') {
@@ -999,10 +999,10 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
   // =====================================================================
   // 3. LES TILLEULS — quartier pavillonnaire (z 76..192 ; x B, C, D)
   // =====================================================================
-  const WALLS = ['#f2c6a0', '#9fd8e8', '#f5b8c8', '#c9b8ff', '#a8e0c0', '#f2e2a0', '#ffd0a8', '#b8c8f0', '#e8a0a0'];
-  const ROOFS = ['#c0563f', '#4a3f7a', '#3d6fa8', '#5a4a6a', '#8a4a5a', '#2f7a7a', '#a8483a'];
-  const DOORS = ['#e8553f', '#3d6fd1', '#2fa88a', '#7b4ad6', '#ffcd20', '#5a3a2a'];
-  const SHUT = ['#3d6fd1', '#2fa88a', '#e86f6f', '#7b4ad6', '#f4f0e8', '#5a3a2a'];
+  const WALLS = ['#d8c8b0', '#c2c4c0', '#d6c0b0', '#c8c0b8', '#bfc6b8', '#ddd2b8', '#d4bca4', '#b8bcc0', '#c8a898'];
+  const ROOFS = ['#8a4a36', '#4a4c52', '#5a5650', '#3e4248', '#7a4234', '#585a5e', '#94523a'];
+  const DOORS = ['#7a2e24', '#2c3e5a', '#2e4a3a', '#4a3a2e', '#8a6a3a', '#5a3a2a'];
+  const SHUT = ['#3a5068', '#3e5a48', '#8a4a40', '#5a5a60', '#e8e4dc', '#5a3a2a'];
   // Maison cartoon à 2 niveaux : murs, pignons, tuiles, fenêtres à volets,
   // porte + auvent + marche, cheminée, garage optionnel.
   function house(d, o) {
@@ -1552,7 +1552,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
   // =====================================================================
   // 5. ZONE INDUSTRIELLE (x -192..-76, z -192..-76)
   // =====================================================================
-  const CONT = ['#e8553f', '#3d6fd1', '#f2b84b', '#6fcf97', '#8f7ad8', '#2fa8a8', '#d8d4e8'];
+  const CONT = ['#9a3a2a', '#2c4a72', '#b07a2a', '#3a6a4a', '#6a6a70', '#2a5a62', '#b8b4ac'];
   {
     const d = district('industrie', [-192, -192, -76, -76]);
     const g = d.group;

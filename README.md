@@ -1,8 +1,8 @@
 # NIGHTFALL: Rise of the Abyss — SuperEssence
 
-Jeu d'action-aventure 3D dans le navigateur (Three.js + Vite), **style cartoon
-« spooky-fun »** : proportions exagérées, couleurs saturées, ombrage en aplats
-(toon) avec liseré lumineux, nuit colorée mais inquiétante.
+Jeu d'action-aventure 3D dans le navigateur (Three.js + Vite). Depuis la v1.6, **rendu
+réaliste** : matériaux physiques (PBR), ciel physique, éclairage global par le ciel, pluie
+qui mouille la ville et chaîne de post-traitement cinéma (voir « Rendu réaliste (v1.6) »).
 
 ## Lancer
 ```bash
@@ -30,6 +30,33 @@ Vesper fait maintenant environ 600 × 600 m : centre-ville, **campus du lycée V
 lointains sont masqués automatiquement pour garder un bon rendu sur téléphone.
 **Intérieurs visitables** : le lycée (hall, couloir et casiers, salles 12 et 14, labo de
 physique, cafétéria) et la maison de Noa (salon, cuisine, chambre).
+
+## Rendu réaliste (v1.6 « Ultra »)
+Tout le décor passe d'un ombrage cartoon à un **rendu physique** :
+- **Matériaux PBR** (`src/game/fx/pbr.js`) : `toon()` et `M()` produisent désormais des
+  `MeshStandardMaterial` (rugosité / métal par type de surface : asphalte, béton, enduit, verre,
+  métal, végétation, eau…). Un shader de détail en coordonnées monde ajoute variations d'albédo
+  et de rugosité, micro-relief, crasse au pied des murs, et **la pluie** : surfaces assombries,
+  **flaques miroir** et **ondes d'impact des gouttes**. Les couleurs saturées héritées sont
+  ramenées à des teintes crédibles ; textures procédurales refaites (asphalte à granulats,
+  fissures et taches d'huile, dalles de béton, façades vitrées avec intérieurs éclairés).
+- **Ciel physique** (`src/game/world/sky.js`) : diffusion atmosphérique Rayleigh + Mie
+  (couchers de soleil exacts selon la hauteur du soleil), précalculée dans une petite table
+  (recalculée seulement quand l'heure change), disque solaire, **lune détaillée** (mers,
+  cratères, halo), étoiles scintillantes, Voie lactée, pollution lumineuse, **nuages
+  procéduraux** éclairés (liseré argenté, dessous éclairé par la ville la nuit), aurore
+  abyssale et lueur de la faille. Le même ciel génère l'**éclairage d'environnement (IBL)**
+  et la couleur de la brume ; la lumière directionnelle (ombres) suit le soleil puis la lune.
+- **Post-traitement** (`src/game/fx/cinematic.js`, `grade.js`) : scène HDR avec **MSAA**,
+  **occlusion ambiante (SSAO)**, **réflexions écran sur sol mouillé (SSR)**, **rayons
+  crépusculaires**, halo du soleil dans la brume, **flou de mouvement** de caméra, bloom,
+  tonalité **ACES**, puis étalonnage film (virage couleur, netteté adaptative, aberration
+  d'objectif, vignettage, grain argentique, tramage). Exposition adaptée jour / nuit.
+- **Qualité** (menu pause) : *Basse* (téléphones : PBR simple, pas de post-traitement lourd),
+  *Moyenne* (SSAO, rayons), *Élevée* (+ réflexions, flou de mouvement), **Ultra (cinéma)**
+  (ombres 4096, SSAO pleine résolution, réflexions et rayons plus fins, plus de lumières).
+- Contrôle visuel : `node scripts/fxviews.mjs <dossier> <qualité> night,morning,evening`,
+  `scripts/fxprobe.mjs` (effets désactivés un par un), `scripts/fxinside.mjs` (intérieurs).
 
 ## Personnages réalistes (v1.5)
 Tous les personnages humains et deux créatures sont désormais des **modèles réalistes riggués**
