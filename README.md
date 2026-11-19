@@ -55,6 +55,11 @@ Tout le décor passe d'un ombrage cartoon à un **rendu physique** :
 - **Qualité** (menu pause) : *Basse* (téléphones : PBR simple, pas de post-traitement lourd),
   *Moyenne* (SSAO, rayons), *Élevée* (+ réflexions, flou de mouvement), **Ultra (cinéma)**
   (ombres 4096, SSAO pleine résolution, réflexions et rayons plus fins, plus de lumières).
+- **Végétation et véhicules (v1.7)** : arbres faits de cartes de feuilles découpées
+  (`src/game/world/foliage.js`, feuillus et conifères, ombres découpées, **vent** dans le
+  shader), voitures à silhouette de berline extrudée (capot, pare-brise incliné, toit, coffre)
+  en **peinture métallisée vernie**, vitres sombres réfléchissantes, teintes de carrosserie
+  réelles ; arêtes des décors nettement moins arrondies.
 - Contrôle visuel : `node scripts/fxviews.mjs <dossier> <qualité> night,morning,evening`,
   `scripts/fxprobe.mjs` (effets désactivés un par un), `scripts/fxinside.mjs` (intérieurs).
 

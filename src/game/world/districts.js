@@ -12,6 +12,7 @@
 // moteur), avec ses propres lots d'instances et son kit d'immeubles, puis une
 // fusion des maillages statiques (mergeStatic) : quelques dizaines d'appels de
 // dessin par quartier. Tout ce qui est solide reçoit une boîte de collision.
+import { crownGeometry, pineGeometry, foliageMaterial } from './foliage.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createBuildingKit } from './buildings.js';
@@ -283,10 +284,9 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     ball: () => geo('ball', () => new THREE.IcosahedronGeometry(1, 1)),
     ball0: () => geo('ball0', () => new THREE.IcosahedronGeometry(1, 0)),
     cyl: () => geo('cyl', () => new THREE.CylinderGeometry(1, 1, 1, 10).translate(0, 0.5, 0)),
-    crown: () => geo('crown', () => mergeGeometries([[0, 0.08, 0, 1.02], [0.62, -0.25, 0.22, 0.7], [-0.58, -0.18, -0.28, 0.74]]
-      .map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, low ? 0 : 1).translate(x, y, z)))),
-    pine: () => geo('pine', () => mergeGeometries([[1, 1.3, 0.65], [0.78, 1.1, 1.4], [0.52, 0.95, 2.05]]
-      .map(([r, h, y]) => nonIdx(new THREE.ConeGeometry(r, h, 7).translate(0, y, 0))))),
+    // Feuillages réalistes : cartes de feuilles découpées (voir foliage.js).
+    crown: () => geo('crown', () => crownGeometry(low ? 30 : 60)),
+    pine: () => geo('pine', () => pineGeometry()),
     prism: () => geo('prism', prismGeo),
   };
 
@@ -488,13 +488,16 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
   }
 
   // ---------- Décors réutilisables ----------
-  const LEAF = ['#4a6b32', '#56763a', '#3f5f2c', '#66703a'];
-  const PINE = ['#26402a', '#2c4630', '#223a28', '#30482e', '#283e2c'];
+  // Teintes appliquées à la texture de feuilles (déjà verte) : variations douces.
+  const LEAF = ['#ffffff', '#e4eed6', '#f4ead0', '#d6e2cc', '#eef2dc'];
+  const PINE = ['#c4d0c0', '#b4c4b4', '#ccd4c2', '#bcc8bc', '#c8ccbc'];
+  const leafMat = foliageMaterial('#ffffff', 'leaf');
+  const pineMat = foliageMaterial('#ffffff', 'pine');
   // Arbre : 'round' (tilleul), 'pine' (sapin), 'dead' (arbre mort). y = sol.
   function tree(ctx, kind, x, y, z, s = 1, color) {
     if (kind === 'pine') {
       ctx.I('trunk', G.trunk, MAT.trunk).add(x, y, z, 0, 0.28 * s, 1.6 * s, 0.28 * s);
-      ctx.I('pine', G.pine, MAT.inst, { colored: true }).add(x, y + 0.9 * s, z, rand() * 6, 2.1 * s, 2.7 * s, 2.1 * s, color || pick(PINE));
+      ctx.I('pine', G.pine, pineMat, { colored: true, shadow: !low }).add(x, y + 0.9 * s, z, rand() * 6, 2.1 * s, 2.7 * s, 2.1 * s, color || pick(PINE));
     } else if (kind === 'dead') {
       const h = 4.5 * s;
       ctx.I('deadTrunk', G.trunk, mat('#3a2c3e')).add(x, y, z, 0, 0.22 * s, h, 0.22 * s);
@@ -506,7 +509,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     } else {
       const h = 2.4 * s;
       ctx.I('trunk', G.trunk, MAT.trunk).add(x, y, z, 0, 0.2 * s, h + 0.4 * s, 0.2 * s);
-      ctx.I('crown', G.crown, MAT.inst, { colored: true }).add(x, y + h + 0.6 * s, z, rand() * 6, 1.55 * s, 1.35 * s, 1.55 * s, color || pick(LEAF));
+      ctx.I('crown', G.crown, leafMat, { colored: true, shadow: !low }).add(x, y + h + 0.6 * s, z, rand() * 6, 1.55 * s, 1.35 * s, 1.55 * s, color || pick(LEAF));
     }
     col.addCentered(x, 0, z, 0.6, y + 4, 0.6);
   }
@@ -1479,7 +1482,7 @@ export function buildDistricts({ scene, col, quality = 'medium', rand = Math.ran
     scatterTrees(d, Math.round(95 * Q), -190, 9.5, -78, 60.5, okA);
     const okB = (x, z) => Math.hypot(x - fx, z - fz) > 13 && !d.nearPath(x, z, 2.8) && !(x < -155 && x > -187 && z > -57 && z < -25);
     scatterTrees(d, Math.round(85 * Q), -190, -60.5, -78, -9.5, okB);
-    for (const [x, z] of [[-188, -58], [-186, -14], [-172, -58]]) tree(d, 'round', x, S, z, 1.4, '#7b5cd6');
+    for (const [x, z] of [[-188, -58], [-186, -14], [-172, -58]]) tree(d, 'round', x, S, z, 1.4, '#e8c890');
     d.finish();
   }
   {

@@ -90,6 +90,9 @@ function realColor(color, surf) {
 const VERT_DECL = /* glsl */ `
   varying vec3 nfWPos;
   varying vec3 nfWNrm;
+  #ifdef NF_WIND
+    uniform float nfTime;
+  #endif
 `;
 const VERT_BODY = /* glsl */ `
   {
@@ -98,6 +101,15 @@ const VERT_BODY = /* glsl */ `
       nfM = modelMatrix * instanceMatrix;
     #endif
     nfWPos = (nfM * vec4(transformed, 1.0)).xyz;
+    #ifdef NF_WIND
+      // Vent : rafales lentes + frémissement des feuilles (phase selon la position).
+      vec3 wp = nfWPos;
+      float gust = sin(nfTime * 0.6 + wp.x * 0.04 + wp.z * 0.03) * 0.5 + 0.5;
+      vec3 sway = vec3(sin(nfTime * 1.7 + wp.x * 0.6 + wp.y * 0.9), 0.0, cos(nfTime * 1.4 + wp.z * 0.6 + wp.y * 0.7)) * (0.03 + 0.05 * gust);
+      sway.y = sin(nfTime * 3.3 + wp.x * 2.1 + wp.z * 1.7) * 0.02;
+      transformed += sway;
+      nfWPos += sway;
+    #endif
     nfWNrm = normalize(mat3(nfM) * objectNormal);
   }
 `;
@@ -178,7 +190,7 @@ const MAP_FRAGMENT = /* glsl */ `
   #endif
 `;
 
-function injectDetail(m, surf, mapSat) {
+function injectDetail(m, surf, mapSat, wind = false) {
   const u = {
     nfMapSat: { value: mapSat },
     nfColSat: { value: Math.min(1, surf.sat + 0.2) },
@@ -200,7 +212,8 @@ function injectDetail(m, surf, mapSat) {
       .replace('#include <roughnessmap_fragment>', FRAG_ALBEDO + '\n#include <roughnessmap_fragment>\n' + FRAG_ROUGH)
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + FRAG_NORMAL);
   };
-  m.customProgramCacheKey = () => 'nfpbr1';
+  if (wind) m.defines = { ...(m.defines || {}), NF_WIND: '' };
+  m.customProgramCacheKey = () => (wind ? 'nfpbr1w' : 'nfpbr1');
 }
 
 // Désaturation simple de la texture (qualité basse, sans shader de détail).
@@ -220,7 +233,8 @@ const COPY = ['map', 'emissiveMap', 'emissiveIntensity', 'transparent', 'opacity
 
 // Crée un matériau réaliste. p : paramètres « standard » + surface (facultatif).
 export function pbr(p = {}) {
-  const m = new THREE.MeshStandardMaterial();
+  // Peinture vernie (carrosseries) : couche de vernis brillante.
+  const m = p.clearcoat ? new THREE.MeshPhysicalMaterial({ clearcoat: p.clearcoat, clearcoatRoughness: p.clearcoatRoughness ?? 0.08 }) : new THREE.MeshStandardMaterial();
   for (const k of COPY) if (p[k] !== undefined) m[k] = p[k];
   if (p.color !== undefined) m.color.set(p.color);
   if (p.emissive !== undefined) m.emissive.set(p.emissive);
@@ -234,7 +248,7 @@ export function pbr(p = {}) {
   if (kind === 'emissive') m.emissiveIntensity = (p.emissiveIntensity ?? 1) * 1.6;
   const mapSat = p.map ? Math.min(1, surf.sat + 0.25) : 1;
   const detailed = PBR.detail && !m.transparent && !m.wireframe && kind !== 'emissive' && p.detail !== false;
-  if (detailed) injectDetail(m, surf, mapSat);
+  if (detailed) injectDetail(m, surf, mapSat, !!p.wind);
   else if (p.map) injectMapSat(m, mapSat);
   return m;
 }

@@ -11,8 +11,8 @@ export function M(p = {}) {
   return pbr(p);
 }
 
-// Boîte aux arêtes arrondies (style « jouet »).
-export const rbox = (w, h, d, r = 0.12) => new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2.1, h / 2.1, d / 2.1));
+// Boîte aux arêtes adoucies : biseau discret (rendu réaliste, plus « jouet »).
+export const rbox = (w, h, d, r = 0.12) => new RoundedBoxGeometry(w, h, d, 2, Math.min(r * 0.45, w / 2.1, h / 2.1, d / 2.1));
 
 // Fusionne les maillages statiques qui partagent un matériau (optimisation :
 // quelques dizaines d'appels de dessin au lieu de près d'un millier).

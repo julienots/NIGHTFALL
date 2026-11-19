@@ -218,7 +218,7 @@ export function buildStreet({ root, col, rand, quality, car, box, M, barrierMat,
   col.addBox({ x: 14.2, y: 0, z: 10.4 }, { x: 17.8, y: 2.6, z: 10.6 });
 
   // ---------- Circulation ----------
-  const carColors = ['#ff5d5d', '#4fc3f7', '#ffd54f', '#9575cd', '#66bb6a', '#ff8a65', '#f06292', '#e8ecff'];
+  const carColors = ['#8a1a1a', '#1c2a48', '#b8bcc0', '#1a1a1c', '#5a6470', '#e6e6e2', '#3a4a3a', '#2a4a6a', '#c8c0a8', '#d8d8d4'];
   const hazardMat = new THREE.MeshBasicMaterial({ color: '#ff9a20' });
   const cars = [];
   function spawnCar(lane, s, opts = {}) {

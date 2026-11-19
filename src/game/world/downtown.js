@@ -6,6 +6,7 @@ import { toon } from '../fx/toon.js';
 import { createBuildingKit } from './buildings.js';
 import { buildStreet } from './street.js';
 import { mulberry32 } from '../core/rng.js';
+import { crownGeometry, foliageMaterial } from './foliage.js';
 import { M, rbox, mergeStatic } from './helpers.js';
 import {
   asphaltTextures, sidewalkTexture, ribbedTexture, riftTexture, signTexture, roadMarkTexture,
@@ -203,10 +204,35 @@ export function buildDowntown(scene, col, quality) {
   });
 
   // ---------- Décor : voitures, barrières, conteneurs ----------
-  const carColors = ['#ff5d5d', '#4fc3f7', '#ffd54f', '#9575cd', '#66bb6a', '#ff8a65', '#f06292'];
-  const glassMat = M({ color: '#3a5bb8', emissive: '#1a2a6a', emissiveIntensity: 0.6 });
-  const tireMat = M({ color: '#221a3a' });
-  const hubMat = M({ color: '#e8e4ff' });
+  // Profils de berline (z = longueur, avant en +z ; y = hauteur) extrudés sur la largeur.
+  let SEDAN = null;
+  function extrudeProfile(pts, width, bevel = 0.05) {
+    const sh = new THREE.Shape(pts.map(([pz, py]) => new THREE.Vector2(pz, py)));
+    const g = new THREE.ExtrudeGeometry(sh, { depth: width - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, steps: 1 });
+    g.translate(0, 0, -(width - bevel * 2) / 2);
+    g.rotateY(-Math.PI / 2);
+    g.computeVertexNormals();
+    return g;
+  }
+  function sedanGeometries() {
+    return {
+      body: extrudeProfile([[-2.02, 0.34], [2.0, 0.34], [2.05, 0.7], [1.92, 0.94], [0.85, 1.08], [-1.5, 1.1], [-2.02, 1.02], [-2.08, 0.62]], 1.96, 0.08),
+      glass: extrudeProfile([[0.92, 1.04], [0.26, 1.56], [-0.95, 1.56], [-1.55, 1.06]], 1.66, 0.03),
+      roof: extrudeProfile([[0.3, 1.55], [-0.98, 1.55], [-0.94, 1.64], [0.24, 1.64]], 1.7, 0.03),
+    };
+  }
+
+  // Teintes de carrosserie courantes (gris, noirs, blancs, rouge, bleu nuit…).
+  const carColors = ['#8a1a1a', '#1c2a48', '#b8bcc0', '#1a1a1c', '#5a6470', '#e6e6e2', '#3a4a3a', '#6a2a1a', '#2a4a6a', '#c8c0a8'];
+  const glassMat = M({ color: '#0e1216', surface: 'glass', roughness: 0.04, metalness: 0.1 });
+  const tireMat = M({ color: '#1a1a1a', surface: 'plaster', roughness: 0.92 });
+  const hubMat = M({ color: '#6a6e72', surface: 'metal', roughness: 0.45, metalness: 0.8 });
+  const paintCache = new Map();
+  // Peinture métallisée vernie (une instance par teinte).
+  const paintMat = (c) => {
+    if (!paintCache.has(c)) paintCache.set(c, M({ color: c, surface: 'paint', roughness: 0.42, metalness: 0.45, clearcoat: 1, clearcoatRoughness: 0.06, keepColor: true }));
+    return paintCache.get(c);
+  };
   const headMat = M({ color: '#fff', emissive: '#fff4d6', emissiveIntensity: 2 });
   const tailMat = M({ color: '#ff3b5a', emissive: '#ff2040', emissiveIntensity: 1.2 });
   const wheelGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.36, 18);
@@ -215,27 +241,17 @@ export function buildDowntown(scene, col, quality) {
 
   // Voiture « bulle » : carrosserie arrondie, grosses roues, phares ronds.
   function car(x, z, rot, opts = {}) {
+    SEDAN ??= sedanGeometries();
     const g = new THREE.Group();
-    const paint = opts.burnt ? burntMat : M({ color: opts.color || carColors[Math.floor(rand() * carColors.length)] });
+    const paint = opts.burnt ? burntMat : paintMat(opts.color || carColors[Math.floor(rand() * carColors.length)]);
     const len = opts.van ? 5.2 : 4.1;
-    const body = new THREE.Mesh(rbox(2.0, opts.van ? 1.7 : 0.9, len, 0.4), paint);
-    body.position.y = opts.van ? 1.3 : 0.85;
-    g.add(body);
     if (!opts.van) {
-      const cabin = new THREE.Mesh(rbox(1.7, 0.8, 2.0, 0.35), paint);
-      cabin.position.set(0, 1.55, -0.25);
-      g.add(cabin);
-      for (const [wz, wl] of [[0.77, 0.06], [-1.27, 0.06]]) {
-        const win = new THREE.Mesh(rbox(1.5, 0.55, wl, 0.03), glassMat);
-        win.position.set(0, 1.6, wz);
-        g.add(win);
-      }
-      for (const sx of [-0.86, 0.86]) {
-        const sw = new THREE.Mesh(rbox(0.06, 0.5, 1.6, 0.03), glassMat);
-        sw.position.set(sx, 1.6, -0.25);
-        g.add(sw);
-      }
+      // Berline : silhouette extrudée (capot, pare-brise incliné, toit, coffre).
+      g.add(new THREE.Mesh(SEDAN.body, paint), new THREE.Mesh(SEDAN.glass, glassMat), new THREE.Mesh(SEDAN.roof, paint));
     } else {
+      const body = new THREE.Mesh(rbox(2.0, 1.7, len, 0.3), paint);
+      body.position.y = 1.3;
+      g.add(body);
       const ws = new THREE.Mesh(rbox(1.7, 0.7, 0.08, 0.03), glassMat);
       ws.position.set(0, 1.75, len / 2 + 0.01);
       g.add(ws);
@@ -253,11 +269,11 @@ export function buildDowntown(scene, col, quality) {
     if (!opts.burnt) {
       for (const sx of [-0.6, 0.6]) {
         const hl = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8), headMat);
-        hl.position.set(sx, opts.van ? 1.0 : 0.95, len / 2 - 0.05);
+        hl.position.set(sx, opts.van ? 1.0 : 0.82, opts.van ? len / 2 - 0.05 : 2.02);
         hl.scale.z = 0.5;
         g.add(hl);
         const tl = new THREE.Mesh(rbox(0.4, 0.18, 0.08, 0.04), tailMat);
-        tl.position.set(sx, opts.van ? 1.0 : 1.0, -len / 2);
+        tl.position.set(sx, opts.van ? 1.0 : 0.92, opts.van ? -len / 2 : -2.1);
         g.add(tl);
       }
     } else {
@@ -329,7 +345,8 @@ export function buildDowntown(scene, col, quality) {
   }
 
   // Arbre « sucette » dans un bac : tronc courbe, feuillage en boules.
-  const leafMats = [M({ color: '#4a6b32', surface: 'foliage' }), M({ color: '#56763a', surface: 'foliage' }), M({ color: '#7a6a34', surface: 'foliage' })];
+  // Feuillage réaliste (cartes de feuilles + vent), trois teintes dont une automnale.
+  const leafMats = [foliageMaterial('#ffffff'), foliageMaterial('#e2ecd2'), foliageMaterial('#f0d8a0')];
   const trunkMat = M({ color: '#5a4434', surface: 'plaster' });
   function tree(x, z, purple = false) {
     const g = new THREE.Group();
@@ -340,11 +357,10 @@ export function buildDowntown(scene, col, quality) {
     trunk.rotation.z = (rand() - 0.5) * 0.25;
     g.add(planter, trunk);
     const leaf = purple ? leafMats[2] : leafMats[Math.floor(rand() * 2)];
-    for (const [lx, ly, lz, r] of [[0, 3.3, 0, 1.2], [0.6, 3.0, 0.3, 0.8], [-0.5, 3.1, -0.3, 0.85], [0.1, 3.9, -0.1, 0.8]]) {
-      const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), leaf);
-      b.position.set(lx, ly, lz);
-      g.add(b);
-    }
+    const crown = new THREE.Mesh(crownGeometry(quality === 'low' ? 30 : 60, 3 + Math.floor(rand() * 4)), leaf);
+    crown.position.set(0, 3.35, 0);
+    crown.scale.set(1.45, 1.3, 1.45);
+    g.add(crown);
     g.traverse((o) => o.isMesh && (o.castShadow = true));
     g.position.set(x, 0.15, z);
     g.rotation.y = rand() * 6;
