@@ -29,6 +29,8 @@ async function startGame(button) {
   await page.waitForSelector('#title:not(.hidden)');
   await page.waitForTimeout(300);
   await page.keyboard.press('Enter');
+  // La campagne de la ville se lance depuis « Ancienne campagne » ; « Nouvelle partie » = monde ouvert.
+  if (button.startsWith('[data-ch')) await page.click('#btn-chapters');
   await page.click(button);
   await page.waitForFunction(() => window.__nightfall?.running, null, { timeout: 120000 }).catch((e) => {
     console.log(errors);
@@ -43,7 +45,7 @@ await page.evaluate((q) => {
   localStorage.clear();
   localStorage.setItem('nightfall.settings', JSON.stringify({ quality: q }));
 }, process.env.QUALITY || 'low');
-await startGame('#btn-new');
+await startGame('[data-ch="prologue"]');
 
 const G = (fn, arg) => page.evaluate(fn, arg);
 const sim = (s) => G((s) => window.__nightfall.simulate(s), s);

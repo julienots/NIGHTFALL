@@ -1,8 +1,39 @@
 # NIGHTFALL: Rise of the Abyss — SuperEssence
 
-Jeu d'action-aventure 3D dans le navigateur (Three.js + Vite). Depuis la v1.6, **rendu
-réaliste** : matériaux physiques (PBR), ciel physique, éclairage global par le ciel, pluie
-qui mouille la ville et chaîne de post-traitement cinéma (voir « Rendu réaliste (v1.6) »).
+Jeu d'action-aventure 3D **en monde ouvert** dans le navigateur et sur Android (Three.js + Vite +
+Capacitor), univers **dark fantasy**, rendu réaliste (voir « Rendu réaliste »).
+
+## v2.0 — Les Marches de Vesper (monde ouvert)
+« Nouvelle partie » lance le monde ouvert ; l'ancienne campagne en ville reste jouable via
+« Ancienne campagne » sur l'écran titre.
+
+**Lore.** Mille ans après la chute du royaume de Vesper. La reine Ysolde, qui voulait arrêter le
+temps, a ouvert la Faille au nord : l'Abysse s'en échappe, les lanternes se sont éteintes (le
+Nightfall). Sept Veilleurs, armés d'anneaux de métal d'étoile, ont dressé trois Sceaux pour la
+contenir… pour mille ans. Les Sceaux se fissurent. Noa s'éveille au Sanctuaire des Veilleurs, sans
+mémoire, dix anneaux aux avant-bras. Huit stèles (les **Mémoires**) racontent le reste, dans le
+désordre, à qui explore.
+
+**Liberté.** Seule la première quête guide (stèle → Brumeval → Aldric). Ensuite : les **trois
+Sceaux** (Aube, Marées, Cendres) dans l'ordre qu'on veut, chacun gardé de jour comme de nuit ;
+ils rendent le **vol** (Aube) et la **Forme Abysse** (Marées). Les trois ranimés ouvrent la
+**Faille** et son gardien. Quêtes de villages (Bran le chasseur, Maëlle la guérisseuse),
+coffres, ruines, cycle **jour / nuit continu** (≈ 16 min) : les Rôdeurs sortent la nuit.
+
+**Monde.** ≈ 600 × 600 m jouables bordés de montagnes : collines, prairies, forêt de pins à
+l'ouest, lac des Saules, rivière et ponts, trois villages à colombages (Brumeval, Cendreval,
+Port-Saule) avec habitants, lanternes et fenêtres qui s'allument le soir, Sanctuaire, Tour de guet,
+Fort du Col, la Faille. Lucioles la nuit.
+
+**Herbe interactive** (`src/game/world/grass.js`) : des centaines de milliers de brins calculés sur
+le GPU (deux couches : dense autour de Noa, plus légère au loin), vent en rafales, brins qui
+s'écartent autour des personnages et des créatures ; Noa laisse une **trace couchée qui se
+redresse en quelques secondes** ; le souffle du vol plaque l'herbe en cercle.
+
+Code : `world/terrain.js` (relief, lac, rivière, chemins), `world/wilds.js` (monde),
+`world/wildsTextures.js`, `world/grass.js`, `story/wildsStory.js` (cycle, villageois, stèles,
+Sceaux), `data/wilds.js` (quêtes, Mémoires, dialogues). Test : `node tests/wilds.mjs`.
+Captures : `node scripts/wildsviews.mjs <dossier> <qualité> morning,evening,night`.
 
 ## Lancer
 ```bash
@@ -10,7 +41,8 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build      # build de production dans dist/
 npm test           # tests unitaires (inventaire, butin, missions, sauvegarde…)
-npm run test:browser   # test de bout en bout dans Chromium (combat, caisses, rechargement…)
+npm run test:browser   # test de bout en bout de l'ancienne campagne (ville)
+node tests/wilds.mjs   # test de bout en bout du monde ouvert
 ```
 
 ## Android (APK de test)

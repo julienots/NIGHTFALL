@@ -247,7 +247,7 @@ export class Colossus {
     this.id = 'colossus';
     this.model = new ColossusModel();
     addOutline(this.model.root, { thickness: 0.06 });
-    this.pos = new THREE.Vector3(pos.x, 0.15, pos.z);
+    this.pos = new THREE.Vector3(pos.x, game.col.terrainAt(pos.x, pos.z) + 0.15, pos.z);
     this.home = this.pos.clone();
     this.vel = new THREE.Vector3();
     this.yaw = 0;

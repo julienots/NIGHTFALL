@@ -20,7 +20,9 @@ await p.touchscreen.tap(400, 200);
 await p.waitForSelector('#title:not(.hidden)');
 await p.waitForTimeout(300);
 await p.touchscreen.tap(400, 200);
-await p.tap('#btn-new');
+// Campagne de la ville (le monde ouvert a son propre test : tests/wilds.mjs).
+await p.tap('#btn-chapters');
+await p.tap('[data-ch="prologue"]');
 await p.waitForFunction(() => window.__nightfall?.running, null, { timeout: 120000 });
 await p.evaluate(() => window.__nightfall.stopLoop());
 // Le jeu commence en classe : on vérifie qu'un toucher sur la bulle fait avancer

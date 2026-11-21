@@ -771,7 +771,7 @@ export class Hero {
         this.grounded = true;
       }
     } else if (gh > this.pos.y) this.pos.y = gh;
-    if (this.pos.y < -5) this.pos.y = 0.2;
+    if (this.pos.y < col.terrainAt(this.pos.x, this.pos.z) - 5) this.pos.y = col.terrainAt(this.pos.x, this.pos.z) + 0.2;
   }
 
   #animate(dt) {

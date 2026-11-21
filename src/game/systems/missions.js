@@ -1,9 +1,9 @@
 // Suivi des missions : progression par étapes, pilotée par des événements
 // (kill, interact) et par la position du joueur (reach).
-import { MISSIONS } from '../data/missions.js';
+import { missionsFor } from '../data/missions.js';
 
 export class MissionLog {
-  constructor(data, defs = MISSIONS) {
+  constructor(data, defs = missionsFor('city')) {
     this.defs = defs;
     this.state = {}; // id -> { status: 'active'|'done', step, progress }
     this.tracked = null;
@@ -19,7 +19,8 @@ export class MissionLog {
   #startAvailable(out) {
     for (const [id, def] of Object.entries(this.defs)) {
       if (this.state[id]) continue;
-      if (def.autoStart || (def.requires && this.state[def.requires]?.status === 'done')) {
+      const all = def.requiresAll && def.requiresAll.every((r) => this.state[r]?.status === 'done');
+      if (def.autoStart || all || (def.requires && this.state[def.requires]?.status === 'done')) {
         this.state[id] = { status: 'active', step: 0, progress: 0 };
         out?.push({ type: 'missionStart', id, title: def.title });
       }
@@ -29,6 +30,14 @@ export class MissionLog {
   #retrack() {
     const active = this.activeIds();
     this.tracked = active.find((id) => this.defs[id].kind === 'story') || active.find((id) => this.defs[id].kind === 'main') || active[0] || null;
+  }
+
+  // Démarre une mission à la demande (quête donnée par un personnage).
+  start(id) {
+    if (this.state[id] || !this.defs[id]) return [];
+    this.state[id] = { status: 'active', step: 0, progress: 0 };
+    if (!this.tracked) this.tracked = id;
+    return [{ type: 'missionStart', id, title: this.defs[id].title }];
   }
 
   activeIds() {
@@ -84,6 +93,10 @@ export class MissionLog {
           out.push({ type: 'progress', id });
           if (this.state[id].progress >= step.count) this.#advance(id, out);
         }
+      } else if (event.type === 'collect' && step.type === 'collect' && step.item === event.item) {
+        this.state[id].progress++;
+        out.push({ type: 'progress', id });
+        if (this.state[id].progress >= step.count) this.#advance(id, out);
       } else if (event.type === 'interact' && (step.type === 'interact' || step.type === 'talk') && step.target === event.target) {
         this.#advance(id, out);
       } else if (event.type === 'event' && step.type === 'event' && step.id === event.id) {
@@ -113,7 +126,7 @@ export class MissionLog {
     const def = this.defs[this.tracked];
     const s = this.state[this.tracked];
     const step = def.steps[s.step];
-    const counter = step.type === 'kill' ? ` (${s.progress}/${step.count})` : '';
+    const counter = step.type === 'kill' || step.type === 'collect' ? ` (${s.progress}/${step.count})` : '';
     return { id: this.tracked, title: def.title, kind: def.kind, text: step.text + counter, step };
   }
 

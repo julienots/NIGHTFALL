@@ -8,6 +8,13 @@ export class CollisionWorld {
   constructor() {
     this.boxes = [];
     this.grid = new Map();
+    // Relief du sol (monde ouvert) : (x, z) => hauteur ; absent = sol plat à 0.
+    this.heightFn = null;
+  }
+
+  // Hauteur du terrain nu (sans les boîtes).
+  terrainAt(x, z) {
+    return this.heightFn ? this.heightFn(x, z) : 0;
   }
 
   // min/max : {x,y,z}. tag optionnel (ex. 'water', 'roof').
@@ -76,7 +83,7 @@ export class CollisionWorld {
 
   // Hauteur du sol sous un cercle (plus haute surface atteignable depuis `fromY`).
   groundHeight(x, z, r, fromY, step = 0.55) {
-    let h = 0;
+    let h = this.heightFn ? this.heightFn(x, z) : 0;
     for (const b of this.query(x - r, z - r, x + r, z + r)) {
       if (x + r * 0.6 < b.min.x || x - r * 0.6 > b.max.x || z + r * 0.6 < b.min.z || z - r * 0.6 > b.max.z) continue;
       if (b.max.y <= fromY + step && b.max.y > h) h = b.max.y;

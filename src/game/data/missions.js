@@ -1,6 +1,8 @@
 // Missions et chapitres. Les cibles (`target`) sont des points nommés du monde
 // ou des personnages. `requires` : la mission démarre quand l'autre est terminée.
 // Types d'étapes : reach (atteindre), talk (parler), interact, kill, event.
+import { WILDS_MISSIONS } from './wilds.js';
+
 export const MISSIONS = {
   // ---------- Prologue : un ado sans pouvoirs ----------
   p01_after_school: {
@@ -150,5 +152,13 @@ export const MISSIONS = {
     reward: { xp: 150, credits: 160 },
   },
 };
+
+// Quêtes du monde ouvert (Marches de Vesper), filtrées selon le mode de jeu.
+Object.assign(MISSIONS, WILDS_MISSIONS);
+
+// Missions d'un mode de jeu : 'city' (campagne Vesper) ou 'wilds' (monde ouvert).
+export function missionsFor(mode) {
+  return Object.fromEntries(Object.entries(MISSIONS).filter(([, d]) => (mode === 'wilds') === (d.world === 'wilds')));
+}
 
 export const MISSION_KIND_LABEL = { story: 'Histoire', main: 'Principale', side: 'Secondaire', contract: 'Contrat de chasse' };

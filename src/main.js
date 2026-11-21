@@ -21,14 +21,14 @@ async function exportMode() {
   window.__intro = { renderAt: (t) => intro.renderAt(t), duration: TIMELINE.end };
 }
 
-async function startGame(saveData) {
+async function startGame(saveData, mode = null) {
   stopTitleBg?.();
   stopTitleBg = null;
   hide('title');
   hide('boot');
   show('loading');
   const { Game } = await import('./game/Game.js');
-  const game = new Game($('game'), { saveData });
+  const game = new Game($('game'), { saveData, mode });
   await game.init();
   hide('loading');
   show('game');
@@ -68,12 +68,12 @@ function titleScreen() {
     if (existing && !confirm('Démarrer ce chapitre ? La sauvegarde actuelle sera remplacée.')) return;
     saves.clear();
     const { chapterPreset } = await import('./game/data/presets.js');
-    startGame(chapterPreset(b.dataset.ch));
+    startGame(chapterPreset(b.dataset.ch), 'city');
   }));
   $('btn-new').addEventListener('click', () => {
     if (existing && !confirm('Commencer une nouvelle partie ? La sauvegarde actuelle sera remplacée.')) return;
     saves.clear();
-    startGame(null);
+    startGame(null, 'wilds');
   });
 }
 

@@ -392,7 +392,7 @@ export class Sky {
   }
 
   // v : −1 = plein jour, 0 = crépuscule doré, 1 = nuit du Nightfall.
-  set(v, { rain = false } = {}) {
+  set(v, { rain = false, pollution = 1 } = {}) {
     this.night = v;
     const u = this.material.uniforms;
     const day = Math.max(0, -v);
@@ -410,7 +410,7 @@ export class Sky {
     u.uRift.value = smooth(0.5, 1, k);
     u.uCover.value = rain ? 0.78 : THREE.MathUtils.lerp(0.42, 0.55, smooth(0, 1, k));
     u.uCloudDark.value = rain ? 0.7 : 0.15 * k;
-    u.uPollution.value = 0.06 * smooth(0.1, 1, k);
+    u.uPollution.value = 0.06 * pollution * smooth(0.1, 1, k);
     // Lumière directionnelle : soleil, puis lune la nuit (changement doux).
     const s = smooth(0.35, 0.75, k);
     const sunT = transmittance(this.sunDir, new THREE.Color());

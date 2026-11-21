@@ -21,7 +21,8 @@ export class Crate {
     this.state = 'closed';
     this.openT = 0;
     this.pos = new THREE.Vector3(def.x, def.y, def.z);
-    const st = STYLE[def.type];
+    // Monde ouvert : coffres de bois cerclés de fer (même logique de butin).
+    const st = def.look === 'chest' ? { ...STYLE[def.type], body: def.type === 'boss' ? '#3a2a40' : '#6a4a2e', trim: def.type === 'supply' ? '#2e2e30' : STYLE[def.type].trim } : STYLE[def.type];
     const [w, h, d] = st.size;
     this.root = new THREE.Group();
     this.root.position.copy(this.pos);

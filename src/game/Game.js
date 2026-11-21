@@ -32,9 +32,11 @@ import { SaveSystem } from './systems/save.js';
 import { loadSettings, saveSettings } from './systems/settings.js';
 import { rollCrate, CRATE_TYPES } from './systems/loot.js';
 import { ITEMS, RARITY_INFO } from './data/items.js';
-import { MISSIONS, MISSION_KIND_LABEL } from './data/missions.js';
+import { MISSIONS, MISSION_KIND_LABEL, missionsFor } from './data/missions.js';
 import { Hud } from './ui/hud.js';
 import { Story } from './story/story.js';
+import { WildsStory } from './story/wildsStory.js';
+import { buildWilds } from './world/wilds.js';
 import { Magnetism, STORM } from './systems/magnetism.js';
 import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { Menus } from './ui/menus.js';
@@ -67,9 +69,12 @@ const LORE = {
 };
 
 export class Game {
-  constructor(container, { saveData = null } = {}) {
+  constructor(container, { saveData = null, mode = null } = {}) {
     this.container = container;
     this.saveData = saveData;
+    // 'wilds' : monde ouvert des Marches de Vesper ; 'city' : campagne Vesper.
+    // (Les anciennes sauvegardes sans mode sont celles de la campagne.)
+    this.mode = saveData ? saveData.mode || 'city' : mode || 'wilds';
     this.settings = loadSettings();
     this.saveSys = new SaveSystem();
     this.timer = new THREE.Clock();
@@ -154,18 +159,26 @@ export class Game {
 
     // --- Monde ---
     this.col = new CollisionWorld();
-    this.world = buildDowntown(scene, this.col, q);
-    // Monde ouvert : quartiers autour du centre-ville (lycée, parc, port…).
-    const dist = buildDistricts({ scene, col: this.col, quality: q, rand: mulberry32(1891), lampLights: this.world.lampLights });
-    this.districts = dist;
-    Object.assign(this.world.targets, dist.targets);
-    this.world.enemySpawns.push(...dist.enemySpawns);
-    this.world.crates.push(...dist.crates);
-    this.world.magnetSpots.push(...dist.magnetSpots);
-    if (dist.targets.bus_school) this.world.street.schoolStop = dist.targets.bus_school;
-    // Intérieurs (lycée, maison de Noa), loin de la ville, masqués par défaut.
-    this.interiors = buildInteriors({ scene, col: this.col, quality: q });
-    this.skyline = buildSkyline(scene, this.col, mulberry32(77));
+    if (this.mode === 'wilds') {
+      // Monde ouvert : terrain, villages, ruines (pas de quartiers ni d'intérieurs).
+      this.world = buildWilds(scene, this.col, q);
+      this.districts = { districts: [], update() {}, npcRoutes: [], hangouts: [] };
+      this.interiors = { zones: {}, update() {} };
+      this.skyline = { update() {}, setNight() {} };
+    } else {
+      this.world = buildDowntown(scene, this.col, q);
+      // Monde ouvert : quartiers autour du centre-ville (lycée, parc, port…).
+      const dist = buildDistricts({ scene, col: this.col, quality: q, rand: mulberry32(1891), lampLights: this.world.lampLights });
+      this.districts = dist;
+      Object.assign(this.world.targets, dist.targets);
+      this.world.enemySpawns.push(...dist.enemySpawns);
+      this.world.crates.push(...dist.crates);
+      this.world.magnetSpots.push(...dist.magnetSpots);
+      if (dist.targets.bus_school) this.world.street.schoolStop = dist.targets.bus_school;
+      // Intérieurs (lycée, maison de Noa), loin de la ville, masqués par défaut.
+      this.interiors = buildInteriors({ scene, col: this.col, quality: q });
+      this.skyline = buildSkyline(scene, this.col, mulberry32(77));
+    }
     this.zone = 'city';
     this.fx = new Effects(scene);
     this.audio = new AudioEngine(this.settings);
@@ -191,7 +204,7 @@ export class Game {
     }
     this.progression = new Progression(d?.progression);
     this.skills = new SkillTree(d?.skills);
-    this.missions = new MissionLog(d?.missions);
+    this.missions = new MissionLog(d?.missions, missionsFor(this.mode));
     this.clock = { day: 1, phase: 'afternoon', ...(d?.clock || {}) };
     this.social = new Social(this, d?.social);
     this.opened = new Set(d?.opened || []);
@@ -249,9 +262,10 @@ export class Game {
 
     this.rifts = new Rifts(this);
     window.__nightfall = this; // accès de test/débogage
+    this.world.attach?.(this);
     this.world.street.traffic.hero = this.hero;
     this.world.street.traffic.onHonk = (pos) => this.audio.honk(pos);
-    this.story = new Story(this);
+    this.story = this.mode === 'wilds' ? new WildsStory(this) : new Story(this);
     this.story.init(!d);
     this.audio.resume();
     this.audio.startAmbience();
@@ -282,14 +296,17 @@ export class Game {
   // Fait apparaître les créatures dont le chapitre est atteint (une seule fois).
   // Le groupe du parking déjà éliminé ne réapparaît pas.
   spawnGated() {
-    if (this.clock && this.clock.phase !== 'night') return; // les créatures ne sortent que la nuit
+    // Les créatures ne sortent que la nuit (sauf les gardiens « always »).
+    const night = !this.clock || this.clock.phase === 'night';
     const m = this.missions;
     const m01 = m.state.m01_first_contact;
     const parkingDone = m.stepReached('m01_first_contact', 1);
     let parkingSkip = m01 && m01.step === 0 ? m01.progress : 0;
     for (const s of this.world.enemySpawns) {
       const key = `${s.group}:${s.x}:${s.z}`;
-      if (this.spawned.has(key) || (s.after && !m.isDone(s.after))) continue;
+      if (!night && !s.always) continue;
+      if (this.spawned.has(key) || (s.after && !m.isDone(s.after)) || (s.until && m.isDone(s.until))) continue;
+      if (this.enemies.some((e) => e.alive && e.id === key)) continue;
       this.spawned.add(key);
       if (s.group === 'parking') {
         if (parkingDone) continue;
@@ -312,20 +329,22 @@ export class Game {
     const day = Math.max(0, -kIn);
     const c = (a, b, dayCol) => new THREE.Color(a).lerp(new THREE.Color(b), k).lerp(new THREE.Color(dayCol), day);
     const sky = this.sky;
-    sky.set(kIn, { rain: k > 0.5 && this.zone === 'city' });
+    const wilds = this.mode === 'wilds';
+    sky.set(kIn, { rain: !wilds && k > 0.5 && this.zone === 'city', pollution: wilds ? 0.2 : 1 });
     // Ambiance : le ciel (IBL) éclaire déjà ; l'hémisphère ne sert que de
     // débouchage léger (nuit lisible sans être grise).
-    this.hemi.color.copy(c('#ffd8c0', '#8a9cff', '#dfe8ff'));
+    this.hemi.color.copy(c('#ffd8c0', wilds ? '#56627a' : '#8a9cff', '#dfe8ff'));
     this.hemi.groundColor.copy(c('#4a3a30', '#1a1622', '#4a463e'));
     this.hemi.intensity = 0.35 + k * 0.25 - day * 0.1;
     this.moon.color.copy(sky.lightColor);
-    this.moon.intensity = sky.lightIntensity;
+    this.moon.intensity = sky.lightIntensity * (wilds ? 1 - 0.35 * THREE.MathUtils.smoothstep(k, 0.3, 1) : 1);
     this.scene.fog.color.copy(sky.fogColor);
-    this.scene.fog.density = 0.0018 + k * 0.0026 + Math.max(0, 0.6 - Math.abs(kIn)) * 0.0012 - day * 0.0004;
+    this.scene.fog.density = (0.0018 + k * 0.0026 + Math.max(0, 0.6 - Math.abs(kIn)) * 0.0012 - day * 0.0004) * (wilds ? 0.5 : 1);
     this.scene.background.copy(sky.fogColor);
-    this.scene.environmentIntensity = sky.ambient;
-    this.renderer.toneMappingExposure = sky.exposure;
-    this.audio.setRain?.(k > 0.5 && this.zone === 'city');
+    this.scene.environmentIntensity = sky.ambient * (wilds ? 1 - 0.5 * THREE.MathUtils.smoothstep(k, 0.3, 1) : 1);
+    // Nuits des Marches : claires mais sombres (pas de pollution lumineuse).
+    this.renderer.toneMappingExposure = sky.exposure * (wilds ? 1 - 0.4 * THREE.MathUtils.smoothstep(k, 0.3, 1) : 1);
+    this.audio.setRain?.(!wilds && k > 0.5 && this.zone === 'city');
   }
 
   // ---------- Horloge : matin (cours), après-midi, soirée, nuit (créatures) ----------
@@ -343,7 +362,7 @@ export class Game {
       this.spawnGated();
     } else if (phase !== 'night') {
       for (const e of this.enemies) {
-        if (e === this.boss || e.spawn.group === 'chaser' || !e.alive) continue;
+        if (e === this.boss || e.spawn.group === 'chaser' || e.spawn.always || !e.alive) continue;
         this.scene.remove(e.model.root);
         e.alive = false;
         e.deadT = 99;
@@ -381,7 +400,7 @@ export class Game {
       for (const l of z.lights || []) l.visible = zn === name;
     }
     this.world.rain.visible = !inside && Math.max(0, this.night ?? 0) > 0.5;
-    this.audio.setRain?.(!inside && (this.night ?? 0) > 0.5);
+    this.audio.setRain?.(this.mode !== 'wilds' && !inside && (this.night ?? 0) > 0.5);
     if (spawn) {
       this.hero.placeAt(spawn, spawn.yaw ?? 0);
       this.camYaw = spawn.yaw ?? 0;
@@ -581,7 +600,7 @@ export class Game {
     PBR.time.value = this.time;
     const city = this.zone === 'city';
     const night = this.night ?? 0;
-    const raining = city && night > 0.5;
+    const raining = city && (this.world.raining ?? night > 0.5);
     // Le sol sèche lentement, se mouille vite.
     const tgt = raining ? 1 : 0;
     const rate = instant ? 1 : Math.min(1, dt * (tgt > PBR.wet.value ? 0.5 : 0.08));
@@ -603,7 +622,7 @@ export class Game {
   // Boutons tactiles selon le contexte (aussi appelé par la simulation à pas fixe).
   #updateTouch() {
     this.touch?.update({
-      menu: this.menus.isOpen, cinematic: this.story.inCinematic || this.social.active || !!this.trans, rings: this.hero.powers.rings, flight: this.hero.powers.flight,
+      menu: this.menus.isOpen, cinematic: this.story.inCinematic || this.social.active || this.story.talking || !!this.trans, rings: this.hero.powers.rings, flight: this.hero.powers.flight,
       flying: this.hero.flying, canInteract: this.nearInteract,
       magnet: this.hero.powers.magnet && this.hero.form === 'human', holding: this.magnet.holding,
       umbra: this.hero.powers.umbra, canTransform: this.hero.form === 'umbra' || this.hero.abyss >= 50,
@@ -642,7 +661,7 @@ export class Game {
     this.#updateTransition(dt);
     if (this.story.inCinematic && !this.social.active && input.was('interact')) this.story.skip();
     // Filet de sécurité : le héros ne reste jamais figé hors cinématique / dialogue / fondu.
-    if (hero.cinematic && !this.story.inCinematic && !this.social.active && !this.trans) {
+    if (hero.cinematic && !this.story.inCinematic && !this.social.active && !this.story.talking && !this.trans) {
       this.cineStuckT = (this.cineStuckT || 0) + dt;
       if (this.cineStuckT > 0.5) hero.cinematic = false;
     } else this.cineStuckT = 0;
@@ -757,7 +776,7 @@ export class Game {
     this.ghosts.human.update(dt, dodging && !umbra, h.flying ? 0.05 : 0.07);
     this.ghosts.umbra.update(dt, dodging && umbra, 0.07);
     // Masque + écharpe la nuit, en ville, une fois les pouvoirs éveillés.
-    const gear = h.powers.rings && this.zone === 'city' && this.clock.phase === 'night' && !h.pose;
+    const gear = h.powers.rings && this.zone === 'city' && (this.mode === 'wilds' || this.clock.phase === 'night') && !h.pose;
     if (h.model.gearOn !== gear) h.model.setGear(gear);
     this.post?.tick(dt, { lowHp: Math.max(0, 1 - h.hp / h.stats.maxHp / 0.3), umbra, aspect: this.camera.aspect, time: this.time, night: Math.max(0, this.night ?? 0) });
   }
@@ -921,13 +940,14 @@ export class Game {
     const t = this.col.raycast(pivot, dir.clone().multiplyScalar(this.camDist + 0.3), 1);
     const dist = Math.max(0.7, (this.camDist + 0.3) * t - 0.3);
     const want = pivot.clone().addScaledVector(dir, dist);
-    want.y = Math.max(want.y, 0.4);
+    want.y = Math.max(want.y, this.col.terrainAt(want.x, want.z) + 0.45, 0.4);
     if (!this.camPos) this.camPos = want.clone();
     // Rapprochement instantané (évite de traverser un mur), éloignement doux.
     const curD = this.camPos.distanceTo(pivot);
     if (dist < curD - 0.05) this.camPos.copy(want);
     else this.camPos.lerp(want, 1 - Math.exp(-14 * (dt || 0.016)));
     this.camera.position.copy(this.camPos);
+    this.camera.position.y = Math.max(this.camera.position.y, this.col.terrainAt(this.camPos.x, this.camPos.z) + 0.35);
     this.camera.lookAt(pivot.x, pivot.y - 0.1, pivot.z);
     // Secousse
     if (this.shakeAmp > 0.001 && dt > 0) {
@@ -998,7 +1018,7 @@ export class Game {
 
   #interactions() {
     const hero = this.hero;
-    if (this.social.active || this.trans) return this.hud.prompt('');
+    if (this.social.active || this.story.talking || this.trans) return this.hud.prompt('');
     if (hero.dead || this.story.inCinematic) return this.hud.prompt(this.story.inCinematic ? '<kbd>E</kbd>Passer la cinématique' : '');
     let near = null;
     let nd = 2.6;
@@ -1395,6 +1415,7 @@ export class Game {
       clock: { ...this.clock },
       social: this.social.serialize(),
       storyFlags: [...this.story.flags],
+      mode: this.mode,
       inventory: this.inventory.serialize(),
       progression: this.progression.serialize(),
       skills: this.skills.serialize(),

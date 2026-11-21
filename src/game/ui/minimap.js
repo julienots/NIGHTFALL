@@ -25,6 +25,8 @@ export class Minimap {
   }
 
   #bake() {
+    // Monde ouvert : le monde fournit son propre fond (relief, eau, lieux).
+    if (this.game.world.minimapBase) return this.game.world.minimapBase(HALF, RES);
     const size = HALF * 2 * RES;
     const c = document.createElement('canvas');
     c.width = c.height = size;

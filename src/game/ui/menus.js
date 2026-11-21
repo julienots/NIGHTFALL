@@ -221,12 +221,12 @@ export class Menus {
 
   #journal() {
     const log = this.game.missions;
-    const rows = Object.entries(MISSIONS).map(([id, def]) => {
+    const rows = Object.entries(log.defs || MISSIONS).map(([id, def]) => {
       const st = log.state[id];
       if (!st) return '';
       const steps = def.steps.map((s, i) => {
         const cls = st.status === 'done' || i < st.step ? 'done' : i === st.step ? 'cur' : '';
-        const c = s.type === 'kill' && i === st.step && st.status !== 'done' ? ` (${st.progress}/${s.count})` : '';
+        const c = (s.type === 'kill' || s.type === 'collect') && i === st.step && st.status !== 'done' ? ` (${st.progress}/${s.count})` : '';
         return `<li class="${cls}">${s.text}${c}</li>`;
       }).join('');
       const rw = def.reward;

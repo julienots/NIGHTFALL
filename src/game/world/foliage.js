@@ -78,15 +78,15 @@ export function needleTexture() {
       x.moveTo(bx, 0);
       x.lineTo(bx + (r() - 0.5) * 10, H * 0.9);
       x.stroke();
-      for (let i = 0; i < 70; i++) {
+      for (let i = 0; i < 150; i++) {
         const t = r();
         const py = t * H * 0.9;
         const px = bx + (r() - 0.5) * 6;
-        const len = 8 + r() * 14 * (1 - t * 0.4);
+        const len = 6 + r() * 10 * (1 - t * 0.4);
         const side = r() < 0.5 ? -1 : 1;
         const g = 70 + Math.floor(r() * 50);
         x.strokeStyle = `rgb(${Math.floor(g * 0.5)},${g},${Math.floor(g * 0.55)})`;
-        x.lineWidth = 1.4;
+        x.lineWidth = 0.9;
         x.beginPath();
         x.moveTo(px, py);
         x.lineTo(px + side * len, py + len * 0.6);
