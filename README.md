@@ -30,6 +30,16 @@ le GPU (deux couches : dense autour de Noa, plus légère au loin), vent en rafa
 s'écartent autour des personnages et des créatures ; Noa laisse une **trace couchée qui se
 redresse en quelques secondes** ; le souffle du vol plaque l'herbe en cercle.
 
+**v2.1 — Animations et pouvoirs.** Tous les pouvoirs sont disponibles dès le départ (anneaux,
+fouet, rafale, bouclier, vol, magnétisme, Forme Abysse) ; les Sceaux donnent désormais des points
+de compétence. Clips de capture de mouvement cassés ou mal étiquetés écartés (fouet, bouclier,
+repos et course des Rôdeurs, tentacules : voir `actors/realCast.js`, `scripts/clipgallery.mjs`) ;
+vraie pose de super-héros en vol, saut groupé. Effets refaits (`fx/effects.js`) : ondes de choc
+avec débris et poussière qui soufflent l'herbe, éclairs épais (fouet, rafale en chaîne, tentacules,
+rugissement), mur du son au boost, atterrissage qui frappe les créatures, ralentis brefs, fumée
+douce au lieu des nuages cartoon. Magnétisme : rochers, barils et charrettes à soulever et lancer.
+Contrôle : `scripts/animstrip.mjs`, `scripts/powershots.mjs`.
+
 Code : `world/terrain.js` (relief, lac, rivière, chemins), `world/wilds.js` (monde),
 `world/wildsTextures.js`, `world/grass.js`, `story/wildsStory.js` (cycle, villageois, stèles,
 Sceaux), `data/wilds.js` (quêtes, Mémoires, dialogues). Test : `node tests/wilds.mjs`.

@@ -12,9 +12,9 @@ export const MOVES = {
     { anim: 'jabL', dur: 0.32, hit: 0.3, range: 2.3, arc: 1.7, mult: 1.1, knock: 2.5, poise: 12, lunge: 2.5, ring: 'L' },
     { anim: 'ringPunch', dur: 0.6, hit: 0.38, range: 4.2, arc: 0.9, mult: 1.9, knock: 8, poise: 40, lunge: 3, heavy: true, ringShot: true },
   ],
-  heavy: { anim: 'whip', dur: 0.85, hit: 0.45, range: 5.6, arc: 3.6, mult: 2.4, knock: 9, poise: 70, lunge: 0.5, heavy: true, whip: true },
-  power: { anim: 'volley', dur: 0.75, hit: 0.42, range: 15, mult: 2.6, knock: 10, poise: 90, energy: 30, cooldown: 3.5, heavy: true, maxTargets: 5 },
-  dive: { anim: 'diveImpact', dur: 0.45, aoe: 3.3, mult: 2.0, knock: 8, poise: 50, heavy: true },
+  heavy: { anim: 'whip', dur: 0.8, hit: 0.42, range: 7.5, arc: 3.8, mult: 2.8, knock: 13, poise: 90, lunge: 1.5, heavy: true, whip: true },
+  power: { anim: 'volley', dur: 0.75, hit: 0.42, range: 22, mult: 3.2, knock: 14, poise: 110, energy: 25, cooldown: 2.5, heavy: true, maxTargets: 8 },
+  dive: { anim: 'diveImpact', dur: 0.45, aoe: 5.5, mult: 3.0, knock: 16, poise: 90, heavy: true },
 };
 
 // Forme Abysse : griffes, tentacules qui attirent, rugissement de zone.
@@ -24,8 +24,8 @@ export const UMBRA = {
     { anim: 'clawL', dur: 0.4, hit: 0.32, range: 3.1, arc: 2.3, mult: 1.8, knock: 5, poise: 30, lunge: 4 },
     { anim: 'smash', dur: 0.7, hit: 0.4, aoe: 3.6, mult: 2.9, knock: 11, poise: 80, lunge: 2.5, heavy: true, smash: true },
   ],
-  heavy: { anim: 'lash', dur: 0.75, hit: 0.45, range: 11, arc: 1.1, mult: 1.6, knock: 9, poise: 60, lunge: 0, heavy: true, pull: true },
-  power: { anim: 'roar', dur: 1.1, hit: 0.3, aoe: 7.5, centered: true, mult: 1.4, knock: 15, poise: 140, energy: 25, cooldown: 6, heavy: true, roar: true },
+  heavy: { anim: 'lash', dur: 0.75, hit: 0.45, range: 13, arc: 1.3, mult: 1.9, knock: 9, poise: 60, lunge: 0, heavy: true, pull: true },
+  power: { anim: 'roar', dur: 1.1, hit: 0.3, aoe: 10, centered: true, mult: 2.0, knock: 22, poise: 160, energy: 25, cooldown: 5, heavy: true, roar: true },
   drain: 4.2, // jauge perdue par seconde transformé
   min: 50, // jauge minimale pour se transformer
 };
@@ -184,8 +184,8 @@ export class Hero {
     const c = this.pos.clone().add(new THREE.Vector3(0, 1.1, 0));
     fx.emit(c, { count: 40, color: '#1d1530', speed: 6, up: 3, size: 0.4, life: 0.8, gravity: 4 });
     fx.emit(c, { count: 18, color: '#5fe3ff', speed: 5, up: 2, size: 0.18, life: 0.6, gravity: 2 });
-    fx.ring(this.pos, { color: umbra ? '#7a5cff' : '#7fe3ff', from: 0.4, to: 6, life: 0.5 });
-    this.game.shake(umbra ? 0.5 : 0.2);
+    fx.shockwave(this.pos, { radius: umbra ? 8 : 4, color: umbra ? '#7a5cff' : '#7fe3ff', power: umbra ? 1.5 : 0.6 });
+    this.game.shake(umbra ? 0.6 : 0.2);
   }
 
   #revert(instant = false) {
@@ -280,6 +280,11 @@ export class Hero {
         ? list.map((e) => ({ x: e.pos.x, y: e.pos.y + e.def.height * 0.55, z: e.pos.z }))
         : [this.pos.clone().addScaledVector(f, 9).add(new THREE.Vector3(0, 1.2, 0))];
       this.rings.launch(tg, 0.9);
+      // Éclairs en chaîne vers chaque cible, onde de charge autour de Noa.
+      const hand = this.pos.clone().add(new THREE.Vector3(0, 1.3, 0));
+      for (const t of tg) this.game.fx.lightning(hand, t, { color: '#7fe3ff', jag: 0.7, branches: 2, life: 0.3 });
+      this.game.fx.ring(this.pos, { color: '#7fe3ff', from: 0.3, to: 5, life: 0.4, y: 0.08 });
+      this.game.fx.energyBurst(hand, '#bff6ff', 0.9);
       this.pendingVolley = { t: 0.3, list, mult: base / (this.stats.damage * def.mult * (1 + this.stats.powerDamage)) };
       return list.length;
     }
@@ -325,7 +330,7 @@ export class Hero {
       if (!e.alive) continue;
       const dmg = Math.round(base * (0.92 + Math.random() * 0.16));
       e.takeHit({ damage: dmg, dir: e.pos.clone().sub(this.pos).setY(0).normalize(), knock: def.knock, poise: def.poise, heavy: true, power: true, kind: 'power' });
-      this.game.fx.starBurst({ x: e.pos.x, y: e.pos.y + e.def.height * 0.6, z: e.pos.z }, '#7fe3ff', 1.6);
+      this.game.fx.energyBurst({ x: e.pos.x, y: e.pos.y + e.def.height * 0.6, z: e.pos.z }, '#7fe3ff', 1.3);
     }
     if (v.list.length) {
       this.game.hitStop(0.06);
@@ -418,9 +423,8 @@ export class Hero {
     this.flightMode = 'hover';
     if (fromGround) {
       this.vy = 13;
-      this.game.fx.dustRing(this.pos, 1.6, 14, '#c9d8ff');
-      this.game.fx.ring(this.pos, { color: '#7fe3ff', from: 0.3, to: 4, life: 0.4 });
-      this.game.shake(0.2);
+      this.game.fx.shockwave(this.pos, { radius: 6, color: '#7fe3ff', power: 0.9 });
+      this.game.shake(0.3);
     }
     this.game.audio.takeoff();
     this.game.onFlightStart?.();
@@ -450,8 +454,9 @@ export class Hero {
     this.flightMode = hs > 24 * this.mods.flightMult ? 'boost' : hs > 4 ? 'fly' : 'hover';
     if (this.flightMode === 'boost' && prevMode !== 'boost') {
       // « Bang » d'air au passage en boost
-      this.game.fx.ring(this.pos.clone().add(new THREE.Vector3(0, 1, 0)), { color: '#ffffff', from: 0.5, to: 6, life: 0.35, y: 0 });
-      this.game.shake(0.25);
+      const d = new THREE.Vector3(this.vel.x, this.vy, this.vel.z).normalize();
+      this.game.fx.sonicBoom(this.pos.clone().add(new THREE.Vector3(0, 1, 0)), d);
+      this.game.shake(0.35);
       this.game.audio.boost();
     }
     const prevYaw = this.yaw;
@@ -476,9 +481,9 @@ export class Hero {
         // Atterrissage de super-héros
         this.vel.multiplyScalar(0.1);
         this.action = { kind: 'anim', anim: 'superLanding', dur: 0.95, t: 0, lockMove: true };
-        this.game.fx.dustRing(this.pos, 2, 18);
-        this.game.fx.ring(this.pos, { color: '#7fe3ff', from: 0.4, to: 4.5, life: 0.45 });
-        this.game.shake(0.45);
+        this.game.fx.shockwave(this.pos, { radius: Math.min(10, 4 + impact * 0.15), color: '#7fe3ff', power: Math.min(2, 0.8 + impact / 30) });
+        this.#resolveHit({ ...MOVES.dive, centered: true, aoe: Math.min(8, 3 + impact * 0.12), mult: 1.6 });
+        this.game.shake(0.6);
         this.game.audio.hit(this.pos, true);
       } else this.game.fx.dustRing(this.pos, 0.9, 8);
     }
@@ -568,7 +573,7 @@ export class Hero {
         if (wishDir) this.yaw = Math.atan2(dir.x, dir.z);
         this.dodgeCd = 0.55 - this.mods.dodgeCd;
         this.game.audio.dodge();
-        this.game.fx.dustRing(this.pos, 0.8, 7, '#c9b8ff');
+        this.game.fx.dustRing(this.pos, 0.8, 6);
       } else if (holding && (input.was('light') || input.was('heavy') || input.was('power'))) {
         mag.throwHeld();
       } else if (input.was('power') || input.was('light') || input.was('heavy')) {
@@ -627,14 +632,35 @@ export class Hero {
             this.rings.set('ringShot');
             this.game.fx.ring(this.pos.clone().addScaledVector(this.facing(), 2), { color: '#7fe3ff', from: 0.3, to: 2.5, life: 0.3, y: 1.2 });
           }
-          if (act.def.whip) this.game.fx.slamWave(this.pos, 4, '#7fe3ff');
-          if (act.def.smash) this.game.fx.slamWave(this.pos.clone().addScaledVector(this.facing(), 1.2), 3.6, '#7a5cff');
-          if (act.def.roar) {
-            this.game.fx.ring(this.pos, { color: '#7a5cff', from: 0.5, to: 9, life: 0.6, y: 1 });
-            this.game.fx.ring(this.pos, { color: '#5fe3ff', from: 0.5, to: 7, life: 0.5 });
-            this.game.shake(0.6);
+          const fx = this.game.fx;
+          const hand = this.pos.clone().add(new THREE.Vector3(0, 1.25, 0));
+          if (act.def.whip) {
+            // Fouet d'anneaux : arc électrique balayé devant Noa + onde au sol.
+            const f = this.facing();
+            const side = new THREE.Vector3(f.z, 0, -f.x);
+            for (let k = -2; k <= 2; k++) {
+              const end = this.pos.clone().addScaledVector(f, 6.5 - Math.abs(k) * 0.6).addScaledVector(side, k * 1.9).add(new THREE.Vector3(0, 0.8 + Math.random() * 0.6, 0));
+              fx.lightning(hand, end, { color: '#7fe3ff', jag: 0.5, branches: 1, life: 0.2 });
+            }
+            fx.shockwave(this.pos.clone().addScaledVector(f, 3), { radius: 5, color: '#7fe3ff', power: 0.8 });
           }
-          if (act.def.pull) this.game.fx.emit(this.pos.clone().add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(this.facing(), 2), { count: 20, color: '#1d1530', speed: 9, size: 0.3, life: 0.35, gravity: 0, dir: this.facing() });
+          if (act.def.smash) fx.shockwave(this.pos.clone().addScaledVector(this.facing(), 1.2), { radius: 6, color: '#8a5cff', power: 1.3 });
+          if (act.def.roar) {
+            fx.shockwave(this.pos, { radius: 11, color: '#8a5cff', power: 2 });
+            fx.ring(this.pos, { color: '#5fe3ff', from: 0.5, to: 9, life: 0.6, y: 1.2 });
+            for (let k = 0; k < 8; k++) {
+              const a = (k / 8) * Math.PI * 2;
+              fx.lightning(hand, this.pos.clone().add(new THREE.Vector3(Math.cos(a) * 8, 0.3, Math.sin(a) * 8)), { color: '#a070ff', jag: 0.8, branches: 1, life: 0.25 });
+            }
+            this.game.shake(0.8);
+            this.game.slowMo?.(0.18);
+          }
+          if (act.def.pull) {
+            const f = this.facing();
+            fx.emit(hand.clone().addScaledVector(f, 2), { count: 40, color: '#1d1530', speed: 14, size: 0.3, life: 0.4, gravity: 0, dir: f });
+            fx.lightning(hand, hand.clone().addScaledVector(f, 12), { color: '#8a5cff', jag: 0.9, branches: 2, life: 0.22 });
+          }
+          if (act.def.ringShot) fx.energyBurst(hand.clone().addScaledVector(this.facing(), 2.2), '#7fe3ff', 0.8);
           if (act.kind === 'power' && !U) this.game.audio.voidStrike();
           this.#resolveHit(act.def);
         }
@@ -661,7 +687,8 @@ export class Hero {
           if (act.falling) {
             act.falling = false;
             act.t = 0;
-            this.game.fx.slamWave(this.pos, MOVES.dive.aoe + 1, '#7fe3ff');
+            this.game.fx.shockwave(this.pos, { radius: MOVES.dive.aoe + 2.5, color: '#7fe3ff', power: 1.8 });
+            this.game.slowMo?.(0.12);
             this.game.audio.hit(this.pos, true);
             this.#resolveHit(MOVES.dive);
             this.game.shake(0.45);
@@ -824,7 +851,7 @@ export class Hero {
       lean: this.lean,
       dead: this.dead,
       deadP: this.deadT,
-      flight: this.flying ? { mode: this.flightMode, pitch: this.flyPitch, roll: this.flyRoll } : null,
+      flight: this.flying ? { mode: this.flightMode, pitch: this.flyPitch, roll: this.flyRoll, speed: Math.hypot(this.vel.x, this.vel.z) } : null,
     });
     model.root.position.copy(this.pos);
     model.root.rotation.y = this.yaw;

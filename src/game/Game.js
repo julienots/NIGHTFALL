@@ -263,6 +263,9 @@ export class Game {
     this.rifts = new Rifts(this);
     window.__nightfall = this; // accès de test/débogage
     this.world.attach?.(this);
+    // Effets posés sur le relief ; les ondes de choc soufflent l'herbe.
+    if (this.col.heightFn) this.fx.groundAt = (x, z) => this.col.terrainAt(x, z);
+    this.fx.onBlast = (p, r, k) => this.world.blast?.(p, r, k);
     this.world.street.traffic.hero = this.hero;
     this.world.street.traffic.onHonk = (pos) => this.audio.honk(pos);
     this.story = this.mode === 'wilds' ? new WildsStory(this) : new Story(this);
@@ -972,6 +975,11 @@ export class Game {
 
   hitStop(t) {
     this.hitStopT = Math.max(this.hitStopT, t);
+  }
+
+  // Ralenti bref (impacts de pouvoirs).
+  slowMo(t) {
+    this.slowT = Math.max(this.slowT || 0, t);
   }
 
   #toggleLock() {

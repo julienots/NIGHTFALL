@@ -17,19 +17,69 @@ const KINDS = {
   van: { size: [2.0, 2.2, 5.2], dmg: 6.5, aoe: 4.2, holdY: 3.8 },
   dumpster: { size: [1.9, 1.3, 1.3], dmg: 3.6, aoe: 2.8, holdY: 3.0 },
   barrel: { size: [0.8, 1.1, 0.8], dmg: 2.4, aoe: 2.2, holdY: 2.8 },
+  // Monde ouvert : le métal d'étoile plie aussi la pierre.
+  boulder: { size: [1.9, 1.5, 1.9], dmg: 5, aoe: 3.8, holdY: 3.4 },
+  cart: { size: [1.5, 1.3, 2.4], dmg: 3.4, aoe: 2.8, holdY: 3.1 },
 };
 
 let mats = null;
 function propMats() {
   if (mats) return mats;
   mats = {
-    dumpster: toon('#3fae6a', { rim: '#bfffd8', rimStrength: 0.5, shared: false }),
-    lid: toon('#2b6e48', { shared: false }),
-    barrel: toon('#e2533f', { rim: '#ffd0c0', rimStrength: 0.5, shared: false }),
-    band: toon('#ffcd20', { shared: false }),
-    dark: toon('#2b2050', { shared: false }),
+    dumpster: toon('#3a5a40', { shared: false, surface: 'metal', roughness: 0.6, metalness: 0.5 }),
+    lid: toon('#2a3a2c', { shared: false, surface: 'metal' }),
+    barrel: toon('#6a4a30', { shared: false, surface: 'plaster', roughness: 0.8 }),
+    band: toon('#2e2e30', { shared: false, surface: 'metal', roughness: 0.45, metalness: 0.8 }),
+    dark: toon('#1e1e20', { shared: false, surface: 'metal' }),
+    rock: toon('#7e786e', { shared: false, surface: 'concrete' }),
+    wood: toon('#6a5038', { shared: false, surface: 'plaster', roughness: 0.85 }),
   };
   return mats;
+}
+
+// Rocher irrégulier (icosaèdre déformé).
+function makeBoulder(seed = Math.random() * 100) {
+  const g = new THREE.Group();
+  const geo = new THREE.IcosahedronGeometry(1, 2);
+  const p = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const n = Math.sin(v.x * 3.1 + seed) * Math.cos(v.z * 2.7 - seed) * 0.16 + Math.sin(v.y * 4.3 + seed * 2) * 0.08;
+    v.multiplyScalar(0.85 + n);
+    p.setXYZ(i, v.x * 0.95, v.y * 0.75, v.z * 0.95);
+  }
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, propMats().rock);
+  m.position.y = 0.7;
+  g.add(m);
+  return g;
+}
+
+// Charrette de bois cerclée de fer.
+function makeCart() {
+  const m = propMats();
+  const g = new THREE.Group();
+  const bed = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 2.2), m.wood);
+  bed.position.y = 0.75;
+  g.add(bed);
+  for (const sx of [-0.68, 0.68]) {
+    const side = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 2.2), m.wood);
+    side.position.set(sx, 1.15, 0);
+    g.add(side);
+    const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.07, 8, 16), m.band);
+    wheel.rotation.y = Math.PI / 2;
+    wheel.position.set(sx * 1.1, 0.45, 0.3);
+    g.add(wheel);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 8), m.dark);
+    hub.rotation.z = Math.PI / 2;
+    hub.position.copy(wheel.position);
+    g.add(hub);
+  }
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.6), m.wood);
+  shaft.position.set(0, 0.7, 1.8);
+  g.add(shaft);
+  return g;
 }
 
 function makeDumpster() {
@@ -82,6 +132,8 @@ export class Magnetism {
     const kind = KINDS[spot.kind] ? spot.kind : 'car';
     let g;
     if (kind === 'car' || kind === 'van') g = this.game.world.makeCar({ van: kind === 'van', color: spot.color, burnt: spot.burnt, decal: spot.decal });
+    else if (kind === 'boulder') g = makeBoulder(spot.x * 0.13 + spot.z * 0.07);
+    else if (kind === 'cart') g = makeCart();
     else g = kind === 'dumpster' ? makeDumpster() : makeBarrel();
     bakeRigid(g);
     g.traverse((o) => o.isMesh && (o.castShadow = true));
@@ -132,7 +184,7 @@ export class Magnetism {
     if (hero.flying) return this.startStorm();
     const p = this.#pick();
     if (!p) {
-      this.game.hud.toast('Aucun objet métallique à portée', '#7fe3ff');
+      this.game.hud.toast(this.game.mode === 'wilds' ? 'Aucun rocher ni objet à portée' : 'Aucun objet métallique à portée', '#7fe3ff');
       this.game.audio.denied();
       return false;
     }
@@ -396,8 +448,8 @@ export class Magnetism {
           this.#settle(p);
           continue;
         }
-        if (p.pos.y < -10) {
-          p.pos.y = 0;
+        if (p.pos.y < col.terrainAt(p.pos.x, p.pos.z) - 10) {
+          p.pos.y = col.terrainAt(p.pos.x, p.pos.z);
           this.#settle(p);
           continue;
         }

@@ -30,15 +30,19 @@ export const CROWD = ['p_jody', 'p_bryce', 'p_louise', 'p_martha', 'p_remy', 'th
 export const STUDENTS = ['theo', 'camille', 'p_remy', 'p_jody', 'p_bryce', 'p_louise'];
 
 // Clé du jeu -> clip Mixamo.
+// Clips du jeu de données écartés car cassés ou mal étiquetés (vérifiés image par image,
+// voir scripts/clipgallery.mjs) : Standing_Block_Idle et Roundhouse_Kick (bassin au sol),
+// Standing_1H_Magic_Attack_03 (finit couché), Zombie_Idle (couché), Zombie_Running (= « parler »),
+// Zombie_Attack (quasi immobile).
 export const CLIPS = {
   // Locomotion
   idle: 'Idle', fightIdle: 'Fight_Idle', walk: 'Walking', run: 'Running', sprint: 'Sprint',
   fall: 'Falling', land: 'Landing', float: 'Floating', roll: 'Dive_Roll',
-  block: 'Standing_Block_Idle', blockHit: 'Standing_Block_React_Large',
+  block: 'Fight_Idle', blockHit: 'Standing_Block_React_Large',
   hitSmall: 'Standing_React_Small_From_Front', hitLarge: 'Standing_React_Large_From_Front',
   death: 'Dying', getUp: 'Getting_Up',
   // Attaques (anneaux)
-  jabR: 'Lead_Jab', jabL: 'Cross_Punch', ringPunch: 'Hook_Punch', whip: 'Standing_1H_Magic_Attack_03',
+  jabR: 'Lead_Jab', jabL: 'Cross_Punch', ringPunch: 'Hook_Punch', whip: 'Throw_Object',
   volley: 'Standing_2H_Magic_Attack_01', diveImpact: 'Jump_Attack', superLanding: 'Fall_B_Land_To_Standing_Idle',
   kick: 'Roundhouse_Kick', flyingKick: 'Flying_Kick',
   // Vie quotidienne / histoire
@@ -48,11 +52,11 @@ export const CLIPS = {
   happy: 'Happy_Idle', lookAround: 'Look_Around',
   // Forme Abysse
   transform: 'Mutant_Roaring', roar: 'Mutant_Roaring', clawR: 'Mutant_Swiping', clawL: 'Mutant_Punch', smash: 'Mutant_Jump_Attack',
-  lash: 'Zombie_Attack', umbraIdle: 'Mutant_Breathing_Idle', umbraRun: 'Mutant_Run',
+  lash: 'Throw_Object', umbraIdle: 'Mutant_Breathing_Idle', umbraRun: 'Mutant_Run',
   // Créatures
   mIdle: 'Mutant_Idle', mRun: 'Mutant_Run', mRoar: 'Mutant_Roaring', mSwipe: 'Mutant_Swiping', mJump: 'Mutant_Jump_Attack',
   mFlex: 'Mutant_Flexing_Muscles', mDie: 'Mutant_Dying', mBreath: 'Mutant_Breathing_Idle',
-  zIdle: 'Zombie_Idle', zRun: 'Zombie_Running', zAttack: 'Zombie_Attack', zDie: 'Zombie_Dying', zStumble: 'Zombie_Stumbling',
+  zIdle: 'Mutant_Idle', zRun: 'Mutant_Run', zAttack: 'Zombie_Attack', zDie: 'Zombie_Dying', zStumble: 'Zombie_Stumbling',
 };
 
 // Animations jouées en boucle (les autres sont pilotées par leur progression).

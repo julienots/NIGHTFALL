@@ -8,7 +8,7 @@ export const WILDS_MISSIONS = {
     world: 'wilds',
     kind: 'story',
     title: 'Le Porte-Anneaux',
-    intro: "Tu t'éveilles au milieu de colonnes brisées, dix anneaux de métal d'étoile soudés à tes avant-bras. Tu ne te souviens que d'un nom : Noa. Au loin, une colonne de lumière violette fend le ciel du nord.",
+    intro: "Tu t'éveilles au milieu de colonnes brisées, dix anneaux de métal d'étoile soudés à tes avant-bras. Ils te portent dans les airs, plient le métal et la pierre, et quelque chose de noir dort sous ta peau. Tu ne te souviens que d'un nom : Noa. Au loin, une colonne de lumière violette fend le ciel du nord.",
     autoStart: true,
     steps: [
       { type: 'interact', target: 'stele_0', text: 'Lire la stèle du Sanctuaire' },
@@ -145,7 +145,7 @@ export const VILLAGERS = {
       ['Aldric', "Par les sept… Des anneaux d'étoile. On racontait qu'un Veilleur dormait au Sanctuaire, mais je croyais à une histoire pour les enfants."],
       ['Noa', "Je ne me souviens de rien. Juste de mon nom."],
       ['Aldric', "Alors écoute. Les trois Sceaux qui retiennent la Faille se fissurent. Chaque nuit, les Rôdeurs descendent plus près des villages."],
-      ['Aldric', "L'Aube à l'est, les Marées au nord du lac, les Cendres dans la forêt. Ranime-les, dans l'ordre que tu veux. Et lis les stèles : elles disent ce que nous avons oublié."],
+      ['Aldric', "L'Aube à l'est, les Marées au nord du lac, les Cendres dans la forêt. Ranime-les, dans l'ordre que tu veux : chacun te rendra un peu de la force des anciens. Et lis les stèles : elles disent ce que nous avons oublié."],
       ['Aldric', "L'autel bleu, là, garde les voyageurs : prie-y pour te reposer. Et la forge de Tomas renforcera tes anneaux. Que la lumière te garde, Porte-Anneaux."],
     ],
     idle: [

@@ -42,6 +42,32 @@ check('nouvelle partie = monde ouvert', st.mode === 'wilds' && st.story === 'Wil
 check('première quête suivie', st.tracked === 'w01_reveil');
 check('Noa posé sur le relief', Math.abs(st.y - st.ground) < 0.8, `${st.y.toFixed(2)} / ${st.ground.toFixed(2)}`);
 check('villageois présents', st.npcs >= 15, String(st.npcs));
+const pw = await G(() => { const g = window.__nightfall; return { ...g.hero.powers, abyss: g.hero.abyss, props: g.magnet.props.length }; });
+check('tous les pouvoirs dès le départ', pw.rings && pw.magnet && pw.flight && pw.umbra && pw.abyss >= 50, JSON.stringify(pw));
+check('objets à soulever (rochers, barils, charrettes)', pw.props >= 40, String(pw.props));
+// Animations : le bassin reste au-dessus du sol pour le fouet, le bouclier et le saut
+// (les clips cassés du jeu de données mettaient Noa à terre).
+const hips = await G(() => {
+  const g = window.__nightfall; const h = g.hero; const out = {};
+  const hipY = () => { const v = h.model.bones.hips.getWorldPosition(new h.pos.constructor()); return v.y - h.pos.y; };
+  h.input = g.input;
+  g.input.pressed.add('heavy'); g.simulate(0.45); out.whip = hipY(); g.simulate(0.6);
+  g.input.down.add('shield'); g.simulate(0.5); out.shield = hipY(); g.input.down.delete('shield'); g.simulate(0.3);
+  g.input.pressed.add('jump'); g.simulate(0.25); out.jump = hipY(); g.simulate(1);
+  return out;
+});
+check('animations : bassin au-dessus du sol (fouet, bouclier, saut)', hips.whip > 0.55 && hips.shield > 0.6 && hips.jump > 0.5, JSON.stringify(hips));
+// Magnétisme : soulever un rocher puis le lancer.
+const mag = await G(() => {
+  const g = window.__nightfall; const h = g.hero;
+  const r = g.magnet.props.find((p) => p.kind === 'boulder');
+  r.pos.set(h.pos.x + 3, g.col.terrainAt(h.pos.x + 3, h.pos.z), h.pos.z);
+  g.input.pressed.add('magnet'); g.simulate(1);
+  const held = g.magnet.holding;
+  g.input.pressed.add('magnet'); g.simulate(0.3);
+  return { held, thrown: !g.magnet.holding };
+});
+check('magnétisme : soulever et lancer un rocher', mag.held && mag.thrown, JSON.stringify(mag));
 await shot('01_depart');
 
 // Marcher : le héros suit le relief.

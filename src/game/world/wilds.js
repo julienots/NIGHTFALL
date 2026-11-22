@@ -697,6 +697,29 @@ export function buildWilds(scene, col, quality = 'medium') {
     enemySpawns.push({ after: 'w01_reveil', type, x, z, group: 'wild', patrol: [[x, z], [x + 14, z + 6], [x - 6, z + 12]] });
   }
 
+  // ---------- Objets soulevables (magnétisme) ----------
+  const magnetSpots = [];
+  for (const [key, p] of Object.entries(PLACES)) {
+    if (['brumeval', 'cendreval', 'port_saule'].includes(key)) {
+      for (let i = 0; i < 3; i++) {
+        const a = rand() * Math.PI * 2;
+        const d = p.r * (0.25 + rand() * 0.15);
+        magnetSpots.push({ kind: i === 0 ? 'cart' : 'barrel', x: p.x + Math.cos(a) * d, z: p.z + Math.sin(a) * d, yaw: rand() * 6 });
+      }
+    }
+  }
+  // Rochers près des lieux, des chemins et des Sceaux (armes de fortune).
+  for (let i = 0, n = 0; i < 400 && n < 70; i++) {
+    const x = R(-WORLD.play + 20, WORLD.play - 20);
+    const z = R(-WORLD.play + 20, WORLD.play - 20);
+    const h = H(x, z);
+    if (h < WORLD.water + 0.5 || terrain.slopeAt(x, z) > 0.6 || nearPlace(x, z, 3)) continue;
+    const near = Object.values(PLACES).some((p) => Math.hypot(x - p.x, z - p.z) < p.r + 45) || terrain.pathAt(x, z) > 0 || rand() < 0.25;
+    if (!near) continue;
+    magnetSpots.push({ kind: 'boulder', x, z, yaw: rand() * 6 });
+    n++;
+  }
+
   // ---------- Lucioles (la nuit, autour de Noa) ----------
   const ffCount = low ? 60 : 180;
   const ffGeo = new THREE.BufferGeometry();
@@ -759,6 +782,7 @@ export function buildWilds(scene, col, quality = 'medium') {
   let grass = null;
   let game = null;
   const benders = [];
+  const blasts = []; // souffles d'ondes de choc { x, y, z, r, t }
 
   // ---------- Jour / nuit ----------
   const sealState = {};
@@ -786,7 +810,7 @@ export function buildWilds(scene, col, quality = 'medium') {
 
   return {
     kind: 'wilds',
-    root, targets, enemySpawns, crates, magnetSpots: [], spawn, lampLights, nightHooks: [], rain, drawCalls,
+    root, targets, enemySpawns, crates, magnetSpots, spawn, lampLights, nightHooks: [], rain, drawCalls,
     smokeSources: [],
     terrain, places: PLACES, doors, steles: STELES,
     raining: false,
@@ -795,6 +819,10 @@ export function buildWilds(scene, col, quality = 'medium') {
     setBarricades() {}, toppleMonument() {}, setPower() {},
     makeCar: () => new THREE.Group(),
     setNight, setSeal,
+    blast(p, r, k = 1) {
+      blasts.push({ x: p.x, y: p.y, z: p.z, r, k: Math.min(1.5, k), t: 0 });
+      if (blasts.length > 3) blasts.shift();
+    },
     // Herbe et lumière : branchées au jeu après sa création (renderer, acteurs).
     attach(g) {
       game = g;
@@ -813,7 +841,13 @@ export function buildWilds(scene, col, quality = 'medium') {
       for (const e of game.enemies) if (e.alive) others.push(e.pos);
       for (const n of game.story?.npcs || []) others.push(n.pos);
       others.sort((a, b) => a.distanceToSquared(h.pos) - b.distanceToSquared(h.pos));
-      for (const p of others.slice(0, 7)) benders.push({ x: p.x, y: p.y, z: p.z, r: 1.1, trample: p.distanceToSquared(h.pos) < 900 ? 0.7 : 0 });
+      for (let i = blasts.length - 1; i >= 0; i--) {
+        const b = blasts[i];
+        b.t += dt;
+        if (b.t > 1.4) blasts.splice(i, 1);
+        else benders.push({ x: b.x, y: b.y, z: b.z, r: b.r * Math.min(1, 0.3 + b.t * 3), trample: b.k * (1 - b.t / 1.4) });
+      }
+      for (const p of others.slice(0, Math.max(0, 7 - benders.length + 1))) benders.push({ x: p.x, y: p.y, z: p.z, r: 1.1, trample: p.distanceToSquared(h.pos) < 900 ? 0.7 : 0 });
       grass.update(dt, cam.position, benders, h.pos);
     },
     // Fond de la minicarte : couleurs du terrain vues de dessus.

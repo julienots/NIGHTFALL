@@ -11,8 +11,8 @@ import { MEMOIRES, VILLAGERS } from '../data/wilds.js';
 
 const HINT = `<span class="kbd">ZQSD</span>se déplacer · <span class="kbd">Maj</span>courir · <span class="kbd">Espace</span>sauter · <span class="kbd">E</span>parler / examiner · <span class="kbd">M</span>carte · <span class="kbd">J</span>journal<br>
   <span class="kbd">Clic G</span>anneaux · <span class="kbd">Clic D</span>fouet · <span class="kbd">F</span>rafale · <span class="kbd">G</span>bouclier · <span class="kbd">Ctrl</span>rouler`;
-const HINT_FLY = `<br><span class="kbd">V</span>voler · <span class="kbd">Maj</span>boost · <span class="kbd">Espace / Ctrl</span>monter / descendre`;
-const HINT_UMBRA = `<br><span class="kbd">T</span>Forme Abysse (jauge ≥ 50 %)`;
+const HINT_FLY = `<br><span class="kbd">V</span>voler · <span class="kbd">Maj</span>boost (mur du son) · <span class="kbd">Espace / Ctrl</span>monter / descendre · <span class="kbd">Clic G</span> en vol : piqué explosif`;
+const HINT_UMBRA = `<br><span class="kbd">X</span>magnétisme : soulever / lancer rochers et barils (en vol : tempête) · <span class="kbd">T</span>Forme Abysse`;
 
 // Durée de chaque phase (s) et ordre du cycle.
 const CYCLE = { morning: 240, afternoon: 240, evening: 150, night: 330 };
@@ -48,14 +48,10 @@ export class WildsStory {
     return true;
   }
 
+  // Le dernier Veilleur se réveille avec tous ses pouvoirs : anneaux,
+  // magnétisme (rochers, barils, charrettes), vol et Forme Abysse.
   powers() {
-    const m = this.missions;
-    return {
-      rings: true,
-      magnet: false,
-      flight: m.isDone('w02_aube'),
-      umbra: m.isDone('w03_marees'),
-    };
+    return { rings: true, magnet: true, flight: true, umbra: true };
   }
 
   // ---------- Démarrage ----------
@@ -67,6 +63,7 @@ export class WildsStory {
     if (g.clock.phase !== 'night') g.spawnGated();
     for (const id of ['seal_aube', 'seal_marees', 'seal_cendres']) w.setSeal(id, this.#sealDone(id));
     g.hero.setPowers(this.powers());
+    if (isNew) g.hero.abyss = 100; // la Forme Abysse est disponible tout de suite
     g.hud.setName('NOA');
     this.#updateHint(true);
     this.#villagers();
@@ -196,12 +193,15 @@ export class WildsStory {
     g.shake?.(0.4);
     g.world.setSeal(id, true);
     g.missionEvents(g.missions.handle({ type: 'interact', target: id }));
-    const unlocked = this.powers();
-    g.hero.setPowers(unlocked);
-    this.#updateHint(true);
-    if (id === 'seal_aube') g.hud.banner('POUVOIR RETROUVÉ', 'Le vol', 'Le métal d’étoile se souvient du ciel — [V] pour voler');
-    if (id === 'seal_marees') g.hud.banner('POUVOIR RETROUVÉ', 'La Forme Abysse', 'Tu la portes, elle ne te porte pas — [T]');
-    if (id === 'seal_cendres') g.hud.banner('SCEAU RANIMÉ', 'Les Cendres', 'La forêt respire de nouveau');
+    // Chaque Sceau rend une part de la force des anciens Veilleurs : points de
+    // compétence (touche K), énergie et vie restaurées, jauge d'Abysse pleine.
+    g.progression.skillPoints += 2;
+    g.hero.hp = g.hero.stats.maxHp;
+    g.hero.energy = g.hero.stats.maxEnergy;
+    g.hero.abyss = 100;
+    g.fx.shockwave?.(g.world.targets[id], { radius: 14, color: '#7fe3ff', power: 2, debris: false });
+    const names = { seal_aube: 'L’Aube', seal_marees: 'Les Marées', seal_cendres: 'Les Cendres' };
+    g.hud.banner('SCEAU RANIMÉ', names[id], 'Force des Veilleurs : +2 points de compétence [K]');
   }
 
   #sealFaille() {

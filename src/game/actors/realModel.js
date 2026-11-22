@@ -175,9 +175,9 @@ class Blender {
 
 // Plage utile de chaque action « scrubbée » (début, fin) dans le clip.
 const RANGES = {
-  jabR: [0.05, 0.75], jabL: [0.05, 0.75], ringPunch: [0.05, 0.8], whip: [0.1, 0.85], volley: [0.05, 0.8],
+  jabR: [0.05, 0.75], jabL: [0.05, 0.75], ringPunch: [0.05, 0.8], whip: [0.16, 0.72], volley: [0.05, 0.8],
   diveImpact: [0.45, 0.95], superLanding: [0.05, 0.6], interact: [0.05, 0.95], magnetLift: [0, 0.45], magnetThrow: [0.1, 0.8],
-  awaken: [0, 1], transform: [0, 0.9], roar: [0.05, 0.85], clawR: [0.1, 0.8], clawL: [0.1, 0.8], smash: [0.25, 0.9], lash: [0.1, 0.8],
+  awaken: [0, 1], transform: [0, 0.9], roar: [0.05, 0.85], clawR: [0.1, 0.8], clawL: [0.1, 0.8], smash: [0.25, 0.9], lash: [0.16, 0.72],
   victory: [0, 1], wave: [0, 1], hug: [0, 1], roll: [0.05, 0.75], hitSmall: [0, 0.8], hitLarge: [0, 0.7], death: [0, 1],
 };
 
@@ -430,14 +430,24 @@ export class RealModel {
     else if (anim && LOOPS.has(anim)) T[anim] = { w: 1, ts: 1 };
     else if (anim) scrub(anim, s.animP || 0);
     else if (s.flight) {
-      T.float = { w: 1, ts: s.flight.mode === 'boost' ? 1.6 : 1 };
-      if (s.flight.mode !== 'hover') {
-        tiltX = s.flight.pitch;
-        tiltZ = s.flight.roll;
-      } else tiltX = 0.08;
-    } else if (s.shield) T.block = { w: 1 };
-    else if (s.hurt > 0) scrub(s.hurt > 0.95 && this.prevHurt <= 0 ? 'hitSmall' : 'hitSmall', 1 - s.hurt);
-    else if (s.airborne) T.fall = { w: 1 };
+      // Vol : pose de super-héros (corps à l'horizontale, bras tendus) en
+      // déplacement, sustentation jambes pendantes à l'arrêt ; fondu selon la vitesse.
+      const fv = s.flight.mode === 'hover' ? Math.min(1, (s.flight.speed || 0) / 8) : 1;
+      this.flyBlend = (this.flyBlend ?? fv) + (fv - (this.flyBlend ?? fv)) * Math.min(1, dt * 4);
+      const k = this.flyBlend;
+      if (k < 0.999) T.float = { w: 1 - k, ts: 1 };
+      if (k > 0.001) T.fall = { w: k, ts: s.flight.mode === 'boost' ? 1.4 : 0.8 };
+      // Le clip est déjà horizontal : on n'incline plus que pour monter / piquer.
+      tiltX = (s.flight.pitch - 1.0) * 0.55 * k + 0.06 * (1 - k);
+      tiltZ = s.flight.roll * (0.4 + 0.6 * k);
+    } else if (s.shield) T.block = { w: 1, ts: 0.6 };
+    else if (s.hurt > 0) scrub('hitSmall', 1 - s.hurt);
+    else if (s.airborne) {
+      // Saut : groupé en montant, jambes prêtes à la réception en descendant.
+      const up = (s.vy || 0) > 1.5;
+      T.superLanding = { w: up ? 1 : 0.35, p: 0.01 };
+      T.land = { w: up ? 0 : 0.65, p: 0.02 };
+    }
     else {
       // Locomotion : idle / marche / course / sprint fondus selon la vitesse,
       // cadence ajustée pour que les pieds ne glissent pas.
@@ -506,7 +516,7 @@ const CREATURE_MAP = {
     observe: () => ({ mBreath: { w: 1 } }), lurk: () => ({ zIdle: { w: 1, ts: 0.4 } }),
     windup: (st) => ({ mRoar: { w: 1, p: 0.1 + st.p * 0.25 } }), lunge: (st) => ({ mJump: { w: 1, p: 0.3 + st.p * 0.45 } }),
     swipeWindup: (st) => ({ mSwipe: { w: 1, p: st.p * 0.35 } }), swipe: (st) => ({ mSwipe: { w: 1, p: 0.35 + st.p * 0.5 } }),
-    recover: () => ({ mBreath: { w: 1 } }), stagger: (st) => ({ zStumble: { w: 1, p: Math.min(1, st.p) * 0.6 } }),
+    recover: () => ({ mBreath: { w: 1 } }), stagger: (st) => ({ zStumble: { w: 1, p: Math.min(1, st.p) * 0.32 } }),
     dead: (st) => ({ zDie: { w: 1, p: Math.min(1, st.p / 2) } }),
   },
   brute: {
